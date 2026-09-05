@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CampaignRole {
+  MASTER
+  PLAYER
+}
+
+model User {
+  id         Int              @id @default(autoincrement())
+  name       String
+  email      String           @unique
+  password   String?
+  characters Character[]
+  campaigns  CampaignMember[]
+}
+
+model Campaign {
+  id         Int              @id @default(autoincrement())
+  name       String
+  characters Character[]
+  members    CampaignMember[]
+}
+
+model CampaignMember {
+  id         Int          @id @default(autoincrement())
+
+  userId     Int
+  campaignId Int
+  role       CampaignRole
+
+  user       User         @relation(fields: [userId], references: [id])
+  campaign   Campaign     @relation(fields: [campaignId], references: [id])
+
+  @@unique([userId, campaignId])
+}
+
+model Character {
+  id         Int      @id @default(autoincrement())
+  name       String
+  className  String
+  race       String
+  level      Int
+  avatar     String?
+
+  playerId   Int
+  player     User     @relation(fields: [playerId], references: [id])
+
+  campaignId Int
+  campaign   Campaign @relation(fields: [campaignId], references: [id])
+}
