@@ -20,6 +20,10 @@ function formatModifier(value: number): string {
     return value >= 0 ? `+${value}` : `${value}`;
 }
 
+const cinzel = { fontFamily: "'Cinzel', serif" } as const;
+const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+const nested = { backgroundColor: "#EBDFC4", borderColor: "#A67C3D" };
+
 export function CharacterAbilities({
     data,
     onChange,
@@ -35,29 +39,10 @@ export function CharacterAbilities({
     const raceChoices = data.raceChoices ?? {};
     const talentChoices = data.talentChoices ?? {};
 
-    /*
-     * ============================================================
-     * BÔNUS FIXOS DA RAÇA
-     * ============================================================
-     */
     function getRaceBonus(ability: Ability): number {
         return selectedRace?.abilityScoreIncrease?.[ability] ?? 0;
     }
 
-    /*
-     * ============================================================
-     * BÔNUS ESCOLHIDOS DA RAÇA
-     *
-     * Exemplo:
-     *
-     * Meio-Elfo:
-     * +2 Carisma
-     * +1 em dois atributos diferentes
-     *
-     * raceChoices["abilityScoreIncrease"]
-     * = ["strength", "wisdom"]
-     * ============================================================
-     */
     function getRaceChoiceBonus(ability: Ability): number {
         const choices =
             raceChoices["abilityScoreIncrease"] ?? [];
@@ -73,11 +58,6 @@ export function CharacterAbilities({
         return selectedRace.abilityScoreChoices.amount;
     }
 
-    /*
-     * ============================================================
-     * BÔNUS DO TALENTO
-     * ============================================================
-     */
     function getTalentAbilityChoices(): Ability[] {
         if (!selectedTalent?.abilityScoreIncrease) {
             return [];
@@ -107,10 +87,6 @@ export function CharacterAbilities({
 
         const choices = getTalentAbilityChoices();
 
-        /*
-         * Caso o talento dê bônus em um único atributo
-         * definido diretamente pelo talento.
-         */
         if (choices.length === 0) {
             return 0;
         }
@@ -125,14 +101,7 @@ export function CharacterAbilities({
         return amount;
     }
 
-    /*
-     * ============================================================
-     * ESCOLHER ATRIBUTO DO TALENTO
-     * ============================================================
-     */
-    function updateTalentAbility(
-        ability: Ability
-    ) {
+    function updateTalentAbility(ability: Ability) {
         onChange({
             ...data,
             talentChoices: {
@@ -142,11 +111,6 @@ export function CharacterAbilities({
         });
     }
 
-    /*
-     * ============================================================
-     * ESCOLHER ATRIBUTOS DA RAÇA
-     * ============================================================
-     */
     function updateRaceAbilityChoice(
         index: number,
         ability: Ability
@@ -157,19 +121,12 @@ export function CharacterAbilities({
 
         currentChoices[index] = ability;
 
-        /*
-         * Não permite que o mesmo atributo seja escolhido
-         * duas vezes.
-         */
         const uniqueChoices = currentChoices.filter(
             (value, currentIndex, array) =>
                 value &&
                 array.indexOf(value) === currentIndex
         );
 
-        /*
-         * Mantém exatamente os índices existentes.
-         */
         while (uniqueChoices.length < currentChoices.length) {
             uniqueChoices.push("");
         }
@@ -178,49 +135,21 @@ export function CharacterAbilities({
             ...data,
             raceChoices: {
                 ...raceChoices,
-                abilityScoreIncrease:
-                    currentChoices,
+                abilityScoreIncrease: currentChoices,
             },
         });
     }
 
-    /*
-     * ============================================================
-     * ATRIBUTO TOTAL
-     * ============================================================
-     */
-    function getTotalAbilityValue(
-        ability: Ability
-    ): number {
-        const baseValue =
-            data.abilities[ability] ?? 10;
+    function getTotalAbilityValue(ability: Ability): number {
+        const baseValue = data.abilities[ability] ?? 10;
+        const raceBonus = getRaceBonus(ability);
+        const raceChoiceBonus = getRaceChoiceBonus(ability);
+        const talentBonus = getTalentBonus(ability);
 
-        const raceBonus =
-            getRaceBonus(ability);
-
-        const raceChoiceBonus =
-            getRaceChoiceBonus(ability);
-
-        const talentBonus =
-            getTalentBonus(ability);
-
-        return (
-            baseValue +
-            raceBonus +
-            raceChoiceBonus +
-            talentBonus
-        );
+        return baseValue + raceBonus + raceChoiceBonus + talentBonus;
     }
 
-    /*
-     * ============================================================
-     * ALTERAR ATRIBUTO BASE
-     * ============================================================
-     */
-    function updateAbility(
-        ability: Ability,
-        value: number
-    ) {
+    function updateAbility(ability: Ability, value: number) {
         onChange({
             ...data,
             abilities: {
@@ -230,61 +159,33 @@ export function CharacterAbilities({
         });
     }
 
-    /*
-     * ============================================================
-     * VERIFICA SE RAÇA POSSUI ESCOLHAS
-     * ============================================================
-     */
-    const hasRaceAbilityChoices =
-        !!selectedRace?.abilityScoreChoices;
-
-    const raceChoiceCount =
-        selectedRace?.abilityScoreChoices?.count ?? 0;
-
-    const selectedRaceAbilities =
-        raceChoices["abilityScoreIncrease"] ?? [];
-
-    /*
-     * ============================================================
-     * VERIFICA SE TALENTO POSSUI ESCOLHA DE ATRIBUTO
-     * ============================================================
-     */
-    const talentAbilityChoices =
-        getTalentAbilityChoices();
-
-    const selectedTalentAbility =
-        getTalentSelectedAbility();
+    const hasRaceAbilityChoices = !!selectedRace?.abilityScoreChoices;
+    const raceChoiceCount = selectedRace?.abilityScoreChoices?.count ?? 0;
+    const selectedRaceAbilities = raceChoices["abilityScoreIncrease"] ?? [];
+    const talentAbilityChoices = getTalentAbilityChoices();
+    const selectedTalentAbility = getTalentSelectedAbility();
 
     return (
         <div className="space-y-8">
-            {/* ================================================== */}
-            {/* CABEÇALHO */}
-            {/* ================================================== */}
-
             <div>
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Atributos
                 </h2>
 
-                <p className="mt-2 text-slate-400">
-                    Defina os valores dos seis atributos do
-                    personagem. Os bônus raciais e do talento
-                    serão aplicados automaticamente.
+                <p className="mt-2 text-[#5C4A38]">
+                    Defina os valores dos seis atributos do personagem. Os
+                    bônus raciais e do talento serão aplicados automaticamente.
                 </p>
             </div>
 
-            {/* ================================================== */}
-            {/* RAÇA */}
-            {/* ================================================== */}
-
             {selectedRace && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+                <div className="border p-5" style={card}>
                     <div className="mb-4">
-                        <h3 className="text-lg font-semibold text-white">
+                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                             Raça: {selectedRace.name}
                         </h3>
 
-                        <p className="mt-1 text-sm text-slate-400">
+                        <p className="mt-1 text-sm text-[#5C4A38]">
                             Bônus concedidos pela sua raça.
                         </p>
                     </div>
@@ -293,11 +194,9 @@ export function CharacterAbilities({
                         {Object.entries(
                             selectedRace.abilityScoreIncrease ?? {}
                         ).map(([ability, bonus]) => {
-                            const abilityData =
-                                ABILITIES.find(
-                                    (item) =>
-                                        item.id === ability
-                                );
+                            const abilityData = ABILITIES.find(
+                                (item) => item.id === ability
+                            );
 
                             if (!abilityData) {
                                 return null;
@@ -306,7 +205,8 @@ export function CharacterAbilities({
                             return (
                                 <span
                                     key={ability}
-                                    className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-400"
+                                    className="border px-3 py-1.5 text-sm"
+                                    style={{ borderColor: "#3F5B34", color: "#3F5B34" }}
                                 >
                                     {abilityData.name} +{bonus}
                                 </span>
@@ -316,38 +216,29 @@ export function CharacterAbilities({
                 </div>
             )}
 
-            {/* ================================================== */}
-            {/* ESCOLHAS RACIAIS */}
-            {/* ================================================== */}
-
             {hasRaceAbilityChoices && (
-                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-5">
+                <div className="border p-5" style={{ backgroundColor: "#DCCBA0", borderColor: "#7A2530" }}>
                     <div className="mb-5">
-                        <h3 className="text-lg font-semibold text-white">
+                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                             Escolhas de atributo da raça
                         </h3>
 
-                        <p className="mt-1 text-sm text-slate-400">
+                        <p className="mt-1 text-sm text-[#5C4A38]">
                             Escolha{" "}
-                            <span className="font-medium text-indigo-400">
+                            <span className="text-[#7A2530]" style={cinzel}>
                                 {raceChoiceCount}
                             </span>{" "}
-                            atributos diferentes para receber o
-                            bônus racial.
+                            atributos diferentes para receber o bônus racial.
                         </p>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
-                        {Array.from({
-                            length: raceChoiceCount,
-                        }).map((_, index) => {
-                            const currentValue =
-                                selectedRaceAbilities[index] ??
-                                "";
+                        {Array.from({ length: raceChoiceCount }).map((_, index) => {
+                            const currentValue = selectedRaceAbilities[index] ?? "";
 
                             return (
                                 <div key={index}>
-                                    <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    <label className="mb-2 block text-sm text-[#5C4A38]" style={cinzel}>
                                         Escolha {index + 1}
                                     </label>
 
@@ -356,66 +247,39 @@ export function CharacterAbilities({
                                         onChange={(event) =>
                                             updateRaceAbilityChoice(
                                                 index,
-                                                event.target
-                                                    .value as Ability
+                                                event.target.value as Ability
                                             )
                                         }
-                                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-indigo-500"
+                                        className="w-full border px-4 py-3 text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]"
+                                        style={nested}
                                     >
-                                        <option value="">
-                                            Selecione um atributo
-                                        </option>
+                                        <option value="">Selecione um atributo</option>
 
                                         {selectedRace.abilityScoreChoices?.abilities.map(
                                             (ability) => {
                                                 const alreadySelected =
                                                     selectedRaceAbilities.some(
-                                                        (
-                                                            selected,
-                                                            selectedIndex
-                                                        ) =>
-                                                            selected ===
-                                                                ability &&
-                                                            selectedIndex !==
-                                                                index
+                                                        (selected, selectedIndex) =>
+                                                            selected === ability &&
+                                                            selectedIndex !== index
                                                     );
 
-                                                const abilityData =
-                                                    ABILITIES.find(
-                                                        (
-                                                            item
-                                                        ) =>
-                                                            item.id ===
-                                                            ability
-                                                    );
+                                                const abilityData = ABILITIES.find(
+                                                    (item) => item.id === ability
+                                                );
 
-                                                if (
-                                                    !abilityData
-                                                ) {
+                                                if (!abilityData) {
                                                     return null;
                                                 }
 
                                                 return (
                                                     <option
-                                                        key={
-                                                            ability
-                                                        }
-                                                        value={
-                                                            ability
-                                                        }
-                                                        disabled={
-                                                            alreadySelected
-                                                        }
+                                                        key={ability}
+                                                        value={ability}
+                                                        disabled={alreadySelected}
                                                     >
-                                                        {
-                                                            abilityData.name
-                                                        }{" "}
-                                                        (+
-                                                        {
-                                                            selectedRace
-                                                                .abilityScoreChoices
-                                                                ?.amount
-                                                        })
+                                                        {abilityData.name} (+
+                                                        {selectedRace.abilityScoreChoices?.amount})
                                                     </option>
                                                 );
                                             }
@@ -426,181 +290,117 @@ export function CharacterAbilities({
                         })}
                     </div>
 
-                    <div className="mt-4 rounded-lg bg-slate-900/70 p-3 text-sm text-slate-400">
-                        <span className="font-medium text-slate-300">
-                            Exemplo:
-                        </span>{" "}
-                        um Meio-Elfo recebe +2 em Carisma e pode
-                        escolher dois atributos diferentes para
-                        receber +1 em cada.
+                    <div className="mt-4 border p-3 text-sm text-[#5C4A38]" style={nested}>
+                        <span className="text-[#2A1D14]" style={cinzel}>Exemplo:</span>{" "}
+                        um Meio-Elfo recebe +2 em Carisma e pode escolher dois
+                        atributos diferentes para receber +1 em cada.
                     </div>
                 </div>
             )}
 
-            {/* ================================================== */}
-            {/* TALENTO */}
-            {/* ================================================== */}
-
             {selectedTalent && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+                <div className="border p-5" style={{ backgroundColor: "#DCCBA0", borderColor: "#9C7A3C" }}>
                     <div className="mb-4">
-                        <h3 className="text-lg font-semibold text-white">
-                            Talento Inicial:{" "}
-                            {selectedTalent.name}
+                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            Talento Inicial: {selectedTalent.name}
                         </h3>
 
-                        <p className="mt-1 text-sm text-slate-400">
-                            Bônus de atributo concedidos pelo
-                            talento serão aplicados abaixo.
+                        <p className="mt-1 text-sm text-[#5C4A38]">
+                            Bônus de atributo concedidos pelo talento serão
+                            aplicados abaixo.
                         </p>
                     </div>
 
                     {talentAbilityChoices.length > 0 && (
                         <div>
-                            <label className="mb-2 block text-sm font-medium text-slate-300">
+                            <label className="mb-2 block text-sm text-[#5C4A38]" style={cinzel}>
                                 Atributo beneficiado pelo talento
                             </label>
 
                             <select
-                                value={
-                                    selectedTalentAbility ?? ""
-                                }
+                                value={selectedTalentAbility ?? ""}
                                 onChange={(event) =>
-                                    updateTalentAbility(
-                                        event.target
-                                            .value as Ability
-                                    )
+                                    updateTalentAbility(event.target.value as Ability)
                                 }
-                                className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-white outline-none transition focus:border-amber-500"
+                                className="w-full border px-4 py-3 text-[#2A1D14] outline-none transition-colors focus:border-[#9C7A3C]"
+                                style={nested}
                             >
-                                <option value="">
-                                    Selecione um atributo
-                                </option>
+                                <option value="">Selecione um atributo</option>
 
-                                {talentAbilityChoices.map(
-                                    (ability) => {
-                                        const abilityData =
-                                            ABILITIES.find(
-                                                (item) =>
-                                                    item.id ===
-                                                    ability
-                                            );
+                                {talentAbilityChoices.map((ability) => {
+                                    const abilityData = ABILITIES.find(
+                                        (item) => item.id === ability
+                                    );
 
-                                        if (
-                                            !abilityData
-                                        ) {
-                                            return null;
-                                        }
-
-                                        return (
-                                            <option
-                                                key={ability}
-                                                value={ability}
-                                            >
-                                                {
-                                                    abilityData.name
-                                                }{" "}
-                                                (+
-                                                {
-                                                    selectedTalent
-                                                        .abilityScoreIncrease
-                                                        ?.amount
-                                                })
-                                            </option>
-                                        );
+                                    if (!abilityData) {
+                                        return null;
                                     }
-                                )}
+
+                                    return (
+                                        <option key={ability} value={ability}>
+                                            {abilityData.name} (+
+                                            {selectedTalent.abilityScoreIncrease?.amount})
+                                        </option>
+                                    );
+                                })}
                             </select>
                         </div>
                     )}
 
                     {selectedTalent.abilityScoreIncrease &&
                         talentAbilityChoices.length === 0 && (
-                            <div className="rounded-lg bg-slate-900/70 p-3 text-sm text-slate-400">
-                                Este talento possui um bônus
-                                específico de atributo que será
-                                aplicado automaticamente.
+                            <div className="border p-3 text-sm text-[#5C4A38]" style={nested}>
+                                Este talento possui um bônus específico de
+                                atributo que será aplicado automaticamente.
                             </div>
                         )}
                 </div>
             )}
 
-            {/* ================================================== */}
-            {/* ATRIBUTOS */}
-            {/* ================================================== */}
-
             <div>
                 <div className="mb-5">
-                    <h3 className="text-xl font-semibold text-white">
+                    <h3 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                         Valores dos atributos
                     </h3>
 
-                    <p className="mt-1 text-sm text-slate-400">
-                        O valor informado abaixo representa o
-                        valor base antes dos bônus raciais e do
-                        talento.
+                    <p className="mt-1 text-sm text-[#5C4A38]">
+                        O valor informado abaixo representa o valor base antes
+                        dos bônus raciais e do talento.
                     </p>
                 </div>
 
                 <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                     {ABILITIES.map((ability) => {
-                        const baseValue =
-                            data.abilities[
-                                ability.id
-                            ] ?? 10;
-
-                        const raceBonus =
-                            getRaceBonus(ability.id);
-
-                        const raceChoiceBonus =
-                            getRaceChoiceBonus(
-                                ability.id
-                            );
-
-                        const talentBonus =
-                            getTalentBonus(ability.id);
-
-                        const totalValue =
-                            getTotalAbilityValue(
-                                ability.id
-                            );
-
-                        const modifier =
-                            getAbilityModifier(
-                                totalValue
-                            );
+                        const baseValue = data.abilities[ability.id] ?? 10;
+                        const raceBonus = getRaceBonus(ability.id);
+                        const raceChoiceBonus = getRaceChoiceBonus(ability.id);
+                        const talentBonus = getTalentBonus(ability.id);
+                        const totalValue = getTotalAbilityValue(ability.id);
+                        const modifier = getAbilityModifier(totalValue);
 
                         return (
-                            <div
-                                key={ability.id}
-                                className="rounded-xl border border-slate-800 bg-slate-950 p-5"
-                            >
-                                {/* Nome */}
-
+                            <div key={ability.id} className="border p-5" style={card}>
                                 <div className="mb-4 flex items-center justify-between">
                                     <div>
-                                        <p className="font-semibold text-white">
+                                        <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                                             {ability.name}
                                         </p>
 
-                                        <p className="text-xs text-slate-500">
-                                            {
-                                                ability.shortName
-                                            }
+                                        <p className="text-xs text-[#8A7860]">
+                                            {ability.shortName}
                                         </p>
                                     </div>
 
-                                    <div className="rounded-lg bg-indigo-500/10 px-3 py-1.5 text-lg font-bold text-indigo-400">
-                                        {formatModifier(
-                                            modifier
-                                        )}
+                                    <div
+                                        className="px-3 py-1.5 text-lg"
+                                        style={{ ...cinzel, backgroundColor: "#7A2530", color: "#EBDFC4" }}
+                                    >
+                                        {formatModifier(modifier)}
                                     </div>
                                 </div>
 
-                                {/* Valor base */}
-
                                 <div className="mb-4">
-                                    <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                                    <label className="mb-2 block text-xs text-[#8A7860]" style={cinzel}>
                                         Valor base
                                     </label>
 
@@ -608,107 +408,53 @@ export function CharacterAbilities({
                                         type="number"
                                         min={1}
                                         max={30}
-                                        value={
-                                            baseValue
+                                        value={baseValue}
+                                        onChange={(event) =>
+                                            updateAbility(ability.id, Number(event.target.value))
                                         }
-                                        onChange={(
-                                            event
-                                        ) =>
-                                            updateAbility(
-                                                ability.id,
-                                                Number(
-                                                    event
-                                                        .target
-                                                        .value
-                                                )
-                                            )
-                                        }
-                                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-center text-xl font-semibold text-white outline-none transition focus:border-indigo-500"
+                                        className="w-full border px-4 py-3 text-center text-xl text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]"
+                                        style={{ ...nested, fontFamily: "'Cinzel', serif" }}
                                     />
                                 </div>
 
-                                {/* Cálculo */}
-
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-slate-400">
-                                            Base
-                                        </span>
-
-                                        <span className="text-white">
-                                            {baseValue}
-                                        </span>
+                                        <span className="text-[#5C4A38]">Base</span>
+                                        <span className="text-[#2A1D14]">{baseValue}</span>
                                     </div>
 
                                     {raceBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400">
-                                                Raça
-                                            </span>
-
-                                            <span className="text-emerald-400">
-                                                +
-                                                {
-                                                    raceBonus
-                                                }
-                                            </span>
+                                            <span className="text-[#5C4A38]">Raça</span>
+                                            <span style={{ color: "#3F5B34" }}>+{raceBonus}</span>
                                         </div>
                                     )}
 
-                                    {raceChoiceBonus !==
-                                        0 && (
+                                    {raceChoiceBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400">
-                                                Escolha racial
-                                            </span>
-
-                                            <span className="text-emerald-400">
-                                                +
-                                                {
-                                                    raceChoiceBonus
-                                                }
-                                            </span>
+                                            <span className="text-[#5C4A38]">Escolha racial</span>
+                                            <span style={{ color: "#3F5B34" }}>+{raceChoiceBonus}</span>
                                         </div>
                                     )}
 
                                     {talentBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400">
-                                                Talento
-                                            </span>
-
-                                            <span className="text-amber-400">
-                                                +
-                                                {
-                                                    talentBonus
-                                                }
-                                            </span>
+                                            <span className="text-[#5C4A38]">Talento</span>
+                                            <span style={{ color: "#9C7A3C" }}>+{talentBonus}</span>
                                         </div>
                                     )}
 
-                                    <div className="my-2 border-t border-slate-800" />
+                                    <div className="my-2 border-t border-[#A67C3D]/50" />
 
-                                    <div className="flex justify-between font-semibold">
-                                        <span className="text-slate-300">
-                                            Total
-                                        </span>
-
-                                        <span className="text-white">
-                                            {
-                                                totalValue
-                                            }
-                                        </span>
+                                    <div className="flex justify-between">
+                                        <span className="text-[#5C4A38]" style={cinzel}>Total</span>
+                                        <span className="text-[#2A1D14]" style={cinzel}>{totalValue}</span>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-slate-400">
-                                            Modificador
-                                        </span>
-
-                                        <span className="font-semibold text-indigo-400">
-                                            {formatModifier(
-                                                modifier
-                                            )}
+                                        <span className="text-[#5C4A38]">Modificador</span>
+                                        <span className="text-[#7A2530]" style={cinzel}>
+                                            {formatModifier(modifier)}
                                         </span>
                                     </div>
                                 </div>
@@ -718,44 +464,28 @@ export function CharacterAbilities({
                 </div>
             </div>
 
-            {/* ================================================== */}
-            {/* RESUMO */}
-            {/* ================================================== */}
-
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-                <h3 className="mb-4 text-lg font-semibold text-white">
+            <div className="border p-5" style={card}>
+                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Resumo dos atributos
                 </h3>
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     {ABILITIES.map((ability) => {
-                        const total =
-                            getTotalAbilityValue(
-                                ability.id
-                            );
-
-                        const modifier =
-                            getAbilityModifier(total);
+                        const total = getTotalAbilityValue(ability.id);
+                        const modifier = getAbilityModifier(total);
 
                         return (
-                            <div
-                                key={ability.id}
-                                className="rounded-lg border border-slate-800 bg-slate-900 p-3 text-center"
-                            >
-                                <p className="text-xs font-medium uppercase text-slate-500">
-                                    {
-                                        ability.shortName
-                                    }
+                            <div key={ability.id} className="border p-3 text-center" style={nested}>
+                                <p className="text-xs uppercase text-[#8A7860]" style={cinzel}>
+                                    {ability.shortName}
                                 </p>
 
-                                <p className="mt-1 text-xl font-bold text-white">
+                                <p className="mt-1 text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                                     {total}
                                 </p>
 
-                                <p className="text-sm text-indigo-400">
-                                    {formatModifier(
-                                        modifier
-                                    )}
+                                <p className="text-sm text-[#7A2530]">
+                                    {formatModifier(modifier)}
                                 </p>
                             </div>
                         );

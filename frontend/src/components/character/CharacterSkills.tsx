@@ -22,128 +22,48 @@ interface CharacterSkillsProps {
     onChange: Dispatch<SetStateAction<CharacterFormData>>;
 }
 
+const cinzel = { fontFamily: "'Cinzel', serif" } as const;
+const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+
 export function CharacterSkills({
     data,
     races,
     onChange,
 }: CharacterSkillsProps) {
-    /*
-     * ---------------------------------------------
-     * RAÇA
-     * ---------------------------------------------
-     */
-
-    const selectedRace = races.find(
-        (race) => race.id === data.raceId
-    );
-
-    /*
-     * ---------------------------------------------
-     * CLASSE PRINCIPAL
-     * ---------------------------------------------
-     */
+    const selectedRace = races.find((race) => race.id === data.raceId);
 
     const primaryClass = data.classes[0];
 
     const selectedClass = primaryClass
         ? DND_CLASSES.find(
-            (characterClass) =>
-                characterClass.id === primaryClass.classId
+            (characterClass) => characterClass.id === primaryClass.classId
         )
         : undefined;
-
-    /*
-     * ---------------------------------------------
-     * NÍVEL TOTAL
-     * ---------------------------------------------
-     */
 
     const totalLevel =
         data.classes.length > 0
             ? data.classes.reduce(
-                (total, characterClass) =>
-                    total + characterClass.level,
+                (total, characterClass) => total + characterClass.level,
                 0
             )
             : 1;
 
-    const proficiencyBonus =
-        getProficiencyBonus(totalLevel);
+    const proficiencyBonus = getProficiencyBonus(totalLevel);
 
-    /*
-     * ---------------------------------------------
-     * ATRIBUTOS FINAIS
-     * ---------------------------------------------
-     *
-     * Inclui os bônus raciais.
-     */
+    const finalAbilities = getFinalAbilities(data);
 
-    const finalAbilities =
-        getFinalAbilities(data);
+    const classSkillOptions = selectedClass?.skillProficiencies;
+    const classAvailableSkills = classSkillOptions?.from ?? [];
+    const classSkillLimit = classSkillOptions?.choose ?? 0;
 
-    /*
-     * ---------------------------------------------
-     * PERÍCIAS DA CLASSE
-     * ---------------------------------------------
-     */
+    const raceSkillOptions = selectedRace?.skillChoices;
+    const raceAvailableSkills = raceSkillOptions?.skills ?? [];
+    const raceSkillLimit = raceSkillOptions?.count ?? 0;
 
-    const classSkillOptions =
-        selectedClass?.skillProficiencies;
-
-    const classAvailableSkills =
-        classSkillOptions?.from ?? [];
-
-    const classSkillLimit =
-        classSkillOptions?.choose ?? 0;
-
-    /*
-     * ---------------------------------------------
-     * PERÍCIAS DA RAÇA
-     * ---------------------------------------------
-     */
-
-    const raceSkillOptions =
-        selectedRace?.skillChoices;
-
-    const raceAvailableSkills =
-        raceSkillOptions?.skills ?? [];
-
-    const raceSkillLimit =
-        raceSkillOptions?.count ?? 0;
-
-    /*
-     * ---------------------------------------------
-     * PROFICIÊNCIAS SELECIONADAS
-     * ---------------------------------------------
-     */
-
-    const selectedClassSkills =
-        data.skillProficiencies?.class ?? [];
-
-    const selectedRaceSkills =
-        data.skillProficiencies?.race ?? [];
-
-    const selectedBackgroundSkills =
-        data.skillProficiencies?.background ?? [];
-
-    const selectedTalentSkills =
-        data.skillProficiencies?.talent ?? [];
-
-    /*
-     * ---------------------------------------------
-     * TODAS AS PROFICIÊNCIAS
-     * ---------------------------------------------
-     *
-     * Uma perícia pode receber proficiência através de:
-     *
-     * - Classe
-     * - Raça
-     * - Background
-     * - Talento
-     *
-     * Se qualquer fonte conceder a proficiência,
-     * ela é considerada proficiente.
-     */
+    const selectedClassSkills = data.skillProficiencies?.class ?? [];
+    const selectedRaceSkills = data.skillProficiencies?.race ?? [];
+    const selectedBackgroundSkills = data.skillProficiencies?.background ?? [];
+    const selectedTalentSkills = data.skillProficiencies?.talent ?? [];
 
     const proficientSkills = new Set<Skill>([
         ...selectedClassSkills,
@@ -152,161 +72,61 @@ export function CharacterSkills({
         ...selectedTalentSkills,
     ]);
 
-    /*
-     * ---------------------------------------------
-     * MODIFICADOR DA PERÍCIA
-     * ---------------------------------------------
-     */
-
-    function getSkillModifier(
-        skill: Skill
-    ): number {
-        const skillDefinition =
-            DND_SKILLS.find(
-                (item) => item.id === skill
-            );
+    function getSkillModifier(skill: Skill): number {
+        const skillDefinition = DND_SKILLS.find((item) => item.id === skill);
 
         if (!skillDefinition) {
             return 0;
         }
 
-        /*
-         * Usa o atributo FINAL.
-         *
-         * Exemplo:
-         *
-         * Sabedoria 20
-         * -> modificador +5
-         */
+        const abilityValue = finalAbilities[skillDefinition.ability];
+        const abilityModifier = getAbilityModifier(abilityValue);
+        const isProficient = proficientSkills.has(skill);
+        const skillProficiencyBonus = isProficient ? proficiencyBonus : 0;
 
-        const abilityValue =
-            finalAbilities[
-                skillDefinition.ability
-            ];
-
-        const abilityModifier =
-            getAbilityModifier(abilityValue);
-
-        /*
-         * Verifica se a perícia possui
-         * proficiência em qualquer fonte.
-         */
-
-        const isProficient =
-            proficientSkills.has(skill);
-
-        /*
-         * Bônus de proficiência:
-         *
-         * proficiente -> +4
-         * não proficiente -> +0
-         */
-
-        const skillProficiencyBonus =
-            isProficient
-                ? proficiencyBonus
-                : 0;
-
-        return (
-            abilityModifier +
-            skillProficiencyBonus
-        );
+        return abilityModifier + skillProficiencyBonus;
     }
 
-    /*
-     * ---------------------------------------------
-     * PERCEPÇÃO PASSIVA
-     * ---------------------------------------------
-     *
-     * D&D 5e:
-     *
-     * 10 + modificador de Sabedoria
-     * + bônus de proficiência se proficiente.
-     *
-     * Exemplo:
-     *
-     * SAB 20 = +5
-     * Proficiência = +4
-     *
-     * 10 + 5 + 4 = 19
-     */
+    const passivePerception = 10 + getSkillModifier("perception");
 
-    const passivePerception =
-        10 + getSkillModifier("perception");
-
-    /*
-     * ---------------------------------------------
-     * CLASSE
-     * ---------------------------------------------
-     */
-
-    function toggleClassSkill(
-        skill: Skill
-    ) {
+    function toggleClassSkill(skill: Skill) {
         if (!classSkillOptions) {
             return;
         }
 
-        if (
-            !classAvailableSkills.includes(skill)
-        ) {
+        if (!classAvailableSkills.includes(skill)) {
             return;
         }
 
-        const alreadySelected =
-            selectedClassSkills.includes(skill);
-
-        /*
-         * REMOVER
-         */
+        const alreadySelected = selectedClassSkills.includes(skill);
 
         if (alreadySelected) {
             onChange((previous) => {
-                const current =
-                    previous.skillProficiencies
-                        ?.class ?? [];
+                const current = previous.skillProficiencies?.class ?? [];
+                const updated = current.filter((item) => item !== skill);
 
-                const updated =
-                    current.filter(
-                        (item) => item !== skill
-                    );
-
-                const raceSkills =
-                    previous.skillProficiencies
-                        ?.race ?? [];
-
+                const raceSkills = previous.skillProficiencies?.race ?? [];
                 const backgroundSkills =
-                    previous.skillProficiencies
-                        ?.background ?? [];
-
-                const talentSkills =
-                    previous.skillProficiencies
-                        ?.talent ?? [];
+                    previous.skillProficiencies?.background ?? [];
+                const talentSkills = previous.skillProficiencies?.talent ?? [];
 
                 const stillProficient =
                     updated.includes(skill) ||
                     raceSkills.includes(skill) ||
-                    backgroundSkills.includes(
-                        skill
-                    ) ||
+                    backgroundSkills.includes(skill) ||
                     talentSkills.includes(skill);
 
                 return {
                     ...previous,
-
                     skillProficiencies: {
                         ...(previous.skillProficiencies ?? {}),
                         class: updated,
                     },
-
                     skills: {
                         ...previous.skills,
-
                         [skill]: {
                             ...previous.skills[skill],
-
-                            proficient:
-                                stillProficient,
+                            proficient: stillProficient,
                         },
                     },
                 };
@@ -315,124 +135,66 @@ export function CharacterSkills({
             return;
         }
 
-        /*
-         * LIMITE ATINGIDO
-         */
-
-        if (
-            selectedClassSkills.length >=
-            classSkillLimit
-        ) {
+        if (selectedClassSkills.length >= classSkillLimit) {
             return;
         }
 
-        /*
-         * ADICIONAR
-         */
-
         onChange((previous) => {
-            const current =
-                previous.skillProficiencies
-                    ?.class ?? [];
-
-            const updated = [
-                ...current,
-                skill,
-            ];
+            const current = previous.skillProficiencies?.class ?? [];
+            const updated = [...current, skill];
 
             return {
                 ...previous,
-
                 skillProficiencies: {
                     ...(previous.skillProficiencies ?? {}),
                     class: updated,
                 },
-
                 skills: {
                     ...previous.skills,
-
-                    [skill]: {
-                        ...previous.skills[skill],
-                        proficient: true,
-                    },
+                    [skill]: { ...previous.skills[skill], proficient: true },
                 },
             };
         });
     }
 
-    /*
-     * ---------------------------------------------
-     * RAÇA
-     * ---------------------------------------------
-     */
-
-    function toggleRaceSkill(
-        skill: Skill
-    ) {
+    function toggleRaceSkill(skill: Skill) {
         if (!raceSkillOptions) {
             return;
         }
 
-        if (
-            !raceAvailableSkills.includes(skill)
-        ) {
+        if (!raceAvailableSkills.includes(skill)) {
             return;
         }
 
-        const alreadySelected =
-            selectedRaceSkills.includes(skill);
-
-        /*
-         * REMOVER
-         */
+        const alreadySelected = selectedRaceSkills.includes(skill);
 
         if (alreadySelected) {
             onChange((previous) => {
-                const current =
-                    previous.skillProficiencies
-                        ?.race ?? [];
+                const current = previous.skillProficiencies?.race ?? [];
+                const updated = current.filter((item) => item !== skill);
 
-                const updated =
-                    current.filter(
-                        (item) => item !== skill
-                    );
-
-                const classSkills =
-                    previous.skillProficiencies
-                        ?.class ?? [];
-
+                const classSkills = previous.skillProficiencies?.class ?? [];
                 const backgroundSkills =
-                    previous.skillProficiencies
-                        ?.background ?? [];
-
-                const talentSkills =
-                    previous.skillProficiencies
-                        ?.talent ?? [];
+                    previous.skillProficiencies?.background ?? [];
+                const talentSkills = previous.skillProficiencies?.talent ?? [];
 
                 const stillProficient =
                     classSkills.includes(skill) ||
                     updated.includes(skill) ||
-                    backgroundSkills.includes(
-                        skill
-                    ) ||
+                    backgroundSkills.includes(skill) ||
                     talentSkills.includes(skill);
 
                 return {
                     ...previous,
-
                     skillProficiencies: {
                         ...(previous.skillProficiencies ?? {}),
                         race: updated,
                     },
-
                     skills: {
                         ...previous.skills,
-
                         [skill]: {
                             ...previous.skills[skill],
-
-                            proficient:
-                                stillProficient,
+                            proficient: stillProficient,
                         },
                     },
                 };
@@ -441,56 +203,27 @@ export function CharacterSkills({
             return;
         }
 
-        /*
-         * LIMITE ATINGIDO
-         */
-
-        if (
-            selectedRaceSkills.length >=
-            raceSkillLimit
-        ) {
+        if (selectedRaceSkills.length >= raceSkillLimit) {
             return;
         }
 
-        /*
-         * ADICIONAR
-         */
-
         onChange((previous) => {
-            const current =
-                previous.skillProficiencies
-                    ?.race ?? [];
-
-            const updated = [
-                ...current,
-                skill,
-            ];
+            const current = previous.skillProficiencies?.race ?? [];
+            const updated = [...current, skill];
 
             return {
                 ...previous,
-
                 skillProficiencies: {
                     ...(previous.skillProficiencies ?? {}),
                     race: updated,
                 },
-
                 skills: {
                     ...previous.skills,
-
-                    [skill]: {
-                        ...previous.skills[skill],
-                        proficient: true,
-                    },
+                    [skill]: { ...previous.skills[skill], proficient: true },
                 },
             };
         });
     }
-
-    /*
-     * ---------------------------------------------
-     * COMPONENTE DE PERÍCIA
-     * ---------------------------------------------
-     */
 
     function SkillOption({
         skill,
@@ -503,271 +236,203 @@ export function CharacterSkills({
         available: boolean;
         onClick: () => void;
     }) {
-        const skillData =
-            DND_SKILLS.find(
-                (item) => item.id === skill
-            );
+        const skillData = DND_SKILLS.find((item) => item.id === skill);
 
         if (!skillData) {
             return null;
         }
 
-        const ability =
-            ABILITIES.find(
-                (item) =>
-                    item.id === skillData.ability
-            );
-
-        const modifier =
-            getSkillModifier(skill);
+        const ability = ABILITIES.find((item) => item.id === skillData.ability);
+        const modifier = getSkillModifier(skill);
 
         return (
             <button
                 type="button"
                 disabled={!available}
                 onClick={onClick}
-                className={[
-                    "flex w-full items-center justify-between rounded-xl border p-4 text-left transition",
-
-                    !available
-                        ? "cursor-not-allowed border-slate-800 bg-slate-950 opacity-30"
-                        : selected
-                            ? "border-indigo-500 bg-indigo-500/10"
-                            : "border-slate-700 bg-slate-950 hover:border-slate-600 hover:bg-slate-900",
-                ].join(" ")}
+                className="flex w-full items-center justify-between border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                style={{
+                    backgroundColor: selected ? "#DCCBA0" : "#EBDFC4",
+                    borderColor: selected ? "#7A2530" : "#A67C3D",
+                }}
             >
                 <div className="flex items-center gap-3">
                     <div
-                        className={[
-                            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold",
-
-                            selected
-                                ? "border-indigo-400 bg-indigo-500 text-white"
-                                : "border-slate-600 text-slate-500",
-                        ].join(" ")}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center border text-sm"
+                        style={{
+                            ...cinzel,
+                            borderColor: selected ? "#5C1D26" : "#A67C3D",
+                            backgroundColor: selected ? "#7A2530" : "transparent",
+                            color: selected ? "#EBDFC4" : "#8A7860",
+                        }}
                     >
                         {selected ? "✓" : ""}
                     </div>
 
                     <div>
-                        <p className="font-medium text-white">
-                            {skillData.name}
-                        </p>
-
-                        <p className="text-xs text-slate-500">
-                            {ability?.shortName}
-                        </p>
+                        <p className="text-[#2A1D14]" style={cinzel}>{skillData.name}</p>
+                        <p className="text-xs text-[#8A7860]">{ability?.shortName}</p>
                     </div>
                 </div>
 
-                <div className="text-right">
-                    <p
-                        className={[
-                            "text-lg font-bold",
-
-                            modifier >= 0
-                                ? "text-emerald-400"
-                                : "text-red-400",
-                        ].join(" ")}
-                    >
-                        {modifier >= 0 ? "+" : ""}
-                        {modifier}
-                    </p>
-                </div>
+                <p
+                    className="text-lg"
+                    style={{ ...cinzel, color: modifier >= 0 ? "#3F5B34" : "#8B3A2E" }}
+                >
+                    {modifier >= 0 ? "+" : ""}
+                    {modifier}
+                </p>
             </button>
         );
     }
 
     return (
         <div>
-            {/* CABEÇALHO */}
-
             <div className="mb-8">
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Perícias
                 </h2>
 
-                <p className="mt-2 text-slate-400">
-                    Escolha as perícias concedidas pela
-                    sua classe e pela sua raça.
+                <p className="mt-2 text-[#5C4A38]">
+                    Escolha as perícias concedidas pela sua classe e pela sua raça.
                 </p>
             </div>
 
-            {/* RESUMO SUPERIOR */}
-
             <div className="mb-8 grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                    <p className="text-sm text-slate-400">
-                        Nível total
-                    </p>
-
-                    <p className="mt-1 text-2xl font-bold text-white">
+                <div className="border p-4" style={card}>
+                    <p className="text-sm text-[#5C4A38]">Nível total</p>
+                    <p className="mt-1 text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                         {totalLevel}
                     </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                    <p className="text-sm text-slate-400">
-                        Bônus de proficiência
-                    </p>
-
-                    <p className="mt-1 text-2xl font-bold text-indigo-400">
+                <div className="border p-4" style={card}>
+                    <p className="text-sm text-[#5C4A38]">Bônus de proficiência</p>
+                    <p className="mt-1 text-2xl text-[#7A2530]" style={{ ...cinzel, fontWeight: 600 }}>
                         +{proficiencyBonus}
                     </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                    <p className="text-sm text-slate-400">
-                        Percepção passiva
-                    </p>
-
-                    <p className="mt-1 text-2xl font-bold text-white">
+                <div className="border p-4" style={card}>
+                    <p className="text-sm text-[#5C4A38]">Percepção passiva</p>
+                    <p className="mt-1 text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                         {passivePerception}
                     </p>
                 </div>
             </div>
 
-            {/* PERÍCIAS DA CLASSE */}
-
             {classSkillOptions && (
                 <section className="mb-8">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg font-semibold text-white">
-                                Perícias de{" "}
-                                {selectedClass?.name}
+                            <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                Perícias de {selectedClass?.name}
                             </h3>
 
-                            <p className="mt-1 text-sm text-slate-400">
-                                Escolha{" "}
-                                {classSkillLimit}{" "}
-                                perícias.
+                            <p className="mt-1 text-sm text-[#5C4A38]">
+                                Escolha {classSkillLimit} perícias.
                             </p>
                         </div>
 
-                        <div className="rounded-lg bg-indigo-500/10 px-3 py-1.5 text-sm font-medium text-indigo-400">
-                            {selectedClassSkills.length}
-                            {" / "}
-                            {classSkillLimit}
+                        <div
+                            className="px-3 py-1.5 text-sm"
+                            style={{ ...cinzel, backgroundColor: "#7A2530", color: "#EBDFC4" }}
+                        >
+                            {selectedClassSkills.length} / {classSkillLimit}
                         </div>
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">
-                        {classAvailableSkills.map(
-                            (skill) => (
-                                <SkillOption
-                                    key={skill}
-                                    skill={skill}
-                                    available={true}
-                                    selected={selectedClassSkills.includes(
-                                        skill
-                                    )}
-                                    onClick={() =>
-                                        toggleClassSkill(
-                                            skill
-                                        )
-                                    }
-                                />
-                            )
-                        )}
+                        {classAvailableSkills.map((skill) => (
+                            <SkillOption
+                                key={skill}
+                                skill={skill}
+                                available={true}
+                                selected={selectedClassSkills.includes(skill)}
+                                onClick={() => toggleClassSkill(skill)}
+                            />
+                        ))}
                     </div>
                 </section>
             )}
-
-            {/* PERÍCIAS DA RAÇA */}
 
             {raceSkillOptions && (
                 <section className="mb-8">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg font-semibold text-white">
-                                Perícias de{" "}
-                                {selectedRace?.name}
+                            <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                Perícias de {selectedRace?.name}
                             </h3>
 
-                            <p className="mt-1 text-sm text-slate-400">
-                                Escolha{" "}
-                                {raceSkillLimit}{" "}
-                                perícias.
+                            <p className="mt-1 text-sm text-[#5C4A38]">
+                                Escolha {raceSkillLimit} perícias.
                             </p>
                         </div>
 
-                        <div className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-400">
-                            {selectedRaceSkills.length}
-                            {" / "}
-                            {raceSkillLimit}
+                        <div
+                            className="px-3 py-1.5 text-sm"
+                            style={{ ...cinzel, backgroundColor: "#3F5B34", color: "#EBDFC4" }}
+                        >
+                            {selectedRaceSkills.length} / {raceSkillLimit}
                         </div>
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">
-                        {raceAvailableSkills.map(
-                            (skill) => (
-                                <SkillOption
-                                    key={skill}
-                                    skill={skill}
-                                    available={true}
-                                    selected={selectedRaceSkills.includes(
-                                        skill
-                                    )}
-                                    onClick={() =>
-                                        toggleRaceSkill(
-                                            skill
-                                        )
-                                    }
-                                />
-                            )
-                        )}
+                        {raceAvailableSkills.map((skill) => (
+                            <SkillOption
+                                key={skill}
+                                skill={skill}
+                                available={true}
+                                selected={selectedRaceSkills.includes(skill)}
+                                onClick={() => toggleRaceSkill(skill)}
+                            />
+                        ))}
                     </div>
                 </section>
             )}
-
-            {/* PERÍCIAS DO TALENTO */}
 
             {selectedTalentSkills.length > 0 && (
                 <section className="mb-8">
-                    <div className="mb-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h3 className="text-lg font-semibold text-white">
-                                    Perícias do talento
-                                </h3>
+                    <div className="mb-4 flex items-center justify-between">
+                        <div>
+                            <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                Perícias do talento
+                            </h3>
 
-                                <p className="mt-1 text-sm text-slate-400">
-                                    Perícias recebidas através do Talento Inicial.
-                                </p>
-                            </div>
+                            <p className="mt-1 text-sm text-[#5C4A38]">
+                                Perícias recebidas através do Talento Inicial.
+                            </p>
+                        </div>
 
-                            <div className="rounded-lg bg-purple-500/10 px-3 py-1.5 text-sm font-medium text-purple-400">
-                                {selectedTalentSkills.length}
-                            </div>
+                        <div
+                            className="px-3 py-1.5 text-sm"
+                            style={{ ...cinzel, backgroundColor: "#9C7A3C", color: "#EBDFC4" }}
+                        >
+                            {selectedTalentSkills.length}
                         </div>
                     </div>
 
                     <div className="grid gap-3 md:grid-cols-2">
-                        {selectedTalentSkills.map(
-                            (skill) => (
-                                <SkillOption
-                                    key={skill}
-                                    skill={skill}
-                                    available={false}
-                                    selected={true}
-                                    onClick={() => { }}
-                                />
-                            )
-                        )}
+                        {selectedTalentSkills.map((skill) => (
+                            <SkillOption
+                                key={skill}
+                                skill={skill}
+                                available={false}
+                                selected={true}
+                                onClick={() => {}}
+                            />
+                        ))}
                     </div>
                 </section>
             )}
 
-            {/* RESUMO DAS PROFICIÊNCIAS */}
-
             <section className="mb-8">
                 <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-white">
+                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                         Resumo das proficiências
                     </h3>
 
-                    <p className="mt-1 text-sm text-slate-400">
+                    <p className="mt-1 text-sm text-[#5C4A38]">
                         Suas proficiências podem vir de diferentes fontes.
                     </p>
                 </div>
@@ -776,69 +441,29 @@ export function CharacterSkills({
                     {DND_SKILLS.map((skill) => {
                         const sources: string[] = [];
 
-                        if (
-                            selectedClassSkills.includes(
-                                skill.id
-                            )
-                        ) {
-                            sources.push("Classe");
-                        }
-
-                        if (
-                            selectedRaceSkills.includes(
-                                skill.id
-                            )
-                        ) {
-                            sources.push("Raça");
-                        }
-
-                        if (
-                            selectedBackgroundSkills.includes(
-                                skill.id
-                            )
-                        ) {
-                            sources.push("Background");
-                        }
-
-                        if (
-                            selectedTalentSkills.includes(
-                                skill.id
-                            )
-                        ) {
-                            sources.push("Talento");
-                        }
+                        if (selectedClassSkills.includes(skill.id)) sources.push("Classe");
+                        if (selectedRaceSkills.includes(skill.id)) sources.push("Raça");
+                        if (selectedBackgroundSkills.includes(skill.id)) sources.push("Background");
+                        if (selectedTalentSkills.includes(skill.id)) sources.push("Talento");
 
                         if (sources.length === 0) {
                             return null;
                         }
 
-                        const modifier =
-                            getSkillModifier(
-                                skill.id
-                            );
+                        const modifier = getSkillModifier(skill.id);
 
                         return (
-                            <div
-                                key={skill.id}
-                                className="rounded-lg border border-slate-800 bg-slate-950 p-4"
-                            >
+                            <div key={skill.id} className="border p-4" style={card}>
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="font-medium text-white">
-                                            {skill.name}
-                                        </p>
-
-                                        <p className="mt-1 text-xs text-slate-500">
-                                            {sources.join(
-                                                " • "
-                                            )}
+                                        <p className="text-[#2A1D14]" style={cinzel}>{skill.name}</p>
+                                        <p className="mt-1 text-xs text-[#8A7860]">
+                                            {sources.join(" • ")}
                                         </p>
                                     </div>
 
-                                    <p className="text-lg font-bold text-emerald-400">
-                                        {modifier >= 0
-                                            ? "+"
-                                            : ""}
+                                    <p className="text-lg" style={{ ...cinzel, color: "#3F5B34" }}>
+                                        {modifier >= 0 ? "+" : ""}
                                         {modifier}
                                     </p>
                                 </div>
@@ -848,14 +473,11 @@ export function CharacterSkills({
                 </div>
             </section>
 
-            {/* AVISO */}
-
-            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-                <p className="text-sm leading-6 text-slate-400">
-                    As perícias recebidas de diferentes
-                    fontes não acumulam o bônus de
-                    proficiência. Uma perícia continua
-                    sendo apenas uma proficiência.
+            <div className="border p-4" style={card}>
+                <p className="text-sm leading-6 text-[#5C4A38]">
+                    As perícias recebidas de diferentes fontes não acumulam o
+                    bônus de proficiência. Uma perícia continua sendo apenas
+                    uma proficiência.
                 </p>
             </div>
         </div>

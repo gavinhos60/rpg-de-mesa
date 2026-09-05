@@ -1,7 +1,4 @@
-import type {
-    CharacterFormData,
-    Skill,
-} from "../../types/character";
+import type { CharacterFormData } from "../../types/character";
 
 import {
     ABILITIES,
@@ -10,7 +7,6 @@ import {
 
 import { DND_CLASSES } from "../../data/dnd/classes";
 import { DND_RACES } from "../../data/dnd/races";
-import { DND_SKILLS } from "../../data/dnd/skills";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
 
@@ -27,339 +23,97 @@ interface CharacterCombatProps {
     data: CharacterFormData;
 }
 
-export function CharacterCombat({
-    data,
-}: CharacterCombatProps) {
-    /*
-     * ============================================================
-     * CLASSE
-     * ============================================================
-     */
+const cinzel = { fontFamily: "'Cinzel', serif" } as const;
+const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
 
-    const primaryClassSelection =
-        data.classes[0];
+export function CharacterCombat({ data }: CharacterCombatProps) {
+    const primaryClassSelection = data.classes[0];
 
-    const selectedClass =
-        primaryClassSelection
-            ? DND_CLASSES.find(
-                  (characterClass) =>
-                      characterClass.id ===
-                      primaryClassSelection.classId
-              )
-            : undefined;
+    const selectedClass = primaryClassSelection
+        ? DND_CLASSES.find(
+            (characterClass) => characterClass.id === primaryClassSelection.classId
+        )
+        : undefined;
 
-    /*
-     * ============================================================
-     * RAÇA
-     * ============================================================
-     */
+    const selectedRace = DND_RACES.find((race) => race.id === data.raceId);
 
-    const selectedRace = DND_RACES.find(
-        (race) => race.id === data.raceId
-    );
+    const abilities = getFinalAbilities(data);
 
-    /*
-     * ============================================================
-     * ATRIBUTOS FINAIS
-     * ============================================================
-     *
-     * Aqui entram:
-     *
-     * - atributo base
-     * - bônus fixos da raça
-     * - escolhas de bônus da raça
-     */
-
-    const abilities =
-        getFinalAbilities(data);
-
-    const strength =
-        abilities.strength;
-
-    const dexterity =
-        abilities.dexterity;
-
-    const constitution =
-        abilities.constitution;
-
-    const wisdom =
-        abilities.wisdom;
-
-    const intelligence =
-        abilities.intelligence;
-
-    const charisma =
-        abilities.charisma;
-
-    /*
-     * ============================================================
-     * NÍVEL TOTAL
-     * ============================================================
-     */
+    const strength = abilities.strength;
+    const dexterity = abilities.dexterity;
+    const constitution = abilities.constitution;
+    const wisdom = abilities.wisdom;
 
     const totalLevel =
         data.classes.length > 0
             ? data.classes.reduce(
-                  (
-                      total,
-                      characterClass
-                  ) =>
-                      total +
-                      characterClass.level,
-                  0
-              )
+                (total, characterClass) => total + characterClass.level,
+                0
+            )
             : 1;
 
-    const proficiencyBonus =
-        getProficiencyBonus(
-            totalLevel
-        );
-
-    /*
-     * ============================================================
-     * PONTOS DE VIDA
-     * ============================================================
-     */
+    const proficiencyBonus = getProficiencyBonus(totalLevel);
 
     const hitPoints = selectedClass
-        ? getInitialHitPoints(
-              selectedClass,
-              constitution
-          )
+        ? getInitialHitPoints(selectedClass, constitution)
         : 0;
 
-    /*
-     * ============================================================
-     * CLASSE DE ARMADURA
-     * ============================================================
-     *
-     * Monge:
-     *
-     * 10 + DEX + SAB
-     *
-     * Demais personagens:
-     *
-     * 10 + DEX
-     *
-     * Equipamentos serão adicionados posteriormente.
-     */
+    const armorClass = getBaseArmorClass(dexterity, wisdom, selectedClass);
+    const initiative = getInitiative(dexterity);
+    const movement = selectedRace?.speed ?? 30;
+    const carryingCapacity = getCarryingCapacity(strength);
 
-    const armorClass =
-        getBaseArmorClass(
-            dexterity,
-            wisdom,
-            selectedClass
-        );
+    const raceSkills = data.skillProficiencies?.race ?? [];
+    const classSkills = data.skillProficiencies?.class ?? [];
+    const backgroundSkills = data.skillProficiencies?.background ?? [];
+    const talentSkills = data.skillProficiencies?.talent ?? [];
 
-    /*
-     * ============================================================
-     * INICIATIVA
-     * ============================================================
-     */
+    const proficientSkills = new Set([
+        ...raceSkills,
+        ...classSkills,
+        ...backgroundSkills,
+        ...talentSkills,
+    ]);
 
-    const initiative =
-        getInitiative(
-            dexterity
-        );
+    const perceptionProficient = proficientSkills.has("perception");
 
-    /*
-     * ============================================================
-     * DESLOCAMENTO
-     * ============================================================
-     */
+    const passivePerception = getPassivePerception(
+        wisdom,
+        perceptionProficient,
+        proficiencyBonus
+    );
 
-    const movement =
-        selectedRace?.speed ?? 30;
-
-    /*
-     * ============================================================
-     * CAPACIDADE DE CARGA
-     * ============================================================
-     */
-
-    const carryingCapacity =
-        getCarryingCapacity(
-            strength
-        );
-
-    /*
-     * ============================================================
-     * PROFICIÊNCIAS DE PERÍCIAS
-     * ============================================================
-     *
-     * Uma perícia pode ser concedida por:
-     *
-     * - Classe
-     * - Raça
-     * - Background
-     * - Talento
-     */
-
-    const raceSkills =
-        data.skillProficiencies?.race ?? [];
-
-    const classSkills =
-        data.skillProficiencies?.class ?? [];
-
-    const backgroundSkills =
-        data.skillProficiencies?.background ?? [];
-
-    const talentSkills =
-        data.skillProficiencies?.talent ?? [];
-
-    /*
-     * ============================================================
-     * TODAS AS PROFICIÊNCIAS
-     * ============================================================
-     */
-
-    const proficientSkills =
-        new Set<Skill>([
-            ...raceSkills,
-            ...classSkills,
-            ...backgroundSkills,
-            ...talentSkills,
-        ]);
-
-    /*
-     * ============================================================
-     * PERCEPÇÃO PASSIVA
-     * ============================================================
-     *
-     * Fórmula:
-     *
-     * 10
-     * + modificador de SAB
-     * + bônus de proficiência, se proficiente
-     *
-     * Exemplo:
-     *
-     * SAB 20 = +5
-     * Proficiência nível 12 = +4
-     *
-     * 10 + 5 + 4 = 19
-     */
-
-    const perceptionProficient =
-        proficientSkills.has(
-            "perception"
-        );
-
-    const passivePerception =
-        getPassivePerception(
-            wisdom,
-            perceptionProficient,
-            proficiencyBonus
-        );
-
-    /*
-     * ============================================================
-     * FORMATADOR
-     * ============================================================
-     */
-
-    function formatModifier(
-        value: number
-    ): string {
-        return value >= 0
-            ? `+${value}`
-            : `${value}`;
+    function formatModifier(value: number): string {
+        return value >= 0 ? `+${value}` : `${value}`;
     }
 
-    /*
-     * ============================================================
-     * MODIFICADOR DE PERÍCIA
-     * ============================================================
-     */
+    function getSkillModifier(skillId: "perception"): number {
+        const abilityValue = abilities["wisdom"];
+        const abilityModifier = getAbilityModifier(abilityValue);
+        const proficient = proficientSkills.has(skillId);
 
-    function getSkillModifier(
-        skillId: Skill
-    ): number {
-        const skill =
-            DND_SKILLS.find(
-                (item) =>
-                    item.id === skillId
-            );
-
-        if (!skill) {
-            return 0;
-        }
-
-        /*
-         * Usa o atributo final.
-         *
-         * Exemplo:
-         *
-         * SAB 20
-         * -> +5
-         */
-
-        const abilityValue =
-            abilities[
-                skill.ability
-            ];
-
-        const abilityModifier =
-            getAbilityModifier(
-                abilityValue
-            );
-
-        /*
-         * Verifica todas as fontes
-         * de proficiência.
-         */
-
-        const proficient =
-            proficientSkills.has(
-                skillId
-            );
-
-        return (
-            abilityModifier +
-            (
-                proficient
-                    ? proficiencyBonus
-                    : 0
-            )
-        );
+        return abilityModifier + (proficient ? proficiencyBonus : 0);
     }
-
-    /*
-     * ============================================================
-     * RENDER
-     * ============================================================
-     */
 
     return (
         <div>
-            {/* =====================================================
-                CABEÇALHO
-            ===================================================== */}
-
             <div className="mb-8">
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Combate
                 </h2>
 
-                <p className="mt-2 text-slate-400">
-                    Os valores abaixo são calculados
-                    automaticamente com base na sua
-                    raça, classe e atributos.
+                <p className="mt-2 text-[#5C4A38]">
+                    Os valores abaixo são calculados automaticamente com base
+                    na sua raça, classe e atributos.
                 </p>
             </div>
-
-            {/* =====================================================
-                PRINCIPAIS
-            ===================================================== */}
 
             <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <CombatCard
                     title="Pontos de Vida"
                     value={hitPoints}
                     description={
-                        selectedClass
-                            ? `1d${selectedClass.hitDie} + CON`
-                            : "Selecione uma classe"
+                        selectedClass ? `1d${selectedClass.hitDie} + CON` : "Selecione uma classe"
                     }
                 />
 
@@ -367,8 +121,7 @@ export function CharacterCombat({
                     title="Classe de Armadura"
                     value={armorClass}
                     description={
-                        selectedClass?.id ===
-                        "monk"
+                        selectedClass?.id === "monk"
                             ? "10 + DEX + SAB"
                             : "10 + modificador de Destreza"
                     }
@@ -376,283 +129,159 @@ export function CharacterCombat({
 
                 <CombatCard
                     title="Iniciativa"
-                    value={formatModifier(
-                        initiative
-                    )}
+                    value={formatModifier(initiative)}
                     description="Modificador de Destreza"
                 />
 
                 <CombatCard
                     title="Deslocamento"
                     value={`${movement} ft`}
-                    description={
-                        selectedRace
-                            ? selectedRace.name
-                            : "Padrão"
-                    }
+                    description={selectedRace ? selectedRace.name : "Padrão"}
                 />
             </div>
 
-            {/* =====================================================
-                INFORMAÇÕES DE COMBATE
-            ===================================================== */}
-
             <section className="mb-8">
-                <h3 className="mb-4 text-lg font-semibold text-white">
+                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Informações de combate
                 </h3>
 
                 <div className="grid gap-4 md:grid-cols-3">
-                    <InfoCard
-                        label="Nível total"
-                        value={totalLevel}
-                    />
-
-                    <InfoCard
-                        label="Bônus de proficiência"
-                        value={formatModifier(
-                            proficiencyBonus
-                        )}
-                    />
-
-                    <InfoCard
-                        label="Percepção passiva"
-                        value={passivePerception}
-                    />
-
-                    <InfoCard
-                        label="Capacidade de carga"
-                        value={`${carryingCapacity} lb`}
-                    />
-
-                    <InfoCard
-                        label="Dado de vida"
-                        value={
-                            selectedClass
-                                ? `d${selectedClass.hitDie}`
-                                : "-"
-                        }
-                    />
-
+                    <InfoCard label="Nível total" value={totalLevel} />
+                    <InfoCard label="Bônus de proficiência" value={formatModifier(proficiencyBonus)} />
+                    <InfoCard label="Percepção passiva" value={passivePerception} />
+                    <InfoCard label="Capacidade de carga" value={`${carryingCapacity} lb`} />
+                    <InfoCard label="Dado de vida" value={selectedClass ? `d${selectedClass.hitDie}` : "-"} />
                     <InfoCard
                         label="Modificador de CON"
-                        value={formatModifier(
-                            getAbilityModifier(
-                                constitution
-                            )
-                        )}
+                        value={formatModifier(getAbilityModifier(constitution))}
                     />
                 </div>
             </section>
 
-            {/* =====================================================
-                TESTES DE RESISTÊNCIA
-            ===================================================== */}
-
             <section className="mb-8">
                 <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-white">
+                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                         Testes de resistência
                     </h3>
 
-                    <p className="mt-1 text-sm text-slate-400">
-                        As resistências proficientes recebem
-                        automaticamente o bônus de proficiência.
+                    <p className="mt-1 text-sm text-[#5C4A38]">
+                        As resistências proficientes recebem automaticamente o
+                        bônus de proficiência.
                     </p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
-                    {ABILITIES.map(
-                        (ability) => {
-                            const value =
-                                abilities[
-                                    ability.id
-                                ];
+                    {ABILITIES.map((ability) => {
+                        const value = abilities[ability.id];
 
-                            const modifier =
-                                getSavingThrowModifier(
-                                    ability.id,
-                                    value,
-                                    selectedClass
-                                        ?.savingThrowProficiencies ??
-                                        [],
-                                    proficiencyBonus
-                                );
+                        const modifier = getSavingThrowModifier(
+                            ability.id,
+                            value,
+                            selectedClass?.savingThrowProficiencies ?? [],
+                            proficiencyBonus
+                        );
 
-                            const proficient =
-                                selectedClass
-                                    ?.savingThrowProficiencies
-                                    .includes(
-                                        ability.id
-                                    ) ??
-                                false;
+                        const proficient =
+                            selectedClass?.savingThrowProficiencies.includes(ability.id) ?? false;
 
-                            return (
-                                <div
-                                    key={
-                                        ability.id
-                                    }
-                                    className={[
-                                        "flex items-center justify-between rounded-xl border p-4",
-
-                                        proficient
-                                            ? "border-indigo-500/50 bg-indigo-500/10"
-                                            : "border-slate-800 bg-slate-950",
-                                    ].join(
-                                        " "
-                                    )}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div
-                                            className={[
-                                                "flex h-9 w-9 items-center justify-center rounded-full border text-xs font-bold",
-
-                                                proficient
-                                                    ? "border-indigo-400 bg-indigo-500 text-white"
-                                                    : "border-slate-700 text-slate-500",
-                                            ].join(
-                                                " "
-                                            )}
-                                        >
-                                            {
-                                                ability.shortName
-                                            }
-                                        </div>
-
-                                        <div>
-                                            <p className="font-medium text-white">
-                                                {
-                                                    ability.name
-                                                }
-                                            </p>
-
-                                            <p className="text-xs text-slate-500">
-                                                {proficient
-                                                    ? "Proficiente"
-                                                    : "Não proficiente"}
-                                            </p>
-                                        </div>
+                        return (
+                            <div
+                                key={ability.id}
+                                className="flex items-center justify-between border p-4"
+                                style={{
+                                    backgroundColor: proficient ? "#DCCBA0" : "#EBDFC4",
+                                    borderColor: proficient ? "#7A2530" : "#A67C3D",
+                                }}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        className="flex h-9 w-9 items-center justify-center border text-xs"
+                                        style={{
+                                            ...cinzel,
+                                            backgroundColor: proficient ? "#7A2530" : "transparent",
+                                            borderColor: proficient ? "#5C1D26" : "#A67C3D",
+                                            color: proficient ? "#EBDFC4" : "#8A7860",
+                                        }}
+                                    >
+                                        {ability.shortName}
                                     </div>
 
-                                    <p
-                                        className={[
-                                            "text-xl font-bold",
-
-                                            modifier >=
-                                            0
-                                                ? "text-emerald-400"
-                                                : "text-red-400",
-                                        ].join(
-                                            " "
-                                        )}
-                                    >
-                                        {formatModifier(
-                                            modifier
-                                        )}
-                                    </p>
+                                    <div>
+                                        <p className="text-[#2A1D14]" style={cinzel}>{ability.name}</p>
+                                        <p className="text-xs text-[#8A7860]">
+                                            {proficient ? "Proficiente" : "Não proficiente"}
+                                        </p>
+                                    </div>
                                 </div>
-                            );
-                        }
-                    )}
+
+                                <p
+                                    className="text-xl"
+                                    style={{ ...cinzel, color: modifier >= 0 ? "#3F5B34" : "#8B3A2E" }}
+                                >
+                                    {formatModifier(modifier)}
+                                </p>
+                            </div>
+                        );
+                    })}
                 </div>
             </section>
 
-            {/* =====================================================
-                ATRIBUTOS FINAIS
-            ===================================================== */}
-
             <section className="mb-8">
-                <h3 className="mb-4 text-lg font-semibold text-white">
+                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Atributos finais
                 </h3>
 
-                <p className="mb-4 text-sm text-slate-400">
-                    Os valores abaixo já incluem os bônus
-                    provenientes da raça.
+                <p className="mb-4 text-sm text-[#5C4A38]">
+                    Os valores abaixo já incluem os bônus provenientes da raça.
                 </p>
 
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {ABILITIES.map(
-                        (ability) => {
-                            const value =
-                                abilities[
-                                    ability.id
-                                ];
+                    {ABILITIES.map((ability) => {
+                        const value = abilities[ability.id];
+                        const modifier = getAbilityModifier(value);
 
-                            const modifier =
-                                getAbilityModifier(
-                                    value
-                                );
-
-                            return (
-                                <div
-                                    key={
-                                        ability.id
-                                    }
-                                    className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950 p-4"
-                                >
-                                    <div>
-                                        <p className="font-medium text-white">
-                                            {
-                                                ability.name
-                                            }
-                                        </p>
-
-                                        <p className="text-xs text-slate-500">
-                                            {
-                                                ability.shortName
-                                            }
-                                        </p>
-                                    </div>
-
-                                    <div className="text-right">
-                                        <p className="text-2xl font-bold text-white">
-                                            {
-                                                value
-                                            }
-                                        </p>
-
-                                        <p
-                                            className={[
-                                                "text-sm font-semibold",
-
-                                                modifier >=
-                                                0
-                                                    ? "text-emerald-400"
-                                                    : "text-red-400",
-                                            ].join(
-                                                " "
-                                            )}
-                                        >
-                                            {formatModifier(
-                                                modifier
-                                            )}
-                                        </p>
-                                    </div>
+                        return (
+                            <div
+                                key={ability.id}
+                                className="flex items-center justify-between border p-4"
+                                style={card}
+                            >
+                                <div>
+                                    <p className="text-[#2A1D14]" style={cinzel}>{ability.name}</p>
+                                    <p className="text-xs text-[#8A7860]">{ability.shortName}</p>
                                 </div>
-                            );
-                        }
-                    )}
+
+                                <div className="text-right">
+                                    <p className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                        {value}
+                                    </p>
+
+                                    <p
+                                        className="text-sm"
+                                        style={{ color: modifier >= 0 ? "#3F5B34" : "#8B3A2E" }}
+                                    >
+                                        {formatModifier(modifier)}
+                                    </p>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </section>
 
-            {/* =====================================================
-                PERCEPÇÃO
-            ===================================================== */}
-
             <section>
-                <h3 className="mb-4 text-lg font-semibold text-white">
+                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Percepção
                 </h3>
 
-                <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
+                <div className="border p-5" style={card}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="font-semibold text-white">
+                            <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                                 Percepção
                             </p>
 
-                            <p className="mt-1 text-sm text-slate-500">
+                            <p className="mt-1 text-sm text-[#8A7860]">
                                 {perceptionProficient
                                     ? "Sabedoria + bônus de proficiência"
                                     : "Sabedoria"}
@@ -660,17 +289,11 @@ export function CharacterCombat({
                         </div>
 
                         <div className="text-right">
-                            <p className="text-2xl font-bold text-white">
-                                {formatModifier(
-                                    getSkillModifier(
-                                        "perception"
-                                    )
-                                )}
+                            <p className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                {formatModifier(getSkillModifier("perception"))}
                             </p>
 
-                            <p className="text-xs text-slate-500">
-                                Percepção
-                            </p>
+                            <p className="text-xs text-[#8A7860]">Percepção</p>
                         </div>
                     </div>
                 </div>
@@ -679,62 +302,34 @@ export function CharacterCombat({
     );
 }
 
-/*
- * ================================================================
- * CARD PRINCIPAL
- * ================================================================
- */
-
 interface CombatCardProps {
     title: string;
     value: string | number;
     description: string;
 }
 
-function CombatCard({
-    title,
-    value,
-    description,
-}: CombatCardProps) {
+function CombatCard({ title, value, description }: CombatCardProps) {
     return (
-        <div className="rounded-xl border border-slate-800 bg-slate-950 p-5">
-            <p className="text-sm font-medium text-slate-400">
-                {title}
-            </p>
-
-            <p className="mt-2 text-3xl font-bold text-white">
+        <div className="border p-5" style={card}>
+            <p className="text-sm text-[#5C4A38]">{title}</p>
+            <p className="mt-2 text-3xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                 {value}
             </p>
-
-            <p className="mt-2 text-xs text-slate-500">
-                {description}
-            </p>
+            <p className="mt-2 text-xs text-[#8A7860]">{description}</p>
         </div>
     );
 }
-
-/*
- * ================================================================
- * CARD DE INFORMAÇÃO
- * ================================================================
- */
 
 interface InfoCardProps {
     label: string;
     value: string | number;
 }
 
-function InfoCard({
-    label,
-    value,
-}: InfoCardProps) {
+function InfoCard({ label, value }: InfoCardProps) {
     return (
-        <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
-            <p className="text-sm text-slate-500">
-                {label}
-            </p>
-
-            <p className="mt-1 text-xl font-bold text-white">
+        <div className="border p-4" style={card}>
+            <p className="text-sm text-[#8A7860]">{label}</p>
+            <p className="mt-1 text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                 {value}
             </p>
         </div>

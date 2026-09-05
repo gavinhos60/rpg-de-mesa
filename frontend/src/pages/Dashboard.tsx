@@ -10,67 +10,13 @@ import {
 import { CreateCampaignModal } from "../components/CreateCampaignModal";
 import { useNavigate } from "react-router-dom";
 
-// --- Ícones do brasão (substituem os emojis) -----------------------------
-
-function EmblemIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 48 48" className={className} fill="none">
-            <path
-                d="M24 4 L40 10 V22 C40 32 33 40 24 44 C15 40 8 32 8 22 V10 Z"
-                stroke="currentColor"
-                strokeWidth="2"
-            />
-            <path d="M24 12 V36 M15 20 H33" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-    );
-}
-
-function WaxSealIcon({ className, label }: { className?: string; label: string | number }) {
-    return (
-        <div className={className}>
-            <svg viewBox="0 0 44 44" className="w-full h-full">
-                <circle cx="22" cy="22" r="20" fill="#7A2530" stroke="#5C1D26" strokeWidth="1.5" />
-                <circle cx="22" cy="22" r="15" fill="none" stroke="#C9A461" strokeWidth="1" opacity="0.6" />
-                <text
-                    x="22"
-                    y="28"
-                    textAnchor="middle"
-                    fontFamily="Cinzel, serif"
-                    fontSize="14"
-                    fill="#EBDFC4"
-                >
-                    {label}
-                </text>
-            </svg>
-        </div>
-    );
-}
-
-function BrokenSealIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 64 64" className={className} fill="none">
-            <path d="M32 6 L32 58" stroke="#6B4423" strokeWidth="1" strokeDasharray="3 3" />
-            <circle cx="22" cy="30" r="16" fill="none" stroke="#6B4423" strokeWidth="1.5" />
-            <circle cx="45" cy="30" r="13" fill="none" stroke="#6B4423" strokeWidth="1.5" opacity="0.6" />
-            <path d="M12 30 L32 30" stroke="#6B4423" strokeWidth="1.5" />
-        </svg>
-    );
-}
-
-function QuillIcon({ className }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 24 24" className={className} fill="none">
-            <path
-                d="M20 4 C13 6 6 12 4 20 M20 4 C18 9 15 13 11 16"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-            />
-        </svg>
-    );
-}
-
-// --- Componente principal -------------------------------------------------
+import {
+    EmblemIcon,
+    WaxSealIcon,
+    BrokenSealIcon,
+    QuillIcon,
+    RibbonButton,
+} from "../components/icons/MedievalIcons";
 
 export function Dashboard() {
     const { user } = useAuth();
@@ -102,7 +48,7 @@ export function Dashboard() {
 
     return (
         <div
-            className="relative min-h-full text-[#2A1D14]"
+            className="relative min-h-[calc(100vh-4rem)] text-[#2A1D14]"
             style={{
                 fontFamily: "'EB Garamond', Georgia, serif",
                 backgroundColor: "#EBDFC4",
@@ -144,18 +90,9 @@ export function Dashboard() {
                         </p>
                     </div>
 
-                    <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="relative text-[#EBDFC4] px-6 py-2.5 hover:bg-[#5C1D26] transition-colors"
-                        style={{
-                            backgroundColor: "#7A2530",
-                            fontFamily: "'Cinzel', serif",
-                            clipPath:
-                                "polygon(0% 0%, 100% 0%, 100% 70%, 92% 100%, 85% 70%, 15% 70%, 8% 100%, 0% 70%)",
-                        }}
-                    >
+                    <RibbonButton onClick={() => setShowCreateModal(true)}>
                         Nova campanha
-                    </button>
+                    </RibbonButton>
                 </div>
 
                 {/* Conteúdo */}
@@ -183,13 +120,12 @@ export function Dashboard() {
                             para começar a escrever esta história.
                         </p>
 
-                        <button
+                        <RibbonButton
+                            className="mt-6"
                             onClick={() => setShowCreateModal(true)}
-                            className="mt-6 text-[#EBDFC4] px-6 py-2.5 hover:bg-[#5C1D26] transition-colors"
-                            style={{ backgroundColor: "#7A2530", fontFamily: "'Cinzel', serif" }}
                         >
                             Criar campanha
-                        </button>
+                        </RibbonButton>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

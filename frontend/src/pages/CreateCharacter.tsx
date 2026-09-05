@@ -16,31 +16,29 @@ import type {
     CharacterFormData,
 } from "../types/character";
 
+import {
+    QuillIcon,
+    RibbonButton,
+    romanStep,
+} from "../components/icons/MedievalIcons";
+
+const STEP_TITLES = [
+    "Identidade",
+    "Atributos",
+    "Perícias",
+    "Combate",
+    "Equipamentos",
+    "Magias",
+    "Lore",
+];
+
 const backgrounds: CharacterBackground[] = [
-    {
-        id: "acolyte",
-        name: "Acólito",
-    },
-    {
-        id: "criminal",
-        name: "Criminoso",
-    },
-    {
-        id: "folk-hero",
-        name: "Herói do Povo",
-    },
-    {
-        id: "noble",
-        name: "Nobre",
-    },
-    {
-        id: "sage",
-        name: "Sábio",
-    },
-    {
-        id: "soldier",
-        name: "Soldado",
-    },
+    { id: "acolyte", name: "Acólito" },
+    { id: "criminal", name: "Criminoso" },
+    { id: "folk-hero", name: "Herói do Povo" },
+    { id: "noble", name: "Nobre" },
+    { id: "sage", name: "Sábio" },
+    { id: "soldier", name: "Soldado" },
 ];
 
 const initialData: CharacterFormData = {
@@ -70,95 +68,24 @@ const initialData: CharacterFormData = {
     },
 
     skills: {
-        acrobatics: {
-            proficient: false,
-            expertise: false,
-        },
-
-        "animal-handling": {
-            proficient: false,
-            expertise: false,
-        },
-
-        arcana: {
-            proficient: false,
-            expertise: false,
-        },
-
-        athletics: {
-            proficient: false,
-            expertise: false,
-        },
-
-        deception: {
-            proficient: false,
-            expertise: false,
-        },
-
-        history: {
-            proficient: false,
-            expertise: false,
-        },
-
-        insight: {
-            proficient: false,
-            expertise: false,
-        },
-
-        intimidation: {
-            proficient: false,
-            expertise: false,
-        },
-
-        investigation: {
-            proficient: false,
-            expertise: false,
-        },
-
-        medicine: {
-            proficient: false,
-            expertise: false,
-        },
-
-        nature: {
-            proficient: false,
-            expertise: false,
-        },
-
-        perception: {
-            proficient: false,
-            expertise: false,
-        },
-
-        performance: {
-            proficient: false,
-            expertise: false,
-        },
-
-        persuasion: {
-            proficient: false,
-            expertise: false,
-        },
-
-        religion: {
-            proficient: false,
-            expertise: false,
-        },
-
-        "sleight-of-hand": {
-            proficient: false,
-            expertise: false,
-        },
-
-        stealth: {
-            proficient: false,
-            expertise: false,
-        },
-
-        survival: {
-            proficient: false,
-            expertise: false,
-        },
+        acrobatics: { proficient: false, expertise: false },
+        "animal-handling": { proficient: false, expertise: false },
+        arcana: { proficient: false, expertise: false },
+        athletics: { proficient: false, expertise: false },
+        deception: { proficient: false, expertise: false },
+        history: { proficient: false, expertise: false },
+        insight: { proficient: false, expertise: false },
+        intimidation: { proficient: false, expertise: false },
+        investigation: { proficient: false, expertise: false },
+        medicine: { proficient: false, expertise: false },
+        nature: { proficient: false, expertise: false },
+        perception: { proficient: false, expertise: false },
+        performance: { proficient: false, expertise: false },
+        persuasion: { proficient: false, expertise: false },
+        religion: { proficient: false, expertise: false },
+        "sleight-of-hand": { proficient: false, expertise: false },
+        stealth: { proficient: false, expertise: false },
+        survival: { proficient: false, expertise: false },
     },
 
     skillProficiencies: {
@@ -180,203 +107,150 @@ export function CreateCharacter() {
 
     function handleNext() {
         if (currentStep < 7) {
-            setCurrentStep(
-                (previous) => previous + 1
-            );
+            setCurrentStep((previous) => previous + 1);
         }
     }
 
     function handlePrevious() {
         if (currentStep > 1) {
-            setCurrentStep(
-                (previous) => previous - 1
-            );
+            setCurrentStep((previous) => previous - 1);
         }
     }
 
     function handleSave() {
-        console.log(
-            "Personagem:",
-            data
-        );
+        console.log("Personagem:", data);
 
         navigate("/characters");
     }
 
     return (
-        <div className="mx-auto max-w-6xl">
-            {/* =========================================
-                CABEÇALHO
-            ========================================= */}
+        <div
+            className="min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+            style={{
+                fontFamily: "'EB Garamond', Georgia, serif",
+                backgroundColor: "#EBDFC4",
+                backgroundImage:
+                    "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
+            }}
+        >
+            <div className="max-w-6xl mx-auto px-6 py-10">
 
-            <div className="mb-8">
-                <button
-                    type="button"
-                    onClick={() =>
-                        navigate("/characters")
-                    }
-                    className="mb-5 text-sm text-slate-400 transition hover:text-white"
-                >
-                    ← Voltar para personagens
-                </button>
-
-                <h1 className="text-3xl font-bold text-white">
-                    Criar personagem
-                </h1>
-
-                <p className="mt-2 text-slate-400">
-                    Monte sua ficha de personagem
-                    seguindo as regras de D&D 5e.
-                </p>
-            </div>
-
-            {/* =========================================
-                INDICADOR DAS ETAPAS
-            ========================================= */}
-
-            <CharacterCreationSteps
-                currentStep={currentStep}
-                onChangeStep={setCurrentStep}
-            />
-
-            {/* =========================================
-                CONTEÚDO DA ETAPA ATUAL
-            ========================================= */}
-
-            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl md:p-8">
-
-                {/* =========================================
-                    ETAPA 1 — IDENTIDADE
-                ========================================= */}
-
-                {currentStep === 1 && (
-                    <CharacterIdentity
-                        data={data}
-                        races={DND_RACES}
-                        classes={DND_CLASSES}
-                        backgrounds={backgrounds}
-                        talents={DND_TALENTS}
-                        onChange={setData}
-                    />
-                )}
-
-                {/* =========================================
-                    ETAPA 2 — ATRIBUTOS
-                ========================================= */}
-
-                {currentStep === 2 && (
-                    <CharacterAbilities
-                        data={data}
-                        onChange={setData}
-                    />
-                )}
-
-                {/* =========================================
-                    ETAPA 3 — PERÍCIAS
-                ========================================= */}
-
-                {currentStep === 3 && (
-                    <CharacterSkills
-                        data={data}
-                        races={DND_RACES}
-                        onChange={setData}
-                    />
-                )}
-
-                {/* =========================================
-                    ETAPA 4 — COMBATE
-                ========================================= */}
-
-                {currentStep === 4 && (
-                    <CharacterCombat
-                        data={data}
-                    />
-                )}
-
-                {/* =========================================
-                    ETAPA 5 — EQUIPAMENTOS
-                ========================================= */}
-
-                {currentStep === 5 && (
-                    <div className="py-20 text-center">
-                        <h2 className="text-2xl font-bold text-white">
-                            Equipamentos
-                        </h2>
-
-                        <p className="mt-2 text-slate-400">
-                            Vamos implementar esta etapa
-                            em seguida.
-                        </p>
-                    </div>
-                )}
-
-                {/* =========================================
-                    ETAPA 6 — MAGIAS
-                ========================================= */}
-
-                {currentStep === 6 && (
-                    <div className="py-20 text-center">
-                        <h2 className="text-2xl font-bold text-white">
-                            Magias
-                        </h2>
-
-                        <p className="mt-2 text-slate-400">
-                            Vamos implementar esta etapa
-                            em seguida.
-                        </p>
-                    </div>
-                )}
-
-                {/* =========================================
-                    ETAPA 7 — LORE
-                ========================================= */}
-
-                {currentStep === 7 && (
-                    <div className="py-20 text-center">
-                        <h2 className="text-2xl font-bold text-white">
-                            Lore
-                        </h2>
-
-                        <p className="mt-2 text-slate-400">
-                            Vamos implementar esta etapa
-                            em seguida.
-                        </p>
-                    </div>
-                )}
-
-                {/* =========================================
-                    NAVEGAÇÃO
-                ========================================= */}
-
-                <div className="mt-8 flex items-center justify-between border-t border-slate-800 pt-6">
+                {/* Cabeçalho */}
+                <div className="mb-8 border-b border-[#6B4423] pb-6">
                     <button
                         type="button"
-                        onClick={handlePrevious}
-                        disabled={
-                            currentStep === 1
-                        }
-                        className="rounded-lg px-5 py-2.5 text-slate-300 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-30"
+                        onClick={() => navigate("/characters")}
+                        className="mb-5 text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors"
                     >
-                        ← Anterior
+                        ← Voltar para personagens
                     </button>
 
-                    {currentStep < 7 ? (
-                        <button
-                            type="button"
-                            onClick={handleNext}
-                            className="rounded-lg bg-indigo-600 px-5 py-2.5 font-medium text-white transition hover:bg-indigo-700"
+                    <h1
+                        className="text-3xl text-[#2A1D14]"
+                        style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                    >
+                        Criar personagem
+                    </h1>
+
+                    <p className="mt-2 text-[#5C4A38]">
+                        Monte sua ficha seguindo as regras de D&D 5e.
+                    </p>
+                </div>
+
+                {/* Indicador das etapas */}
+                <CharacterCreationSteps
+                    currentStep={currentStep}
+                    onChangeStep={setCurrentStep}
+                />
+
+                {/* Conteúdo da etapa atual — página do manuscrito */}
+                <div
+                    className="border border-[#6B4423] p-6 md:p-8 mt-6"
+                    style={{ backgroundColor: "#DCCBA0" }}
+                >
+                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-[#A67C3D]/50">
+                        <span
+                            className="w-9 h-9 shrink-0 flex items-center justify-center border border-[#6B4423] text-sm text-[#6B4423]"
+                            style={{ fontFamily: "'Cinzel', serif" }}
                         >
-                            Próximo →
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={handleSave}
-                            className="rounded-lg bg-emerald-600 px-5 py-2.5 font-medium text-white transition hover:bg-emerald-700"
+                            {romanStep(currentStep)}
+                        </span>
+                        <h2
+                            className="text-xl text-[#2A1D14]"
+                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                         >
-                            Criar personagem
-                        </button>
+                            {STEP_TITLES[currentStep - 1]}
+                        </h2>
+                    </div>
+
+                    {currentStep === 1 && (
+                        <CharacterIdentity
+                            data={data}
+                            races={DND_RACES}
+                            classes={DND_CLASSES}
+                            backgrounds={backgrounds}
+                            talents={DND_TALENTS}
+                            onChange={setData}
+                        />
                     )}
+
+                    {currentStep === 2 && (
+                        <CharacterAbilities
+                            data={data}
+                            onChange={setData}
+                        />
+                    )}
+
+                    {currentStep === 3 && (
+                        <CharacterSkills
+                            data={data}
+                            races={DND_RACES}
+                            onChange={setData}
+                        />
+                    )}
+
+                    {currentStep === 4 && (
+                        <CharacterCombat
+                            data={data}
+                        />
+                    )}
+
+                    {(currentStep === 5 || currentStep === 6 || currentStep === 7) && (
+                        <div className="py-16 text-center">
+                            <QuillIcon className="w-8 h-8 mx-auto mb-4 text-[#6B4423]" />
+
+                            <p className="text-[#5C4A38] italic">
+                                Este capítulo ainda não foi escrito.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Navegação */}
+                    <div className="mt-8 flex items-center justify-between border-t border-[#6B4423] pt-6">
+                        <button
+                            type="button"
+                            onClick={handlePrevious}
+                            disabled={currentStep === 1}
+                            className="text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                            style={{ fontFamily: "'Cinzel', serif" }}
+                        >
+                            ← Anterior
+                        </button>
+
+                        {currentStep < 7 ? (
+                            <RibbonButton type="button" onClick={handleNext}>
+                                Próximo
+                            </RibbonButton>
+                        ) : (
+                            <RibbonButton
+                                type="button"
+                                onClick={handleSave}
+                                style={{ backgroundColor: "#5C4A1E" }}
+                            >
+                                Criar personagem
+                            </RibbonButton>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

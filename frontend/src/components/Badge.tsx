@@ -1,37 +1,30 @@
 import type { ReactNode } from "react";
 
 interface BadgeProps {
-  children: ReactNode;
-  variant?: "success" | "warning" | "danger" | "info" | "neutral";
+    children: ReactNode;
+    variant?: "success" | "warning" | "danger" | "info" | "neutral";
 }
 
 export function Badge({
-  children,
-  variant = "neutral",
+    children,
+    variant = "neutral",
 }: BadgeProps) {
-  const variants = {
-    success: "bg-emerald-950/60 text-emerald-400 border-emerald-900",
-    warning: "bg-amber-950/60 text-amber-400 border-amber-900",
-    danger: "bg-red-950/60 text-red-400 border-red-900",
-    info: "bg-indigo-950/60 text-indigo-400 border-indigo-900",
-    neutral: "bg-slate-800 text-slate-400 border-slate-700",
-  };
+    const variants = {
+        success: "border-[#4A6B3D] text-[#4A6B3D]",
+        warning: "border-[#9C7A3C] text-[#9C7A3C]",
+        danger: "border-[#7A2530] text-[#7A2530]",
+        info: "border-transparent text-[#EBDFC4]",
+        neutral: "border-[#6B4423] text-[#5C4A38]",
+    };
 
-  return (
-    <span
-      className={`
-        inline-flex
-        items-center
-        px-2.5
-        py-1
-        rounded-full
-        border
-        text-xs
-        font-medium
-        ${variants[variant]}
-      `}
-    >
-      {children}
-    </span>
-  );
+    const infoBg = variant === "info" ? { backgroundColor: "#7A2530" } : undefined;
+
+    return (
+        <span
+            className={`inline-flex items-center px-3 py-1 border text-xs ${variants[variant]}`}
+            style={{ fontFamily: "'Cinzel', serif", ...infoBg }}
+        >
+            {children}
+        </span>
+    );
 }

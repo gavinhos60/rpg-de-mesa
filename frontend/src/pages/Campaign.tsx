@@ -12,8 +12,24 @@ import {
 
 import { CreateCharacterModal } from "../components/CreateCharacterModal";
 import { AddPlayerModal } from "../components/AddPlayerModal";
+import { StatCard } from "../components/StatCard";
 
 import { useAuth } from "../contexts/AuthContext";
+
+import {
+    EmblemIcon,
+    WaxSealIcon,
+    BrokenSealIcon,
+    QuillIcon,
+    CrownIcon,
+    GroupIcon,
+    ScrollIcon,
+    PortraitIcon,
+    RibbonButton,
+} from "../components/icons/MedievalIcons";
+
+const sectionTitleClass = "text-2xl text-[#2A1D14]";
+const sectionTitleStyle = { fontFamily: "'Cinzel', serif", fontWeight: 600 } as const;
 
 export function Campaign() {
     const { id } = useParams();
@@ -83,26 +99,53 @@ export function Campaign() {
         loadCampaign();
     }, [id]);
 
+    const pageShellStyle = {
+        fontFamily: "'EB Garamond', Georgia, serif",
+        backgroundColor: "#EBDFC4",
+        backgroundImage:
+            "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
+    };
+
     if (loading) {
         return (
-            <div className="text-slate-400">
-                Carregando campanha...
+            <div
+                className="min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+                style={pageShellStyle}
+            >
+                <div className="max-w-6xl mx-auto px-6 py-10">
+                    <div className="flex items-center gap-3 text-[#5C4A38] py-10">
+                        <QuillIcon className="w-5 h-5 animate-pulse" />
+                        <span className="italic">Consultando os arquivos do reino...</span>
+                    </div>
+                </div>
             </div>
         );
     }
 
     if (error || !campaign) {
         return (
-            <div>
-                <button
-                    onClick={() => navigate("/campaigns")}
-                    className="text-indigo-400 hover:text-indigo-300 mb-6"
-                >
-                    ← Voltar
-                </button>
+            <div
+                className="min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+                style={pageShellStyle}
+            >
+                <div className="max-w-6xl mx-auto px-6 py-10">
+                    <button
+                        onClick={() => navigate("/campaigns")}
+                        className="text-sm text-[#7A2530] hover:text-[#5C1D26] mb-6 transition-colors"
+                        style={{ fontFamily: "'Cinzel', serif" }}
+                    >
+                        ← Voltar
+                    </button>
 
-                <div className="rounded-xl border border-red-900 bg-red-950/40 p-6 text-red-300">
-                    {error || "Campanha não encontrada."}
+                    <div
+                        className="flex items-center gap-4 border p-6"
+                        style={{ backgroundColor: "#DCCBA0", borderColor: "#7A2530" }}
+                    >
+                        <BrokenSealIcon className="w-10 h-10 shrink-0" color="#7A2530" />
+                        <p className="text-[#5C1D26]">
+                            {error || "Campanha não encontrada."}
+                        </p>
+                    </div>
                 </div>
             </div>
         );
@@ -123,248 +166,245 @@ export function Campaign() {
     );
 
     return (
-        <div>
-            {/* Cabeçalho */}
-            <div className="mb-8">
+        <div
+            className="min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+            style={pageShellStyle}
+        >
+            <div className="max-w-6xl mx-auto px-6 py-10">
+
+                {/* Voltar */}
                 <button
                     onClick={() => navigate("/campaigns")}
-                    className="text-sm text-slate-400 hover:text-white mb-5 transition"
+                    className="text-sm text-[#5C4A38] hover:text-[#2A1D14] mb-6 transition-colors"
                 >
                     ← Voltar para campanhas
                 </button>
 
-                <div className="flex items-start justify-between gap-5">
-                    <div className="flex items-start gap-5">
-                        <div className="w-16 h-16 rounded-xl bg-indigo-600/20 flex items-center justify-center text-3xl">
-                            ⚔️
-                        </div>
+                {/* Cabeçalho */}
+                <div className="flex items-start justify-between gap-5 flex-wrap mb-8 border-b border-[#6B4423] pb-6">
+                    <div className="flex items-start gap-4">
+                        <WaxSealIcon className="w-14 h-14 shrink-0" label={campaign.id} />
 
                         <div>
-                            <h1 className="text-3xl font-bold text-white">
+                            <h1
+                                className="text-3xl text-[#2A1D14]"
+                                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                            >
                                 {campaign.name}
                             </h1>
 
-                            <p className="text-slate-400 mt-1">
-                                Campanha #{campaign.id}
+                            <p className="text-[#5C4A38] mt-1 italic">
+                                Registro oficial desta campanha
                             </p>
                         </div>
                     </div>
 
-                    {/* Excluir campanha */}
                     {currentUserIsMaster && (
                         <button
                             onClick={handleDeleteCampaign}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition"
+                            className="flex items-center gap-2 border px-4 py-2 text-sm text-[#7A2530] hover:bg-[#7A2530] hover:text-[#EBDFC4] transition-colors"
+                            style={{ borderColor: "#7A2530", fontFamily: "'Cinzel', serif" }}
                         >
-                            🗑️ Excluir campanha
+                            <BrokenSealIcon className="w-5 h-5 shrink-0" color="currentColor" />
+                            Excluir campanha
                         </button>
                     )}
                 </div>
-            </div>
 
-            {/* Resumo */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                    <p className="text-sm text-slate-400">
-                        Membros
-                    </p>
-
-                    <p className="text-3xl font-bold text-white mt-2">
-                        {campaign.members.length}
-                    </p>
+                {/* Resumo */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+                    <StatCard label="Membros" value={campaign.members.length} Icon={EmblemIcon} />
+                    <StatCard label="Jogadores" value={players.length} Icon={GroupIcon} />
+                    <StatCard label="Personagens" value={campaign.characters.length} Icon={ScrollIcon} />
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                    <p className="text-sm text-slate-400">
-                        Jogadores
-                    </p>
+                {/* Mestres */}
+                <section className="mb-10">
+                    <div className="border-l-2 border-[#A67C3D] pl-4 mb-4 flex items-center gap-2">
+                        <CrownIcon className="w-6 h-6 text-[#6B4423]" />
+                        <h2 className={sectionTitleClass} style={sectionTitleStyle}>
+                            Mestres
+                        </h2>
+                    </div>
 
-                    <p className="text-3xl font-bold text-white mt-2">
-                        {players.length}
-                    </p>
-                </div>
-
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-                    <p className="text-sm text-slate-400">
-                        Personagens
-                    </p>
-
-                    <p className="text-3xl font-bold text-white mt-2">
-                        {campaign.characters.length}
-                    </p>
-                </div>
-            </div>
-
-            {/* Mestres */}
-            <section className="mb-8">
-                <h2 className="text-xl font-semibold text-white mb-4">
-                    👑 Mestres
-                </h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {masters.length === 0 ? (
-                        <p className="text-slate-500">
+                        <p className="text-[#8A7860] italic pl-4">
                             Nenhum mestre cadastrado.
                         </p>
                     ) : (
-                        masters.map((member) => (
-                            <div
-                                key={member.id}
-                                className="bg-slate-900 border border-slate-800 rounded-xl p-5"
-                            >
-                                <p className="font-semibold text-white">
-                                    {member.user.name}
-                                </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {masters.map((member) => (
+                                <div
+                                    key={member.id}
+                                    className="border border-[#6B4423] p-5"
+                                    style={{ backgroundColor: "#DCCBA0" }}
+                                >
+                                    <p
+                                        className="text-[#2A1D14]"
+                                        style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                                    >
+                                        {member.user.name}
+                                    </p>
 
-                                <p className="text-sm text-slate-400 mt-1">
-                                    {member.user.email}
-                                </p>
-                            </div>
-                        ))
+                                    <p className="text-sm text-[#5C4A38] mt-1">
+                                        {member.user.email}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
                     )}
-                </div>
-            </section>
+                </section>
 
-            {/* Jogadores */}
-            <section className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-white">
-                        👥 Jogadores
-                    </h2>
+                {/* Jogadores */}
+                <section className="mb-10">
+                    <div className="flex items-end justify-between gap-4 flex-wrap mb-4">
+                        <div className="border-l-2 border-[#A67C3D] pl-4 flex items-center gap-2">
+                            <GroupIcon className="w-6 h-6 text-[#6B4423]" />
+                            <h2 className={sectionTitleClass} style={sectionTitleStyle}>
+                                Jogadores
+                            </h2>
+                        </div>
 
-                    {currentUserIsMaster && (
-                        <button
-                            onClick={() =>
-                                setShowAddPlayerModal(true)
-                            }
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
-                        >
-                            + Adicionar jogador
-                        </button>
-                    )}
-                </div>
+                        {currentUserIsMaster && (
+                            <RibbonButton onClick={() => setShowAddPlayerModal(true)}>
+                                Adicionar jogador
+                            </RibbonButton>
+                        )}
+                    </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {players.length === 0 ? (
-                        <p className="text-slate-500">
+                        <p className="text-[#8A7860] italic pl-4">
                             Nenhum jogador cadastrado.
                         </p>
                     ) : (
-                        players.map((member) => (
-                            <div
-                                key={member.id}
-                                className="bg-slate-900 border border-slate-800 rounded-xl p-5"
-                            >
-                                <p className="font-semibold text-white">
-                                    {member.user.name}
-                                </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {players.map((member) => (
+                                <div
+                                    key={member.id}
+                                    className="border border-[#6B4423] p-5"
+                                    style={{ backgroundColor: "#DCCBA0" }}
+                                >
+                                    <p
+                                        className="text-[#2A1D14]"
+                                        style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                                    >
+                                        {member.user.name}
+                                    </p>
 
-                                <p className="text-sm text-slate-400 mt-1">
-                                    {member.user.email}
-                                </p>
-                            </div>
-                        ))
+                                    <p className="text-sm text-[#5C4A38] mt-1">
+                                        {member.user.email}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
                     )}
-                </div>
-            </section>
+                </section>
 
-            {/* Personagens */}
-            <section>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-white">
-                        ⚔️ Personagens
-                    </h2>
+                {/* Personagens */}
+                <section>
+                    <div className="flex items-end justify-between gap-4 flex-wrap mb-4">
+                        <div className="border-l-2 border-[#A67C3D] pl-4 flex items-center gap-2">
+                            <ScrollIcon className="w-6 h-6 text-[#6B4423]" />
+                            <h2 className={sectionTitleClass} style={sectionTitleStyle}>
+                                Personagens
+                            </h2>
+                        </div>
 
-                    <button
-                        onClick={() =>
-                            setShowCreateCharacterModal(true)
-                        }
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
-                    >
-                        + Novo personagem
-                    </button>
-                </div>
-
-                {campaign.characters.length === 0 ? (
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">
-                        <p className="text-slate-400">
-                            Nenhum personagem nesta campanha.
-                        </p>
+                        <RibbonButton onClick={() => setShowCreateCharacterModal(true)}>
+                            Novo personagem
+                        </RibbonButton>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {campaign.characters.map((character) => (
-                            <div
-                                key={character.id}
-                                className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden hover:border-indigo-500 transition"
-                            >
-                                {character.avatar ? (
-                                    <img
-                                        src={character.avatar}
-                                        alt={character.name}
-                                        className="w-full h-48 object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-48 bg-slate-800 flex items-center justify-center text-5xl">
-                                        🧙
-                                    </div>
-                                )}
 
-                                <div className="p-5">
-                                    <h3 className="text-xl font-semibold text-white">
-                                        {character.name}
-                                    </h3>
+                    {campaign.characters.length === 0 ? (
+                        <div
+                            className="border border-[#6B4423] p-10 text-center"
+                            style={{ backgroundColor: "#DCCBA0" }}
+                        >
+                            <p className="text-[#5C4A38]">
+                                Nenhum personagem nesta campanha.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                            {campaign.characters.map((character) => (
+                                <div
+                                    key={character.id}
+                                    className="border border-[#6B4423] hover:border-[#A67C3D] transition-colors overflow-hidden"
+                                    style={{ backgroundColor: "#DCCBA0" }}
+                                >
+                                    {character.avatar ? (
+                                        <img
+                                            src={character.avatar}
+                                            alt={character.name}
+                                            className="w-full h-44 object-cover"
+                                        />
+                                    ) : (
+                                        <div
+                                            className="w-full h-44 flex items-center justify-center"
+                                            style={{ backgroundColor: "#4A2F18" }}
+                                        >
+                                            <PortraitIcon className="w-16 h-16 text-[#A67C3D]" />
+                                        </div>
+                                    )}
 
-                                    <p className="text-indigo-400 mt-1">
-                                        {character.className}
-                                    </p>
+                                    <div className="p-5">
+                                        <h3
+                                            className="text-xl text-[#2A1D14]"
+                                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                                        >
+                                            {character.name}
+                                        </h3>
 
-                                    <p className="text-sm text-slate-400 mt-2">
-                                        {character.race} • Nível{" "}
-                                        {character.level}
-                                    </p>
-
-                                    <div className="mt-4 pt-4 border-t border-slate-800">
-                                        <p className="text-xs text-slate-500">
-                                            Jogador
+                                        <p className="text-[#7A2530] mt-1">
+                                            {character.className}
                                         </p>
 
-                                        <p className="text-sm text-slate-300">
-                                            {character.player.name}
+                                        <p className="text-sm text-[#5C4A38] mt-2">
+                                            {character.race} • Nível {character.level}
                                         </p>
+
+                                        <div className="mt-4 pt-4 border-t border-[#A67C3D]/50">
+                                            <p className="text-xs text-[#8A7860]">
+                                                Jogador
+                                            </p>
+
+                                            <p className="text-sm text-[#2A1D14]">
+                                                {character.player.name}
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </section>
+                            ))}
+                        </div>
+                    )}
+                </section>
 
-            {/* Modal de criação de personagem */}
-            {showCreateCharacterModal &&
-                user &&
-                campaign && (
-                    <CreateCharacterModal
-                        campaignId={campaign.id}
-                        playerId={user.id}
-                        onClose={() =>
-                            setShowCreateCharacterModal(false)
-                        }
-                        onCreated={loadCampaign}
-                    />
-                )}
+                {/* Modal de criação de personagem */}
+                {showCreateCharacterModal &&
+                    user &&
+                    campaign && (
+                        <CreateCharacterModal
+                            campaignId={campaign.id}
+                            playerId={user.id}
+                            onClose={() =>
+                                setShowCreateCharacterModal(false)
+                            }
+                            onCreated={loadCampaign}
+                        />
+                    )}
 
-            {/* Modal de adicionar jogador */}
-            {showAddPlayerModal &&
-                campaign && (
-                    <AddPlayerModal
-                        campaignId={campaign.id}
-                        onClose={() =>
-                            setShowAddPlayerModal(false)
-                        }
-                        onAdded={loadCampaign}
-                    />
-                )}
+                {/* Modal de adicionar jogador */}
+                {showAddPlayerModal &&
+                    campaign && (
+                        <AddPlayerModal
+                            campaignId={campaign.id}
+                            onClose={() =>
+                                setShowAddPlayerModal(false)
+                            }
+                            onAdded={loadCampaign}
+                        />
+                    )}
+            </div>
         </div>
     );
 }

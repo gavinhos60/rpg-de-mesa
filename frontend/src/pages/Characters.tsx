@@ -1,56 +1,70 @@
 import { useNavigate } from "react-router-dom";
 
+import {
+    ScrollIcon,
+    RibbonButton,
+} from "../components/icons/MedievalIcons";
+
 export function Characters() {
     const navigate = useNavigate();
 
     return (
-        <div>
-            {/* Cabeçalho */}
-            <div className="mb-8 flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-white">
-                        Meus personagens
-                    </h1>
+        <div
+            className="min-h-full text-[#2A1D14]"
+            style={{
+                fontFamily: "'EB Garamond', Georgia, serif",
+                backgroundColor: "#EBDFC4",
+                backgroundImage:
+                    "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
+            }}
+        >
+            <div className="max-w-6xl mx-auto px-6 py-10">
 
-                    <p className="mt-2 text-slate-400">
-                        Crie e gerencie seus personagens de RPG.
+                {/* Cabeçalho */}
+                <div className="mb-8 flex items-end justify-between gap-4 flex-wrap border-b border-[#6B4423] pb-5">
+                    <div>
+                        <h1
+                            className="text-3xl text-[#2A1D14]"
+                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                        >
+                            Meus personagens
+                        </h1>
+
+                        <p className="mt-2 text-[#5C4A38]">
+                            Crie e gerencie seus personagens de RPG.
+                        </p>
+                    </div>
+
+                    <RibbonButton onClick={() => navigate("/characters/new")}>
+                        Novo personagem
+                    </RibbonButton>
+                </div>
+
+                {/* Estado vazio */}
+                <div
+                    className="border border-[#6B4423] p-12 text-center"
+                    style={{ backgroundColor: "#DCCBA0" }}
+                >
+                    <ScrollIcon className="w-16 h-12 mx-auto mb-4 text-[#6B4423]" />
+
+                    <h2
+                        className="text-xl text-[#2A1D14]"
+                        style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                    >
+                        Nenhum personagem registrado
+                    </h2>
+
+                    <p className="mt-2 text-[#5C4A38]">
+                        Você ainda não escreveu nenhuma página nesta coleção.
                     </p>
+
+                    <RibbonButton
+                        className="mt-6"
+                        onClick={() => navigate("/characters/new")}
+                    >
+                        Criar personagem
+                    </RibbonButton>
                 </div>
-
-                <button
-                    type="button"
-                    onClick={() =>
-                        navigate("/characters/new")
-                    }
-                    className="rounded-lg bg-indigo-600 px-4 py-2 text-white transition hover:bg-indigo-700"
-                >
-                    + Novo personagem
-                </button>
-            </div>
-
-            {/* Estado vazio */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-10 text-center">
-                <div className="mb-4 text-5xl">
-                    🧙
-                </div>
-
-                <h2 className="text-xl font-semibold text-white">
-                    Nenhum personagem
-                </h2>
-
-                <p className="mt-2 text-slate-400">
-                    Você ainda não criou nenhum personagem.
-                </p>
-
-                <button
-                    type="button"
-                    onClick={() =>
-                        navigate("/characters/new")
-                    }
-                    className="mt-5 rounded-lg bg-indigo-600 px-5 py-2 text-white transition hover:bg-indigo-700"
-                >
-                    Criar personagem
-                </button>
             </div>
         </div>
     );

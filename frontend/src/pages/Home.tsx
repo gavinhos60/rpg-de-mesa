@@ -1,74 +1,114 @@
 import { useEffect, useState } from "react";
 import { api } from "../services/api";
 
+import {
+    EmblemIcon,
+    WaxSealIcon,
+    BrokenSealIcon,
+    QuillIcon,
+} from "../components/icons/MedievalIcons";
+
 interface HealthResponse {
-  status: string;
-  message: string;
+    status: string;
+    message: string;
 }
 
 export function Home() {
-  const [apiStatus, setApiStatus] = useState<HealthResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+    const [apiStatus, setApiStatus] = useState<HealthResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
-  useEffect(() => {
-    async function checkApi() {
-      try {
-        const response = await api.get<HealthResponse>("/health");
+    useEffect(() => {
+        async function checkApi() {
+            try {
+                const response = await api.get<HealthResponse>("/health");
 
-        setApiStatus(response.data);
-      } catch (err) {
-        console.error(err);
-        setError(true);
-      } finally {
-        setLoading(false);
-      }
-    }
+                setApiStatus(response.data);
+            } catch (err) {
+                console.error(err);
+                setError(true);
+            } finally {
+                setLoading(false);
+            }
+        }
 
-    checkApi();
-  }, []);
+        checkApi();
+    }, []);
 
-  return (
-    <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold mb-4">
-          ⚔️ RPG Hub
-        </h1>
+    return (
+        <main
+            className="min-h-screen flex items-center justify-center px-4"
+            style={{
+                fontFamily: "'EB Garamond', Georgia, serif",
+                backgroundColor: "#150E09",
+                backgroundImage:
+                    "repeating-linear-gradient(115deg, rgba(184,147,78,0.035) 0px, rgba(184,147,78,0.035) 1px, transparent 1px, transparent 5px)",
+                color: "#EBDFC4",
+            }}
+        >
+            <div className="text-center max-w-lg">
+                <EmblemIcon className="w-14 h-14 mx-auto mb-5 text-[#B8934E]" />
 
-        <p className="text-slate-400 mb-8">
-          Plataforma de RPG de mesa
-        </p>
+                <h1
+                    className="text-5xl"
+                    style={{ fontFamily: "'Cinzel', serif", fontWeight: 600, color: "#EBDFC4" }}
+                >
+                    RPG Hub
+                </h1>
 
-        {loading && (
-          <p className="text-yellow-400">
-            Conectando com a API...
-          </p>
-        )}
+                <p className="text-[#B8A98A] italic mt-4">
+                    Plataforma de RPG de mesa
+                </p>
 
-        {!loading && apiStatus && (
-          <div className="rounded-lg border border-green-700 bg-green-950/30 p-6">
-            <p className="text-green-400 text-xl">
-              🟢 API conectada
-            </p>
+                <div className="mt-10 border-t border-[#4A2F18] pt-8">
+                    {loading && (
+                        <div className="flex items-center justify-center gap-3 text-[#B8934E]">
+                            <QuillIcon className="w-5 h-5 animate-pulse" />
+                            <span className="italic">Consultando os arquivos do reino...</span>
+                        </div>
+                    )}
 
-            <p className="text-slate-300 mt-2">
-              {apiStatus.message}
-            </p>
-          </div>
-        )}
+                    {!loading && apiStatus && (
+                        <div
+                            className="inline-flex flex-col items-center border border-[#6B4423] px-8 py-6"
+                            style={{ backgroundColor: "#DCCBA0", color: "#2A1D14" }}
+                        >
+                            <WaxSealIcon className="w-10 h-10" label="✓" />
 
-        {!loading && error && (
-          <div className="rounded-lg border border-red-700 bg-red-950/30 p-6">
-            <p className="text-red-400 text-xl">
-              🔴 API offline
-            </p>
+                            <p
+                                className="mt-3 text-lg"
+                                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                            >
+                                Arquivos conectados
+                            </p>
 
-            <p className="text-slate-300 mt-2">
-              Não foi possível conectar ao backend.
-            </p>
-          </div>
-        )}
-      </div>
-    </main>
-  );
+                            <p className="text-[#5C4A38] mt-1 text-sm">
+                                {apiStatus.message}
+                            </p>
+                        </div>
+                    )}
+
+                    {!loading && error && (
+                        <div
+                            className="inline-flex flex-col items-center border border-[#6B4423] px-8 py-6"
+                            style={{ backgroundColor: "#DCCBA0", color: "#2A1D14" }}
+                        >
+                            <BrokenSealIcon className="w-10 h-10" color="#7A2530" />
+
+                            <p
+                                className="mt-3 text-lg"
+                                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                            >
+                                O selo foi rompido
+                            </p>
+
+                            <p className="text-[#5C4A38] mt-1 text-sm">
+                                Não foi possível conectar ao backend.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </main>
+    );
 }

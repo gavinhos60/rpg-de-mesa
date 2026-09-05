@@ -1,140 +1,136 @@
 import { useState } from "react";
 
 import { addPlayerByEmail } from "../services/campaign.service";
+import { BrokenSealIcon, RibbonButton } from "./icons/MedievalIcons";
 
 interface AddPlayerModalProps {
-  campaignId: number;
-  onClose: () => void;
-  onAdded: () => void;
+    campaignId: number;
+    onClose: () => void;
+    onAdded: () => void;
 }
 
 export function AddPlayerModal({
-  campaignId,
-  onClose,
-  onAdded,
+    campaignId,
+    onClose,
+    onAdded,
 }: AddPlayerModalProps) {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+    const [email, setEmail] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
 
-  async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
+    async function handleSubmit(
+        event: React.FormEvent<HTMLFormElement>
+    ) {
+        event.preventDefault();
 
-    if (!email.trim()) {
-      setError("Informe o email do jogador.");
-      return;
+        if (!email.trim()) {
+            setError("Informe o email do jogador.");
+            return;
+        }
+
+        try {
+            setLoading(true);
+            setError("");
+
+            await addPlayerByEmail(
+                campaignId,
+                email.trim()
+            );
+
+            onAdded();
+            onClose();
+        } catch (error: any) {
+            console.error(error);
+
+            if (error?.response?.status === 404) {
+                setError("Usuário não encontrado.");
+            } else if (error?.response?.status === 409) {
+                setError("Este usuário já faz parte da campanha.");
+            } else {
+                setError("Não foi possível adicionar o jogador.");
+            }
+        } finally {
+            setLoading(false);
+        }
     }
 
-    try {
-      setLoading(true);
-      setError("");
-
-      await addPlayerByEmail(
-        campaignId,
-        email.trim()
-      );
-
-      onAdded();
-      onClose();
-    } catch (error: any) {
-      console.error(error);
-
-      if (error?.response?.status === 404) {
-        setError("Usuário não encontrado.");
-      } else if (
-        error?.response?.status === 409
-      ) {
-        setError(
-          "Este usuário já faz parte da campanha."
-        );
-      } else {
-        setError(
-          "Não foi possível adicionar o jogador."
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-white">
-              Adicionar jogador
-            </h2>
-
-            <p className="text-sm text-slate-400 mt-1">
-              Informe o email de um usuário cadastrado.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white text-xl"
-          >
-            ×
-          </button>
-        </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5"
-        >
-          <div>
-            <label
-              htmlFor="player-email"
-              className="block text-sm font-medium text-slate-300 mb-2"
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+            <div
+                className="w-full max-w-md border-2 p-6"
+                style={{ backgroundColor: "#DCCBA0", borderColor: "#4A2F18" }}
             >
-              Email do jogador
-            </label>
+                <div className="flex items-start justify-between mb-6">
+                    <div>
+                        <h2
+                            className="text-xl text-[#2A1D14]"
+                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                        >
+                            Adicionar jogador
+                        </h2>
 
-            <input
-              id="player-email"
-              type="email"
-              value={email}
-              onChange={(event) =>
-                setEmail(event.target.value)
-              }
-              placeholder="jogador@email.com"
-              autoFocus
-              required
-              className="w-full rounded-lg bg-slate-800 border border-slate-700 px-4 py-3 text-white outline-none focus:border-indigo-500"
-            />
-          </div>
+                        <p className="text-sm text-[#5C4A38] mt-1">
+                            Informe o email de um usuário cadastrado.
+                        </p>
+                    </div>
 
-          {error && (
-            <div className="rounded-lg bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-300">
-              {error}
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="text-[#6B4423] hover:text-[#7A2530] text-xl leading-none"
+                    >
+                        ×
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    <div>
+                        <label
+                            htmlFor="player-email"
+                            className="block text-sm text-[#5C4A38] mb-2"
+                            style={{ fontFamily: "'Cinzel', serif" }}
+                        >
+                            Email do jogador
+                        </label>
+
+                        <input
+                            id="player-email"
+                            type="email"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            placeholder="jogador@email.com"
+                            autoFocus
+                            required
+                            className="w-full border px-4 py-3 text-[#2A1D14] outline-none focus:border-[#7A2530] transition-colors"
+                            style={{ backgroundColor: "#EBDFC4", borderColor: "#A67C3D" }}
+                        />
+                    </div>
+
+                    {error && (
+                        <div
+                            className="flex items-center gap-3 border px-4 py-3 text-sm"
+                            style={{ backgroundColor: "#E8D4C4", borderColor: "#7A2530", color: "#5C1D26" }}
+                        >
+                            <BrokenSealIcon className="w-7 h-7 shrink-0" color="#7A2530" />
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="flex justify-end items-center gap-5">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="text-[#5C4A38] hover:text-[#2A1D14] transition-colors"
+                        >
+                            Cancelar
+                        </button>
+
+                        <RibbonButton type="submit" disabled={loading}>
+                            {loading ? "Adicionando..." : "Adicionar jogador"}
+                        </RibbonButton>
+                    </div>
+                </form>
             </div>
-          )}
-
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-4 py-2 text-slate-300 hover:bg-slate-800 transition"
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 font-medium disabled:opacity-50 transition"
-            >
-              {loading
-                ? "Adicionando..."
-                : "Adicionar jogador"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+        </div>
+    );
 }
