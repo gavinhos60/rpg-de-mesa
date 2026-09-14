@@ -94,7 +94,7 @@ export function RibbonButton({
     return (
         <button
             {...props}
-            className={`relative text-[#EBDFC4] px-6 py-2.5  hover:bg-[#5C1D26] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#7A2530] ${className}`}
+            className={`relative text-[#EBDFC4] px-6 py-2.5 cursor-pointer  hover:bg-[#5C1D26] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#7A2530] ${className}`}
             style={{
                 backgroundColor: "#7A2530",
                 fontFamily: "'Cinzel', serif",
@@ -186,7 +186,7 @@ export function PortraitIcon({ className }: { className?: string }) {
         </svg>
     );
 }
-const ROMAN_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII"];
+const ROMAN_NUMERALS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII"];
 
 export function romanStep(step: number): string {
     return ROMAN_NUMERALS[step - 1] ?? String(step);

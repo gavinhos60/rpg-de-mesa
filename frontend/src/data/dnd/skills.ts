@@ -1,4 +1,8 @@
-import type { Ability, Skill } from "../../types/character";
+import type { Ability, CharacterFormData, Skill } from "../../types/character";
+
+import { getResolvedSkillProficiencies } from "./raceResolution";
+import { getAsiFeatSkills } from "./classFeatures";
+import { getAbilityModifier } from "./abilities";
 
 export interface DndSkill {
     id: Skill;
@@ -98,3 +102,46 @@ export const DND_SKILLS: DndSkill[] = [
         ability: "wisdom",
     },
 ];
+
+export function getProficientSkills(data: CharacterFormData): Set<Skill> {
+    const monkeyPath = data.classes.some(
+        (selection) =>
+            selection.classId === "monk" &&
+            selection.subclassId === "way-of-the-monkey" &&
+            selection.level >= 3
+    );
+
+    const flagged = Object.entries(data.skills ?? {})
+        .filter(([, value]) => value?.proficient)
+        .map(([id]) => id as Skill);
+
+    return new Set<Skill>([
+        ...getResolvedSkillProficiencies(data),
+        ...(data.skillProficiencies?.race ?? []),
+        ...(data.skillProficiencies?.class ?? []),
+        ...(data.skillProficiencies?.background ?? []),
+        ...(data.skillProficiencies?.talent ?? []),
+        ...getAsiFeatSkills(data),
+        ...(monkeyPath ? ["deception" as Skill] : []),
+        ...flagged,
+    ]);
+}
+
+export function getSkillExtraBonus(
+    data: CharacterFormData,
+    skill: Skill,
+    abilities: Record<Ability, number>
+): number {
+    const monkeyPath = data.classes.some(
+        (selection) =>
+            selection.classId === "monk" &&
+            selection.subclassId === "way-of-the-monkey" &&
+            selection.level >= 3
+    );
+
+    if (monkeyPath && skill === "deception") {
+        return getAbilityModifier(abilities.wisdom);
+    }
+
+    return 0;
+}

@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { createCharacter as createCharacterApi } from "./character.service";
 
 export interface CampaignPlayer {
   id: number;
@@ -22,7 +23,7 @@ export interface CampaignCharacter {
   level: number;
   avatar?: string;
   playerId: number;
-  campaignId: number;
+  campaignId?: number | null;
   player: CampaignPlayer;
 }
 
@@ -70,15 +71,8 @@ export interface CreateCharacterRequest {
   campaignId: number;
 }
 
-export async function createCharacter(
-  data: CreateCharacterRequest
-) {
-  const response = await api.post(
-    "/characters",
-    data
-  );
-
-  return response.data;
+export async function createCharacter(data: CreateCharacterRequest) {
+  return createCharacterApi(data);
 }
 
 export async function addPlayerByEmail(

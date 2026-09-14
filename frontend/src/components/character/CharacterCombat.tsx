@@ -1,3 +1,5 @@
+import type { Dispatch, SetStateAction } from "react";
+
 import type { CharacterFormData } from "../../types/character";
 
 import {
@@ -9,6 +11,7 @@ import { DND_CLASSES } from "../../data/dnd/classes";
 import { DND_RACES } from "../../data/dnd/races";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
+import { getRaceDisplayName } from "../../data/dnd/raceResolution";
 
 import {
     getBaseArmorClass,
@@ -18,15 +21,20 @@ import {
     getPassivePerception,
     getSavingThrowModifier,
 } from "../../data/dnd/combat";
+import { formatMetricWeight } from "../../data/dnd/equipment";
+import { getProficientSkills } from "../../data/dnd/skills";
+import { getFeatSavingThrowAbilities } from "../../data/dnd/classFeatures";
+import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
 
 interface CharacterCombatProps {
     data: CharacterFormData;
+    onChange: Dispatch<SetStateAction<CharacterFormData>>;
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
 const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
 
-export function CharacterCombat({ data }: CharacterCombatProps) {
+export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
     const primaryClassSelection = data.classes[0];
 
     const selectedClass = primaryClassSelection
@@ -54,28 +62,23 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
 
     const proficiencyBonus = getProficiencyBonus(totalLevel);
 
-    const hitPoints = selectedClass
+    const calculatedHitPoints = selectedClass
         ? getInitialHitPoints(selectedClass, constitution)
         : 0;
+    const hitPoints = data.hitPoints ?? calculatedHitPoints;
 
     const armorClass = getBaseArmorClass(dexterity, wisdom, selectedClass);
     const initiative = getInitiative(dexterity);
     const movement = selectedRace?.speed ?? 30;
     const carryingCapacity = getCarryingCapacity(strength);
 
-    const raceSkills = data.skillProficiencies?.race ?? [];
-    const classSkills = data.skillProficiencies?.class ?? [];
-    const backgroundSkills = data.skillProficiencies?.background ?? [];
-    const talentSkills = data.skillProficiencies?.talent ?? [];
-
-    const proficientSkills = new Set([
-        ...raceSkills,
-        ...classSkills,
-        ...backgroundSkills,
-        ...talentSkills,
-    ]);
+    const proficientSkills = getProficientSkills(data);
 
     const perceptionProficient = proficientSkills.has("perception");
+    const savingThrowProficiencies = [
+        ...(selectedClass?.savingThrowProficiencies ?? []),
+        ...getFeatSavingThrowAbilities(data),
+    ];
 
     const passivePerception = getPassivePerception(
         wisdom,
@@ -88,7 +91,7 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
     }
 
     function getSkillModifier(skillId: "perception"): number {
-        const abilityValue = abilities["wisdom"];
+        const abilityValue = abilities.wisdom;
         const abilityModifier = getAbilityModifier(abilityValue);
         const proficient = proficientSkills.has(skillId);
 
@@ -103,8 +106,8 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                 </h2>
 
                 <p className="mt-2 text-[#5C4A38]">
-                    Os valores abaixo são calculados automaticamente com base
-                    na sua raça, classe e atributos.
+                    Os valores abaixo são calculados automaticamente. Use as
+                    sub-abas para ver habilidades de raça e de cada classe.
                 </p>
             </div>
 
@@ -113,7 +116,11 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                     title="Pontos de Vida"
                     value={hitPoints}
                     description={
-                        selectedClass ? `1d${selectedClass.hitDie} + CON` : "Selecione uma classe"
+                        selectedClass
+                            ? data.hitPoints !== null
+                                ? "Definido pelo jogador"
+                                : `1d${selectedClass.hitDie} + CON`
+                            : "Selecione uma classe"
                     }
                 />
 
@@ -136,7 +143,11 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                 <CombatCard
                     title="Deslocamento"
                     value={`${movement} ft`}
-                    description={selectedRace ? selectedRace.name : "Padrão"}
+                    description={
+                        selectedRace
+                            ? getRaceDisplayName(data) || selectedRace.name
+                            : "Padrão"
+                    }
                 />
             </div>
 
@@ -149,7 +160,7 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                     <InfoCard label="Nível total" value={totalLevel} />
                     <InfoCard label="Bônus de proficiência" value={formatModifier(proficiencyBonus)} />
                     <InfoCard label="Percepção passiva" value={passivePerception} />
-                    <InfoCard label="Capacidade de carga" value={`${carryingCapacity} lb`} />
+                    <InfoCard label="Capacidade de carga" value={formatMetricWeight(carryingCapacity)} />
                     <InfoCard label="Dado de vida" value={selectedClass ? `d${selectedClass.hitDie}` : "-"} />
                     <InfoCard
                         label="Modificador de CON"
@@ -177,12 +188,12 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                         const modifier = getSavingThrowModifier(
                             ability.id,
                             value,
-                            selectedClass?.savingThrowProficiencies ?? [],
+                            savingThrowProficiencies,
                             proficiencyBonus
                         );
 
                         const proficient =
-                            selectedClass?.savingThrowProficiencies.includes(ability.id) ?? false;
+                            savingThrowProficiencies.includes(ability.id);
 
                         return (
                             <div
@@ -269,7 +280,7 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                 </div>
             </section>
 
-            <section>
+            <section className="mb-8">
                 <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                     Percepção
                 </h3>
@@ -297,6 +308,17 @@ export function CharacterCombat({ data }: CharacterCombatProps) {
                         </div>
                     </div>
                 </div>
+            </section>
+
+            <section className="mt-8">
+                <h3 className="mb-2 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    Habilidades
+                </h3>
+                <p className="mb-4 text-sm text-[#5C4A38]">
+                    Separe por raça e por cada classe do personagem. As habilidades
+                    aparecem ordenadas por nível.
+                </p>
+                <CharacterAbilityTabs data={data} onChange={onChange} variant="wizard" />
             </section>
         </div>
     );

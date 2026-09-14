@@ -12,9 +12,20 @@ import {
 } from "../../data/dnd/abilities";
 
 import { DND_CLASSES } from "../../data/dnd/classes";
-import { DND_SKILLS } from "../../data/dnd/skills";
+import { DND_BACKGROUNDS } from "../../data/dnd/backgrounds";
+import {
+    DND_SKILLS,
+    getProficientSkills,
+    getSkillExtraBonus,
+} from "../../data/dnd/skills";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
+import { getAsiFeatSkills } from "../../data/dnd/classFeatures";
+import {
+    getRaceDisplayName,
+    getResolvedSkillChoices,
+    getResolvedSkillProficiencies,
+} from "../../data/dnd/raceResolution";
 
 interface CharacterSkillsProps {
     data: CharacterFormData;
@@ -56,7 +67,7 @@ export function CharacterSkills({
     const classAvailableSkills = classSkillOptions?.from ?? [];
     const classSkillLimit = classSkillOptions?.choose ?? 0;
 
-    const raceSkillOptions = selectedRace?.skillChoices;
+    const raceSkillOptions = getResolvedSkillChoices(data);
     const raceAvailableSkills = raceSkillOptions?.skills ?? [];
     const raceSkillLimit = raceSkillOptions?.count ?? 0;
 
@@ -64,13 +75,25 @@ export function CharacterSkills({
     const selectedRaceSkills = data.skillProficiencies?.race ?? [];
     const selectedBackgroundSkills = data.skillProficiencies?.background ?? [];
     const selectedTalentSkills = data.skillProficiencies?.talent ?? [];
-
-    const proficientSkills = new Set<Skill>([
+    const selectedAsiFeatSkills = getAsiFeatSkills(data);
+    const selectedBackground = DND_BACKGROUNDS.find(
+        (background) => background.id === data.backgroundId
+    );
+    const raceFixedSkills = getResolvedSkillProficiencies(data);    const baseBackgroundSkills = selectedBackground?.skillProficiencies ?? [];
+    const nonBackgroundSkills = new Set<Skill>([
+        ...raceFixedSkills,
         ...selectedClassSkills,
         ...selectedRaceSkills,
-        ...selectedBackgroundSkills,
         ...selectedTalentSkills,
+        ...selectedAsiFeatSkills,
     ]);
+    const backgroundReplacementCount = baseBackgroundSkills.filter(
+        (skill) => nonBackgroundSkills.has(skill)
+    ).length;
+    const selectedBackgroundReplacements =
+        data.backgroundChoices.skills.slice(0, backgroundReplacementCount);
+
+    const proficientSkills = getProficientSkills(data);
 
     function getSkillModifier(skill: Skill): number {
         const skillDefinition = DND_SKILLS.find((item) => item.id === skill);
@@ -84,7 +107,9 @@ export function CharacterSkills({
         const isProficient = proficientSkills.has(skill);
         const skillProficiencyBonus = isProficient ? proficiencyBonus : 0;
 
-        return abilityModifier + skillProficiencyBonus;
+        return abilityModifier +
+            skillProficiencyBonus +
+            getSkillExtraBonus(data, skill, finalAbilities);
     }
 
     const passivePerception = 10 + getSkillModifier("perception");
@@ -225,6 +250,53 @@ export function CharacterSkills({
         });
     }
 
+    function updateBackgroundReplacement(index: number, skill: Skill | "") {
+        onChange((previous) => {
+            const replacements = [
+                ...previous.backgroundChoices.skills.slice(
+                    0,
+                    backgroundReplacementCount
+                ),
+            ];
+            if (skill) replacements[index] = skill;
+            else replacements.splice(index, 1);
+
+            const backgroundSkills = [
+                ...baseBackgroundSkills,
+                ...replacements.filter(Boolean),
+            ];
+            const proficient = new Set<Skill>([
+                ...(previous.skillProficiencies?.class ?? []),
+                ...(previous.skillProficiencies?.race ?? []),
+                ...(previous.skillProficiencies?.talent ?? []),
+                ...getAsiFeatSkills(previous),
+                ...backgroundSkills,
+            ]);
+            const skills = Object.fromEntries(
+                Object.entries(previous.skills).map(([id, value]) => [
+                    id,
+                    {
+                        ...value,
+                        proficient: proficient.has(id as Skill),
+                    },
+                ])
+            ) as CharacterFormData["skills"];
+
+            return {
+                ...previous,
+                backgroundChoices: {
+                    ...previous.backgroundChoices,
+                    skills: replacements.filter(Boolean),
+                },
+                skillProficiencies: {
+                    ...previous.skillProficiencies,
+                    background: backgroundSkills,
+                },
+                skills,
+            };
+        });
+    }
+
     function SkillOption({
         skill,
         selected,
@@ -361,7 +433,7 @@ export function CharacterSkills({
                     <div className="mb-4 flex items-center justify-between">
                         <div>
                             <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
-                                Perícias de {selectedRace?.name}
+                                Perícias de {getRaceDisplayName(data) || selectedRace?.name}
                             </h3>
 
                             <p className="mt-1 text-sm text-[#5C4A38]">
@@ -386,6 +458,60 @@ export function CharacterSkills({
                                 selected={selectedRaceSkills.includes(skill)}
                                 onClick={() => toggleRaceSkill(skill)}
                             />
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {backgroundReplacementCount > 0 && (
+                <section className="mb-8">
+                    <div className="mb-4">
+                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            Substituições do antecedente
+                        </h3>
+                        <p className="mt-1 text-sm text-[#5C4A38]">
+                            Uma proficiência do antecedente já veio de outra
+                            fonte. Escolha {backgroundReplacementCount} perícia
+                            diferente, conforme a regra do PHB.
+                        </p>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                        {Array.from({ length: backgroundReplacementCount }).map((_, index) => (
+                            <label key={index} className="border p-4" style={card}>
+                                <span className="mb-2 block text-sm text-[#5C4A38]">
+                                    Perícia substituta {index + 1}
+                                </span>
+                                <select
+                                    value={selectedBackgroundReplacements[index] ?? ""}
+                                    onChange={(event) =>
+                                        updateBackgroundReplacement(
+                                            index,
+                                            event.target.value as Skill | ""
+                                        )
+                                    }
+                                    className="w-full border bg-[#EBDFC4] px-3 py-2 text-[#2A1D14] outline-none"
+                                    style={{ borderColor: "#A67C3D" }}
+                                >
+                                    <option value="">Selecione</option>
+                                    {DND_SKILLS.map((skill) => (
+                                        <option
+                                            key={skill.id}
+                                            value={skill.id}
+                                            disabled={
+                                                nonBackgroundSkills.has(skill.id) ||
+                                                baseBackgroundSkills.includes(skill.id) ||
+                                                selectedBackgroundReplacements.some(
+                                                    (selected, selectedIndex) =>
+                                                        selected === skill.id &&
+                                                        selectedIndex !== index
+                                                )
+                                            }
+                                        >
+                                            {skill.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
                         ))}
                     </div>
                 </section>
@@ -442,7 +568,10 @@ export function CharacterSkills({
                         const sources: string[] = [];
 
                         if (selectedClassSkills.includes(skill.id)) sources.push("Classe");
-                        if (selectedRaceSkills.includes(skill.id)) sources.push("Raça");
+                        if (
+                            selectedRaceSkills.includes(skill.id) ||
+                            raceFixedSkills.includes(skill.id)
+                        ) sources.push("Raça");
                         if (selectedBackgroundSkills.includes(skill.id)) sources.push("Background");
                         if (selectedTalentSkills.includes(skill.id)) sources.push("Talento");
 

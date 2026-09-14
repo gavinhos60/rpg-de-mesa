@@ -1,5 +1,5 @@
 import { useAuth } from "../contexts/AuthContext";
-import { EmblemIcon, WaxSealIcon } from "./icons/MedievalIcons";
+import { WaxSealIcon } from "./icons/MedievalIcons";
 
 export function Header() {
     const { user } = useAuth();

@@ -1,0 +1,1022 @@
+import { useState } from "react";
+import type { ReactNode } from "react";
+import type { CharacterBackground, CharacterFormData, Spell } from "../../types/character";
+import { ABILITIES, getAbilityModifier } from "../../data/dnd/abilities";
+import { DND_CLASSES } from "../../data/dnd/classes";
+import { DND_RACES } from "../../data/dnd/races";
+import {
+    getRaceDisplayName,
+    getResolvedRaceTraits,
+} from "../../data/dnd/raceResolution";
+import {
+    DND_SKILLS,
+    getProficientSkills,
+    getSkillExtraBonus,
+} from "../../data/dnd/skills";
+import { DND_TALENTS } from "../../data/dnd/talents";
+import { DND_BACKGROUNDS } from "../../data/dnd/backgrounds";
+import {
+    getAsiMilestones,
+    getFeatSavingThrowAbilities,
+} from "../../data/dnd/classFeatures";
+import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
+import { getProficiencyBonus } from "../../data/dnd/rules";
+import { getFinalAbilities } from "../../data/dnd/characterStats";
+import {
+    getArmorClassFromEquipment,
+    getCarryingCapacity,
+    getInitialHitPoints,
+    getInitiative,
+    getPassivePerception,
+    getSavingThrowModifier,
+} from "../../data/dnd/combat";
+import {
+    formatMetricWeight,
+    getEquipmentItem,
+} from "../../data/dnd/equipment";
+import { getSpell, SPELL_SCHOOLS } from "../../data/dnd/spells";
+import { getSpellDetail } from "../../data/dnd/spellDetails";
+import {
+    getAlwaysPreparedSpells,
+    getCombinedSpellSlots,
+    getSpellLimits,
+    getSpellcastingAbility,
+} from "../../data/dnd/spellcasting";
+import { getLanguageOptions } from "../character/CharacterTalentChoices";
+
+interface CharacterSheetReviewProps {
+    data: CharacterFormData;
+    backgrounds: CharacterBackground[];
+}
+
+const ALIGNMENT_NAMES: Record<string, string> = {
+    "lawful-good": "Leal e Bom",
+    "neutral-good": "Neutro e Bom",
+    "chaotic-good": "Caótico e Bom",
+    "lawful-neutral": "Leal e Neutro",
+    "true-neutral": "Neutro",
+    "chaotic-neutral": "Caótico e Neutro",
+    "lawful-evil": "Leal e Mau",
+    "neutral-evil": "Neutro e Mau",
+    "chaotic-evil": "Caótico e Mau",
+};
+
+const cinzel = { fontFamily: "'Cinzel', serif" } as const;
+const EQUIPMENT_CATEGORY_NAMES: Record<string, string> = {
+    weapon: "Armas",
+    armor: "Armaduras",
+    shield: "Escudos",
+    ammunition: "Munição",
+    pack: "Pacotes",
+    tool: "Ferramentas",
+    focus: "Focos",
+    gear: "Equipamentos",
+};
+
+const SCHOOL_ACCENTS: Record<string, string> = {
+    abjuration: "#4A6B8A",
+    conjuration: "#4F7A57",
+    divination: "#6D6AA8",
+    enchantment: "#A8558A",
+    evocation: "#B2532B",
+    illusion: "#7B5EA7",
+    necromancy: "#55524F",
+    transmutation: "#9A7A2C",
+};
+
+interface ReviewInventoryRow {
+    itemId: string;
+    classQuantity: number;
+    manualQuantity: number;
+}
+
+export function CharacterSheetReview({
+    data,
+    backgrounds,
+}: CharacterSheetReviewProps) {
+    const [activeTab, setActiveTab] = useState<
+        "summary" | "combat" | "spells" | "inventory" | "story"
+    >("summary");
+    const abilities = getFinalAbilities(data);
+    const race = DND_RACES.find((item) => item.id === data.raceId);
+    const raceTraits = getResolvedRaceTraits(data);
+    const raceLabel = getRaceDisplayName(data) || race?.name;
+    const background = backgrounds.find((item) => item.id === data.backgroundId);
+    const talent = DND_TALENTS.find((item) => item.id === data.talentId);
+    const asiMilestones = getAsiMilestones(data.classes);
+    const asiChoices = asiMilestones.map((milestone) => ({
+        milestone,
+        selection: data.asiSelections[milestone.key],
+    }));
+    const primaryClass = data.classes[0]
+        ? DND_CLASSES.find((item) => item.id === data.classes[0].classId)
+        : undefined;
+
+    const totalLevel = data.classes.reduce((total, item) => total + item.level, 0) || 1;
+    const proficiencyBonus = getProficiencyBonus(totalLevel);
+    const suggestedHitPoints = primaryClass
+        ? getInitialHitPoints(primaryClass, abilities.constitution)
+        : 0;
+    const hitPoints = data.hitPoints ?? suggestedHitPoints;
+    const initiative =
+        getInitiative(abilities.dexterity) +
+        (hasSelectedFeat(data, "alert") ? 5 : 0);
+    const movement = race?.speed ?? 30;
+    const carryingCapacity = getCarryingCapacity(abilities.strength);
+
+    const proficientSkills = getProficientSkills(data);
+    const savingThrowProficiencies = [
+        ...(primaryClass?.savingThrowProficiencies ?? []),
+        ...getFeatSavingThrowAbilities(data),
+    ];
+
+    const classLine = data.classes
+        .map((selection) => {
+            const characterClass = DND_CLASSES.find((item) => item.id === selection.classId);
+            const subclass = characterClass?.subclasses.find((item) => item.id === selection.subclassId);
+            const parts = [
+                characterClass?.name ?? selection.classId,
+                `${selection.level}`,
+            ];
+            return subclass ? `${parts[0]} ${selection.level} (${subclass.name})` : `${parts[0]} ${selection.level}`;
+        })
+        .join(" / ");
+
+    const inventory = buildInventory(data);
+    const armorClass = getArmorClassFromEquipment(
+        abilities.dexterity,
+        abilities.wisdom,
+        primaryClass,
+        inventory.map((row) => row.itemId)
+    );
+    const inventoryWeight = inventory.reduce((total, row) => {
+        const item = getEquipmentItem(row.itemId);
+        return total + (item?.weight ?? 0) *
+            (row.classQuantity + row.manualQuantity);
+    }, 0);
+    const isOverCapacity = inventoryWeight > carryingCapacity;
+
+    const slots = getCombinedSpellSlots(data.classes);
+    const spellGroups = collectSpells(data);
+    const questLines = (data.quests ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+    function formatModifier(value: number): string {
+        return value >= 0 ? `+${value}` : `${value}`;
+    }
+
+    return (
+        <div
+            className="border px-5 py-6 md:px-8 md:py-8"
+            style={{
+                backgroundColor: "#F3E6C4",
+                borderColor: "#6B4423",
+                boxShadow: "inset 0 0 0 1px #A67C3D",
+            }}
+        >
+            <div className="mb-6 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center" style={{ borderColor: "#A67C3D" }}>
+                <div
+                    className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl"
+                    style={{
+                        ...cinzel,
+                        fontWeight: 600,
+                        color: "#F3E6C4",
+                        background: "radial-gradient(circle at 30% 25%, #9A3340, #5A1A22 70%)",
+                        boxShadow: "0 0 0 3px #C09A5A, 0 0 0 5px #6B4423",
+                    }}
+                >
+                    {getInitials(data.name)}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                    <h2
+                        className="text-3xl leading-tight text-[#2A1D14] md:text-4xl"
+                        style={{ ...cinzel, fontWeight: 600, letterSpacing: "0.02em" }}
+                    >
+                        {data.name.trim() || "Herói sem nome"}
+                    </h2>
+                    <p className="mt-1 text-sm italic text-[#7A6A52]">
+                        {[
+                            raceLabel,
+                            classLine,
+                            `Nível ${totalLevel}`,
+                            background?.name,
+                        ]
+                            .filter(Boolean)
+                            .join(" · ") || "Origem desconhecida"}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {data.alignment && (
+                            <Badge>{ALIGNMENT_NAMES[data.alignment]}</Badge>
+                        )}
+                        <Badge>Bônus de Prof. {formatModifier(proficiencyBonus)}</Badge>
+                        {talent && <Badge>{talent.name}</Badge>}
+                        {raceTraits.slice(0, 2).map((trait) => (
+                            <Badge key={trait.id}>{trait.name}</Badge>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="mb-6 flex overflow-x-auto border-y" style={{ borderColor: "#6B4423" }}>
+                {([
+                    ["summary", "Resumo"],
+                    ["combat", "Combate"],
+                    ["spells", "Magias"],
+                    ["inventory", "Inventário"],
+                    ["story", "História"],
+                ] as const).map(([id, label]) => (
+                    <button
+                        key={id}
+                        type="button"
+                        onClick={() => setActiveTab(id)}
+                        className="min-w-fit flex-1 px-4 py-3 text-sm transition-colors"
+                        style={{
+                            ...cinzel,
+                            backgroundColor: activeTab === id ? "#7A2530" : "transparent",
+                            color: activeTab === id ? "#F3E6C4" : "#5C4A38",
+                        }}
+                    >
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            <div className={activeTab === "summary" ? "" : "hidden"}>
+                <RuleTitle>Atributos</RuleTitle>
+                <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                    {ABILITIES.map((ability) => (
+                        <AbilityHex
+                            key={ability.id}
+                            name={ability.name}
+                            score={abilities[ability.id]}
+                            modifier={formatModifier(getAbilityModifier(abilities[ability.id]))}
+                        />
+                    ))}
+                </div>
+
+                <RuleTitle>Combate &amp; Sentidos</RuleTitle>
+                <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <StatBox label="Pontos de vida" value={hitPoints} />
+                    <StatBox label="Classe de armadura" value={armorClass} />
+                    <StatBox label="Iniciativa" value={formatModifier(initiative)} />
+                    <StatBox label="Deslocamento" value={formatMeters(movement)} />
+                    <StatBox
+                        label="Percepção passiva"
+                        value={getPassivePerception(
+                            abilities.wisdom,
+                            proficientSkills.has("perception"),
+                            proficiencyBonus
+                        )}
+                        hint={`10 ${formatModifier(getAbilityModifier(abilities.wisdom))} SAB${proficientSkills.has("perception")
+                                ? ` ${formatModifier(proficiencyBonus)} prof.`
+                                : ""
+                            }`}
+                    />
+                </div>
+
+                <RuleTitle>Origem &amp; Progressão</RuleTitle>
+                <div className="mb-6 grid gap-6 md:grid-cols-[1.1fr_1fr]">
+                    <section className="border p-5" style={{ borderColor: "#6B4423", backgroundColor: "#E8D7AD" }}>
+                        <SectionTitle>Identidade e origem</SectionTitle>
+                        <p className="text-sm leading-6 text-[#5C4A38]">
+                            <span className="text-[#2A1D14]" style={cinzel}>
+                                {data.name.trim() || "Este aventureiro"}
+                            </span>{" "}
+                            é {raceLabel ? `um membro da raça ${raceLabel}` : "de origem desconhecida"}
+                            {background?.name ? `, marcado pelo passado de ${background.name}` : ""}
+                            {data.alignment ? ` e de alinhamento ${ALIGNMENT_NAMES[data.alignment]}` : ""}.
+                        </p>
+                        {((race?.languages?.length ?? 0) > 0 ||
+                            data.backgroundChoices.languages.length > 0) && (
+                                <p className="mt-3 text-sm text-[#5C4A38]">
+                                    <span className="text-[#2A1D14]" style={cinzel}>
+                                        Idiomas:
+                                    </span>{" "}
+                                    {[
+                                        ...(race?.languages ?? []),
+                                        ...(data.backgroundChoices.languages ?? []),     
+                                        ...(data.talentChoices.languages ?? []),
+                                                                 
+                                    ]
+                                        .map((language) => getLanguageOptions([language])[0]?.name ?? language)
+                                        .join(", ")}
+                                </p>
+                            )}
+                        {background && (
+                            <div className="mt-4 border-t pt-3" style={{ borderColor: "#A67C3D" }}>
+                                <p className="text-sm text-[#2A1D14]" style={cinzel}>
+                                    {background.feature.name}
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                    {background.feature.description}
+                                </p>
+                                <p className="mt-2 text-xs text-[#8A7860]">
+                                    Ferramentas: {[
+                                        ...(background.toolProficiencies ?? []),
+                                        ...data.backgroundChoices.tools,
+                                    ].map((id) => getEquipmentItem(id)?.name ?? id).join(", ") || "—"}
+                                </p>
+                            </div>
+                        )}
+                        {raceTraits.length > 0 && (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                {raceTraits.map((trait) => (
+                                    <span
+                                        key={trait.id}
+                                        title={trait.description}
+                                        className="border px-2 py-1 text-xs text-[#5C4A38]"
+                                        style={{ borderColor: "#A67C3D" }}
+                                    >
+                                        {trait.name}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    <section className="border p-5" style={{ borderColor: "#6B4423", backgroundColor: "#E8D7AD" }}>
+                        <SectionTitle>Talentos e melhorias</SectionTitle>
+                        {talent && (
+                            <div className="mb-3">
+                                <p className="text-sm text-[#2A1D14]" style={cinzel}>
+                                    Talento inicial — {talent.name}
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                    {talent.description}
+                                </p>
+                            </div>
+                        )}
+                        {asiChoices.map(({ milestone, selection }) => {
+                            const sourceClass = DND_CLASSES.find(
+                                (item) => item.id === milestone.classId
+                            );
+                            const feat = selection?.kind === "feat"
+                                ? DND_TALENTS.find((item) => item.id === selection.featId)
+                                : undefined;
+                            const abilityNames = selection?.kind === "ability"
+                                ? selection.abilities.map((id) =>
+                                    ABILITIES.find((ability) => ability.id === id)?.name ?? id
+                                )
+                                : [];
+
+                            return (
+                                <div key={milestone.key} className="border-t py-2 text-sm" style={{ borderColor: "#A67C3D" }}>
+                                    <span className="text-[#8A7860]">
+                                        {sourceClass?.name} {milestone.classLevel}:
+                                    </span>{" "}
+                                    <span className="text-[#2A1D14]">
+                                        {!selection && "Pendente"}
+                                        {selection?.kind === "feat" && (feat?.name || "Talento não escolhido")}
+                                        {selection?.kind === "ability" &&
+                                            (selection.mode === "single"
+                                                ? `+2 ${abilityNames[0] ?? "—"}`
+                                                : `+1 ${abilityNames[0] ?? "—"} / +1 ${abilityNames[1] ?? "—"}`)}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                        {!talent && asiChoices.length === 0 && (
+                            <p className="text-sm italic text-[#5C4A38]">Nenhum talento registrado.</p>
+                        )}
+                    </section>
+                </div>
+
+            </div>
+
+            <div className={activeTab === "combat" ? "" : "hidden"}>
+                <div className="mb-6 grid gap-6 md:grid-cols-2">
+                    <section>
+                        <SectionTitle>Testes de resistência</SectionTitle>
+                        <div className="space-y-2">
+                            {ABILITIES.map((ability) => {
+                                const modifier = getSavingThrowModifier(
+                                    ability.id,
+                                    abilities[ability.id],
+                                    savingThrowProficiencies,
+                                    proficiencyBonus
+                                );
+                                const proficient = savingThrowProficiencies.includes(ability.id);
+
+                                return (
+                                    <div key={ability.id} className="flex items-center justify-between border px-3 py-2" style={{ borderColor: "#A67C3D" }}>
+                                        <span className="text-sm">
+                                            {proficient ? "●" : "○"} {ability.name}
+                                        </span>
+                                        <span style={cinzel}>{formatModifier(modifier)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <p className="mt-3 text-xs text-[#8A7860]">
+                            Percepção passiva {getPassivePerception(
+                                abilities.wisdom,
+                                proficientSkills.has("perception"),
+                                proficiencyBonus
+                            )} • Carga {formatMetricWeight(carryingCapacity)}
+                        </p>
+                    </section>
+
+                    <section>
+                        <SectionTitle>Perícias</SectionTitle>
+                        <div className="grid grid-cols-1 gap-1">
+                            {DND_SKILLS.map((skill) => {
+                                const modifier = getAbilityModifier(abilities[skill.ability]) +
+                                    (proficientSkills.has(skill.id) ? proficiencyBonus : 0) +
+                                    getSkillExtraBonus(data, skill.id, abilities);
+                                const ability = ABILITIES.find((item) => item.id === skill.ability);
+
+                                return (
+                                    <div key={skill.id} className="flex items-center justify-between px-1 py-0.5 text-sm">
+                                        <span>
+                                            {proficientSkills.has(skill.id) ? "●" : "○"} {skill.name}
+                                            <span className="ml-1 text-xs text-[#8A7860]">{ability?.shortName}</span>
+                                        </span>
+                                        <span style={cinzel}>{formatModifier(modifier)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                </div>
+
+                <section>
+                    <RuleTitle>Habilidades</RuleTitle>
+                    <CharacterAbilityTabs data={data} variant="sheet" />
+                </section>
+            </div>
+
+            <section className={activeTab === "inventory" ? "" : "hidden"}>
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b pb-1" style={{ borderColor: "#A67C3D" }}>
+                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        Inventário
+                    </h3>
+                    <span className={isOverCapacity ? "text-sm text-[#8B3A2E]" : "text-sm text-[#5C4A38]"}>
+                        {background ? `${background.startingGoldGp} PO • ` : ""}
+                        {formatMetricWeight(inventoryWeight)} / {formatMetricWeight(carryingCapacity)}
+                        {isOverCapacity ? " • Sobrecarga" : ""}
+                    </span>
+                </div>
+                {inventory.length === 0 ? (
+                    <p className="text-sm italic text-[#5C4A38]">Nenhum item registrado.</p>
+                ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {Object.entries(groupInventory(inventory)).map(([category, rows]) => (
+                            <div key={category} className="border p-3" style={{ borderColor: "#A67C3D" }}>
+                                <p className="mb-2 text-sm text-[#2A1D14]" style={cinzel}>
+                                    {EQUIPMENT_CATEGORY_NAMES[category] ?? category}
+                                </p>
+                                <ul className="space-y-2 text-sm">
+                                    {rows.map((row) => {
+                                        const item = getEquipmentItem(row.itemId);
+                                        const quantity = row.classQuantity + row.manualQuantity;
+                                        return (
+                                            <li key={row.itemId} className="flex justify-between gap-3">
+                                                <span>
+                                                    {item?.name ?? row.itemId} × {quantity}
+                                                    <span className="block text-xs text-[#8A7860]">
+                                                        {row.classQuantity > 0 ? "Inicial" : ""}
+                                                        {row.classQuantity > 0 && row.manualQuantity > 0 ? " + " : ""}
+                                                        {row.manualQuantity > 0 ? "Adicionado" : ""}
+                                                    </span>
+                                                </span>
+                                                <span className="shrink-0 text-xs text-[#8A7860]">
+                                                    {formatMetricWeight((item?.weight ?? 0) * quantity)}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
+
+            <section className={activeTab === "spells" ? "" : "hidden"}>
+                <RuleTitle>Grimório</RuleTitle>
+                {slots.length > 0 && (
+                    <div className="mb-6">
+                        <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[#8B5A2B]" style={cinzel}>
+                            Espaços de magia
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                            {slots.map((count, index) => (
+                                <div
+                                    key={index}
+                                    className="flex h-14 w-14 flex-col items-center justify-center rounded-full"
+                                    style={{
+                                        ...cinzel,
+                                        background: "radial-gradient(circle at 35% 25%, #F5E8C0, #D9C08A)",
+                                        boxShadow: "0 0 0 1px #C09A5A, inset 0 0 8px rgba(122,37,48,0.18)",
+                                    }}
+                                    title={`${index + 1}º círculo`}
+                                >
+                                    <span className="text-lg leading-none text-[#5A1A22]" style={{ fontWeight: 700 }}>
+                                        {count}
+                                    </span>
+                                    <span className="text-[10px] text-[#8B5A2B]">{index + 1}º</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {data.classes.map((selection) => {
+                        const characterClass = DND_CLASSES.find((item) => item.id === selection.classId);
+                        const abilityId = getSpellcastingAbility(selection.classId, selection.subclassId);
+                        const limits = abilityId
+                            ? getSpellLimits(selection.classId, selection.level, selection.subclassId, abilities[abilityId])
+                            : undefined;
+                        if (!limits || !abilityId) return null;
+                        const modifier = getAbilityModifier(abilities[abilityId]);
+                        const ability = ABILITIES.find((item) => item.id === abilityId);
+
+                        return (
+                            <div
+                                key={selection.classId}
+                                className="border p-4"
+                                style={{ borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+                            >
+                                <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                    {characterClass?.name}
+                                </p>
+                                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[#8B5A2B]" style={cinzel}>
+                                    Conjuração por {ability?.name ?? "—"}
+                                </p>
+                                <div className="mt-3 flex gap-4 text-sm text-[#5C4A38]">
+                                    <span>
+                                        CD{" "}
+                                        <strong className="text-[#5A1A22]" style={cinzel}>
+                                            {8 + proficiencyBonus + modifier}
+                                        </strong>
+                                    </span>
+                                    <span>
+                                        Ataque{" "}
+                                        <strong className="text-[#5A1A22]" style={cinzel}>
+                                            {formatModifier(proficiencyBonus + modifier)}
+                                        </strong>
+                                    </span>
+                                </div>
+                                {limits.pact && (
+                                    <p className="mt-2 text-xs text-[#8A7860]">
+                                        Magia de Pacto: {limits.pact.count} espaço(s) de {limits.pact.level}º círculo
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {spellGroups.length === 0 ? (
+                    <p className="text-sm italic text-[#5C4A38]">
+                        Este herói não conjura magias — sua força vem do aço e da coragem.
+                    </p>
+                ) : (
+                    spellGroups.map((group) => (
+                        <div key={group.title} className="mb-6">
+                            <RuleTitle>{group.title}</RuleTitle>
+                            {Object.entries(groupSpellsByLevel(group.spells)).map(([level, spells]) => (
+                                <div key={level} className="mb-4 last:mb-0">
+                                    <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[#8B5A2B]" style={cinzel}>
+                                        {level === "0" ? "Truques" : `${level}º círculo`}
+                                        <span className="ml-2 text-[#B09B74]">({spells.length})</span>
+                                    </p>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        {spells.map((spell) => (
+                                            <SpellCard key={spell.id} spell={spell} />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ))
+                )}
+            </section>
+
+            <div className={activeTab === "story" ? "" : "hidden"}>
+                <section className="mb-6">
+                    <SectionTitle>Personalidade</SectionTitle>
+                    <div className="grid gap-3 md:grid-cols-2">
+                        <DetailBox label="Aparência" value={data.loreDetails.appearance} />
+                        <DetailBox label="Traços de personalidade" value={data.loreDetails.personalityTraits} />
+                        <DetailBox label="Ideais" value={data.loreDetails.ideals} />
+                        <DetailBox label="Vínculos" value={data.loreDetails.bonds} />
+                        <DetailBox label="Fraquezas" value={data.loreDetails.flaws} />
+                    </div>
+                </section>
+
+                <section className="mb-6">
+                    <SectionTitle>História</SectionTitle>
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-[#2A1D14]">
+                        {data.lore.trim() || "Ainda não há uma história escrita neste pergaminho."}
+                    </p>
+                </section>
+
+                <section>
+                    <SectionTitle>Missões</SectionTitle>
+                    {questLines.length === 0 ? (
+                        <p className="text-sm italic text-[#5C4A38]">
+                            Nenhuma missão registrada — o destino deste herói ainda está em aberto.
+                        </p>
+                    ) : (
+                        <ul className="space-y-2">
+                            {questLines.map((quest, index) => (
+                                <li
+                                    key={index}
+                                    className="flex gap-3 border px-3 py-2 text-sm leading-6 text-[#2A1D14]"
+                                    style={{ borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+                                >
+                                    <span className="text-[#7A2530]">❖</span>
+                                    <span className="whitespace-pre-wrap">{quest}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+            </div>
+        </div>
+    );
+}
+
+function Badge({ children }: { children: ReactNode }) {
+    return (
+        <span
+            className="border px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#6B4423]"
+            style={{ ...cinzel, borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+        >
+            {children}
+        </span>
+    );
+}
+
+function RuleTitle({ children }: { children: ReactNode }) {
+    return (
+        <div className="mb-3 flex items-center gap-3">
+            <span
+                className="shrink-0 text-sm uppercase tracking-[0.25em] text-[#7A2530]"
+                style={{ ...cinzel, fontWeight: 600 }}
+            >
+                {children}
+            </span>
+            <span className="h-px flex-1" style={{ backgroundColor: "#C09A5A" }} />
+        </div>
+    );
+}
+
+function AbilityHex({
+    name,
+    score,
+    modifier,
+}: {
+    name: string;
+    score: number;
+    modifier: string;
+}) {
+    return (
+        <div className="relative">
+            <div
+                className="flex flex-col items-center px-2 pb-8 pt-3"
+                style={{
+                    clipPath: "polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%)",
+                    background: "linear-gradient(180deg, #F1E2B8 0%, #DCC794 100%)",
+                    boxShadow: "inset 0 0 0 1px #C09A5A",
+                }}
+            >
+                <p
+                    className="text-[10px] uppercase tracking-[0.18em] text-[#8B5A2B]"
+                    style={cinzel}
+                >
+                    {name}
+                </p>
+                <p
+                    className="mt-1 text-3xl leading-none text-[#5A1A22]"
+                    style={{ ...cinzel, fontWeight: 700 }}
+                >
+                    {modifier}
+                </p>
+                <p className="mt-1 text-xs text-[#8A7860]" style={cinzel}>
+                    {score}
+                </p>
+            </div>
+        </div>
+    );
+}
+
+function StatBox({
+    label,
+    value,
+    hint,
+}: {
+    label: string;
+    value: string | number;
+    hint?: string;
+}) {
+    return (
+        <div
+            className="border px-3 py-4 text-center"
+            style={{ borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+        >
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[#8B5A2B]" style={cinzel}>
+                {label}
+            </p>
+            <p
+                className="mt-2 text-2xl leading-none text-[#5A1A22]"
+                style={{ ...cinzel, fontWeight: 600 }}
+            >
+                {value}
+            </p>
+            {hint && <p className="mt-1 text-[10px] text-[#8A7860]">{hint}</p>}
+        </div>
+    );
+}
+
+function SpellCard({ spell }: { spell: Spell }) {
+    const [expanded, setExpanded] = useState(false);
+    const accent = SCHOOL_ACCENTS[spell.school] ?? "#A67C3D";
+    const detail = getSpellDetail(spell.id);
+
+    return (
+        <article
+            className="relative overflow-hidden border px-4 py-3 pl-5"
+            style={{ borderColor: "#C09A5A", backgroundColor: "#F3E7C3" }}
+        >
+            <span
+                className="absolute left-0 top-0 h-full w-[3px]"
+                style={{ backgroundColor: accent }}
+            />
+            <div className="flex items-start gap-3">
+                <div
+                    className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm"
+                    style={{
+                        ...cinzel,
+                        fontWeight: 700,
+                        color: "#F3E6C4",
+                        background: `radial-gradient(circle at 35% 25%, ${accent}, #3A2A1C 140%)`,
+                        boxShadow: "0 0 0 1px #C09A5A",
+                    }}
+                >
+                    {spell.level === 0 ? "✦" : spell.level}
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        {spell.name}
+                    </p>
+                    <p className="mt-0.5 text-[11px] uppercase tracking-[0.14em]" style={{ ...cinzel, color: accent }}>
+                        {SPELL_SCHOOLS[spell.school]}
+                        {spell.ritual ? " · Ritual ◇" : ""}
+                        {spell.attack ? " · Ataque ⚔" : ""}
+                    </p>
+                </div>
+                {detail && (
+                    <button
+                        type="button"
+                        onClick={() => setExpanded((current) => !current)}
+                        aria-expanded={expanded}
+                        aria-label={expanded ? "Recolher descrição" : "Ver descrição completa"}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center border text-xs transition-transform"
+                        style={{
+                            borderColor: "#C09A5A",
+                            color: accent,
+                            transform: expanded ? "rotate(180deg)" : "none",
+                        }}
+                    >
+                        ▾
+                    </button>
+                )}
+            </div>
+
+            <p className="mt-2 text-sm italic leading-6 text-[#5C4A38]">
+                {spell.description ?? "Os detalhes desta magia permanecem selados no grimório."}
+            </p>
+
+            {detail && expanded && (
+                <div className="mt-3 border-t pt-3" style={{ borderColor: "#DBC392" }}>
+                    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                        <SpellMeta label="Tempo de conjuração" value={detail.castingTime} />
+                        <SpellMeta label="Alcance" value={detail.range} />
+                        <SpellMeta label="Componentes" value={detail.components} />
+                        <SpellMeta label="Duração" value={detail.duration} />
+                    </dl>
+                    <p className="mt-3 text-sm leading-6 text-[#2A1D14]">{detail.text}</p>
+                    {detail.higherLevels && (
+                        <p className="mt-2 text-sm leading-6 text-[#5C4A38]">
+                            <span className="text-[#7A2530]" style={cinzel}>
+                                Em níveis superiores.
+                            </span>{" "}
+                            {detail.higherLevels}
+                        </p>
+                    )}
+                </div>
+            )}
+        </article>
+    );
+}
+
+function SpellMeta({ label, value }: { label: string; value: string }) {
+    return (
+        <div>
+            <dt className="text-[10px] uppercase tracking-[0.14em] text-[#8B5A2B]" style={cinzel}>
+                {label}
+            </dt>
+            <dd className="text-[#2A1D14]">{value}</dd>
+        </div>
+    );
+}
+
+function getInitials(name: string): string {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "?";
+    return parts
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() ?? "")
+        .join("");
+}
+
+function formatMeters(feet: number): string {
+    const meters = feet * 0.3;
+    const rounded = Number.isInteger(meters) ? String(meters) : meters.toFixed(1);
+    return `${rounded.replace(".", ",")} m`;
+}
+
+function DetailBox({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="border p-3" style={{ borderColor: "#A67C3D" }}>
+            <p className="text-xs uppercase tracking-wide text-[#8A7860]">{label}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#2A1D14]">
+                {value.trim() || "—"}
+            </p>
+        </div>
+    );
+}
+
+function SectionTitle({ children }: { children: string }) {
+    return (
+        <h3
+            className="mb-3 border-b pb-1 text-lg text-[#2A1D14]"
+            style={{ ...cinzel, fontWeight: 600, borderColor: "#A67C3D" }}
+        >
+            {children}
+        </h3>
+    );
+}
+
+function buildInventory(data: CharacterFormData): ReviewInventoryRow[] {
+    const counts = new Map<string, ReviewInventoryRow>();
+    const classId = data.equipment.classId || data.classes[0]?.classId;
+    const characterClass = DND_CLASSES.find((item) => item.id === classId);
+    const starting = characterClass?.startingEquipment;
+
+    if (starting) {
+        for (const stack of starting.fixed) {
+            addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
+        }
+
+        for (const choice of starting.choices) {
+            const selectedId = data.equipment.choiceSelections[choice.id] ?? choice.alternatives[0]?.id;
+            const selected = choice.alternatives.find((alternative) => alternative.id === selectedId);
+            for (const stack of selected?.items ?? []) {
+                addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
+            }
+        }
+    }
+
+    const background = DND_BACKGROUNDS.find(
+        (item) => item.id === data.backgroundId
+    );
+    for (const stack of background?.startingEquipment ?? []) {
+        addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
+    }
+    if (background?.equipmentFromToolChoice) {
+        data.backgroundChoices.tools.filter(Boolean).forEach((itemId) => {
+            addInventoryQuantity(counts, itemId, 1, "class");
+        });
+    }
+
+    for (const stack of data.equipment.manualItems) {
+        addInventoryQuantity(counts, stack.itemId, stack.quantity, "manual");
+    }
+
+    return [...counts.values()];
+}
+
+function addInventoryQuantity(
+    counts: Map<string, ReviewInventoryRow>,
+    itemId: string,
+    quantity: number,
+    source: "class" | "manual"
+) {
+    const current = counts.get(itemId) ?? {
+        itemId,
+        classQuantity: 0,
+        manualQuantity: 0,
+    };
+    if (source === "class") current.classQuantity += quantity;
+    else current.manualQuantity += quantity;
+    counts.set(itemId, current);
+}
+
+function groupInventory(inventory: ReviewInventoryRow[]) {
+    return inventory.reduce<Record<string, ReviewInventoryRow[]>>((groups, row) => {
+        const category = getEquipmentItem(row.itemId)?.category ?? "gear";
+        groups[category] = [...(groups[category] ?? []), row];
+        return groups;
+    }, {});
+}
+
+function collectSpells(data: CharacterFormData): Array<{ title: string; spells: Spell[] }> {
+    const groups: Array<{ title: string; spells: Spell[] }> = [];
+    const abilities = getFinalAbilities(data);
+    const validAsiKeys = new Set(
+        getAsiMilestones(data.classes).map((milestone) => milestone.key)
+    );
+
+    for (const selection of data.classes) {
+        const characterClass = DND_CLASSES.find((item) => item.id === selection.classId);
+        const abilityId = getSpellcastingAbility(selection.classId, selection.subclassId);
+        const limits = abilityId
+            ? getSpellLimits(selection.classId, selection.level, selection.subclassId, abilities[abilityId])
+            : undefined;
+
+        if (!limits) {
+            continue;
+        }
+
+        const picked = data.spells.byClass[selection.classId];
+        const always = getAlwaysPreparedSpells(selection.subclassId, selection.level);
+        const ids = [
+            ...(picked?.cantrips ?? []),
+            ...(picked?.known ?? []),
+            ...(picked?.prepared ?? []),
+            ...always,
+        ];
+        const unique = [...new Set(ids)]
+            .map((id) => getSpell(id))
+            .filter((spell): spell is Spell => Boolean(spell));
+
+        if (unique.length > 0) {
+            groups.push({
+                title: characterClass?.name ?? selection.classId,
+                spells: unique,
+            });
+        }
+    }
+
+    const talentIds = [...data.spells.talent.cantrips, ...data.spells.talent.spells];
+    const talentSpells = [...new Set(talentIds)]
+        .map((id) => getSpell(id))
+        .filter((spell): spell is Spell => Boolean(spell));
+
+    if (talentSpells.length > 0) {
+        groups.push({ title: "Talento inicial", spells: talentSpells });
+    }
+
+    for (const [key, selection] of Object.entries(data.spells.byFeat)) {
+        if (!validAsiKeys.has(key)) continue;
+        const featSelection = data.asiSelections[key];
+        if (featSelection?.kind !== "feat") continue;
+        const feat = DND_TALENTS.find((item) => item.id === featSelection.featId);
+        const spells = [...new Set([...selection.cantrips, ...selection.spells])]
+            .map((id) => getSpell(id))
+            .filter((spell): spell is Spell => Boolean(spell));
+
+        if (spells.length > 0) {
+            groups.push({
+                title: `${feat?.name ?? "Talento"} (${key.replace(":", " nível ")})`,
+                spells,
+            });
+        }
+    }
+
+    return groups;
+}
+
+function groupSpellsByLevel(spells: Spell[]): Record<string, Spell[]> {
+    return spells
+        .slice()
+        .sort((left, right) =>
+            left.level - right.level || left.name.localeCompare(right.name)
+        )
+        .reduce<Record<string, Spell[]>>((groups, spell) => {
+            const key = String(spell.level);
+            groups[key] = [...(groups[key] ?? []), spell];
+            return groups;
+        }, {});
+}
+
+function hasSelectedFeat(data: CharacterFormData, featId: string): boolean {
+    if (data.talentId === featId) return true;
+
+    const validKeys = new Set(
+        getAsiMilestones(data.classes).map((milestone) => milestone.key)
+    );
+    return Object.entries(data.asiSelections).some(
+        ([key, selection]) =>
+            validKeys.has(key) &&
+            selection.kind === "feat" &&
+            selection.featId === featId
+    );
+}

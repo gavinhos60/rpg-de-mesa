@@ -1,23 +1,29 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { DND_CLASSES } from "../data/dnd/classes";
 import { DND_RACES } from "../data/dnd/races";
 import { DND_TALENTS } from "../data/dnd/talents";
+import { DND_BACKGROUNDS } from "../data/dnd/backgrounds";
 
 import { CharacterCombat } from "../components/character/CharacterCombat";
 import { CharacterCreationSteps } from "../components/character/CharacterCreationSteps";
 import { CharacterIdentity } from "../components/character/CharacterIdentity";
 import { CharacterAbilities } from "../components/character/CharacterAbilities";
 import { CharacterSkills } from "../components/character/CharacterSkills";
+import { CharacterEquipment } from "../components/character/CharacterEquipment";
+import { CharacterSpells } from "../components/character/CharacterSpells";
+import { CharacterLore } from "../components/character/CharacterLore";
+import { CharacterSheetReview } from "../components/character/CharacterSheetReview";
 
-import type {
-    CharacterBackground,
-    CharacterFormData,
-} from "../types/character";
+import type { CharacterFormData } from "../types/character";
+import {
+    canEnterStep,
+    getStepIssues,
+} from "../data/dnd/characterCreation";
+import { createCharacterFromForm } from "../services/character.service";
 
 import {
-    QuillIcon,
     RibbonButton,
     romanStep,
 } from "../components/icons/MedievalIcons";
@@ -30,21 +36,14 @@ const STEP_TITLES = [
     "Equipamentos",
     "Magias",
     "Lore",
-];
-
-const backgrounds: CharacterBackground[] = [
-    { id: "acolyte", name: "Acólito" },
-    { id: "criminal", name: "Criminoso" },
-    { id: "folk-hero", name: "Herói do Povo" },
-    { id: "noble", name: "Nobre" },
-    { id: "sage", name: "Sábio" },
-    { id: "soldier", name: "Soldado" },
+    "Ficha",
 ];
 
 const initialData: CharacterFormData = {
     name: "",
 
     raceId: "",
+    subraceId: "",
 
     raceChoices: {},
 
@@ -55,6 +54,11 @@ const initialData: CharacterFormData = {
     talentChoices: {},
 
     backgroundId: "",
+    backgroundChoices: {
+        skills: [],
+        tools: [],
+        languages: [],
+    },
 
     alignment: "",
 
@@ -94,20 +98,66 @@ const initialData: CharacterFormData = {
         background: [],
         talent: [],
     },
+
+    equipment: {
+        classId: "",
+        choiceSelections: {},
+        manualItems: [],
+    },
+
+    spells: {
+        byClass: {},
+        talent: {
+            cantrips: [],
+            spells: [],
+        },
+        byFeat: {},
+    },
+
+    lore: "",
+    quests: "",
+    loreDetails: {
+        appearance: "",
+        personalityTraits: "",
+        ideals: "",
+        bonds: "",
+        flaws: "",
+    },
+    hitPoints: null,
+    asiSelections: {},
+    featureChoices: {},
 };
 
 export function CreateCharacter() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const campaignIdParam = searchParams.get("campaignId");
+    const campaignId = campaignIdParam ? Number(campaignIdParam) : null;
 
     const [currentStep, setCurrentStep] =
         useState(1);
 
     const [data, setData] =
         useState<CharacterFormData>(initialData);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState("");
+
+    const stepIssues = getStepIssues(currentStep, data);
+    const canProceed = stepIssues.length === 0;
+
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }, [currentStep]);
 
     function handleNext() {
-        if (currentStep < 7) {
+        if (currentStep < 8 && canProceed) {
             setCurrentStep((previous) => previous + 1);
+        }
+    }
+
+    function handleChangeStep(step: number) {
+        if (step === currentStep || canEnterStep(step, data)) {
+            setCurrentStep(step);
         }
     }
 
@@ -117,10 +167,27 @@ export function CreateCharacter() {
         }
     }
 
-    function handleSave() {
-        console.log("Personagem:", data);
+    async function handleSave() {
+        if (saving) return;
 
-        navigate("/characters");
+        try {
+            setSaving(true);
+            setSaveError("");
+            const character = await createCharacterFromForm(data, {
+                campaignId:
+                    campaignId != null && !Number.isNaN(campaignId)
+                        ? campaignId
+                        : null,
+            });
+            navigate(`/characters/${character.id}`);
+        } catch (error) {
+            console.error(error);
+            setSaveError(
+                "Não foi possível salvar o personagem. Verifique se você está logado e tente novamente."
+            );
+        } finally {
+            setSaving(false);
+        }
     }
 
     return (
@@ -160,7 +227,8 @@ export function CreateCharacter() {
                 {/* Indicador das etapas */}
                 <CharacterCreationSteps
                     currentStep={currentStep}
-                    onChangeStep={setCurrentStep}
+                    onChangeStep={handleChangeStep}
+                    canEnterStep={(step) => canEnterStep(step, data)}
                 />
 
                 {/* Conteúdo da etapa atual — página do manuscrito */}
@@ -188,7 +256,7 @@ export function CreateCharacter() {
                             data={data}
                             races={DND_RACES}
                             classes={DND_CLASSES}
-                            backgrounds={backgrounds}
+                            backgrounds={DND_BACKGROUNDS}
                             talents={DND_TALENTS}
                             onChange={setData}
                         />
@@ -212,44 +280,82 @@ export function CreateCharacter() {
                     {currentStep === 4 && (
                         <CharacterCombat
                             data={data}
+                            onChange={setData}
                         />
                     )}
 
-                    {(currentStep === 5 || currentStep === 6 || currentStep === 7) && (
-                        <div className="py-16 text-center">
-                            <QuillIcon className="w-8 h-8 mx-auto mb-4 text-[#6B4423]" />
+                    {currentStep === 5 && (
+                        <CharacterEquipment
+                            data={data}
+                            onChange={setData}
+                        />
+                    )}
 
-                            <p className="text-[#5C4A38] italic">
-                                Este capítulo ainda não foi escrito.
-                            </p>
-                        </div>
+                    {currentStep === 6 && (
+                        <CharacterSpells
+                            data={data}
+                            onChange={setData}
+                        />
+                    )}
+
+                    {currentStep === 7 && (
+                        <CharacterLore
+                            data={data}
+                            onChange={setData}
+                        />
+                    )}
+
+                    {currentStep === 8 && (
+                        <CharacterSheetReview
+                            data={data}
+                            backgrounds={DND_BACKGROUNDS}
+                        />
                     )}
 
                     {/* Navegação */}
-                    <div className="mt-8 flex items-center justify-between border-t border-[#6B4423] pt-6">
-                        <button
-                            type="button"
-                            onClick={handlePrevious}
-                            disabled={currentStep === 1}
-                            className="text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
-                            style={{ fontFamily: "'Cinzel', serif" }}
-                        >
-                            ← Anterior
-                        </button>
-
-                        {currentStep < 7 ? (
-                            <RibbonButton type="button" onClick={handleNext}>
-                                Próximo
-                            </RibbonButton>
-                        ) : (
-                            <RibbonButton
-                                type="button"
-                                onClick={handleSave}
-                                style={{ backgroundColor: "#5C4A1E" }}
-                            >
-                                Criar personagem
-                            </RibbonButton>
+                    <div className="mt-8 border-t border-[#6B4423] pt-6">
+                        {!canProceed && (
+                            <ul className="mb-4 space-y-1 text-sm text-[#7A2530]">
+                                {stepIssues.map((issue) => (
+                                    <li key={issue}>• {issue}</li>
+                                ))}
+                            </ul>
                         )}
+
+                        {saveError && (
+                            <p className="mb-4 text-sm text-[#7A2530]">{saveError}</p>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                            <button
+                                type="button"
+                                onClick={handlePrevious}
+                                disabled={currentStep === 1 || saving}
+                                className="text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                                style={{ fontFamily: "'Cinzel', serif" }}
+                            >
+                                ← Anterior
+                            </button>
+
+                            {currentStep < 8 ? (
+                                <RibbonButton
+                                    type="button"
+                                    onClick={handleNext}
+                                    disabled={!canProceed}
+                                >
+                                    Próximo
+                                </RibbonButton>
+                            ) : (
+                                <RibbonButton
+                                    type="button"
+                                    onClick={handleSave}
+                                    disabled={saving}
+                                    style={{ backgroundColor: "#5C4A1E" }}
+                                >
+                                    {saving ? "Salvando..." : "Criar personagem"}
+                                </RibbonButton>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

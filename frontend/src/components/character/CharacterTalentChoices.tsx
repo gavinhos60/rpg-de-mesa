@@ -11,6 +11,7 @@ import { DND_CLASSES } from "../../data/dnd/classes";
 interface CharacterTalentChoicesProps {
     talent: CharacterTalent;
     data: CharacterFormData;
+    choiceValues?: Record<string, string | string[]>;
     onChange: (choiceId: string, values: string[]) => void;
 }
 
@@ -19,6 +20,7 @@ const cinzel = { fontFamily: "'Cinzel', serif" } as const;
 export function CharacterTalentChoices({
     talent,
     data,
+    choiceValues,
     onChange,
 }: CharacterTalentChoicesProps) {
     if (!talent.choices || talent.choices.length === 0) {
@@ -42,7 +44,11 @@ export function CharacterTalentChoices({
                     key={choice.id}
                     choice={choice}
                     data={data}
-                    selectedValues={data.talentChoices?.[choice.id] ?? []}
+                    selectedValues={
+                        Array.isArray((choiceValues ?? data.talentChoices)?.[choice.id])
+                            ? (choiceValues ?? data.talentChoices)[choice.id] as string[]
+                            : []
+                    }
                     onChange={onChange}
                 />
             ))}
@@ -236,7 +242,7 @@ function getClassOptions(explicitOptions?: string[]): ChoiceOption[] {
     }));
 }
 
-function getLanguageOptions(explicitOptions?: string[]): ChoiceOption[] {
+export function getLanguageOptions(explicitOptions?: string[]): ChoiceOption[] {
     const languages =
         explicitOptions ?? [
             "common", "dwarvish", "elvish", "giant", "gnomish", "goblin",
@@ -257,6 +263,8 @@ function getLanguageOptions(explicitOptions?: string[]): ChoiceOption[] {
         name: names[language] ?? language,
     }));
 }
+
+
 
 function getToolOptions(explicitOptions?: string[]): ChoiceOption[] {
     const tools =

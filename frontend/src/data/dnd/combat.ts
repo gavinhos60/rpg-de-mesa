@@ -52,6 +52,35 @@ export function getBaseArmorClass(
     return 10 + dexterityModifier;
 }
 
+export function getArmorClassFromEquipment(
+    dexterity: number,
+    wisdom: number,
+    characterClass: CharacterClass | undefined,
+    itemIds: string[]
+): number {
+    const dexterityModifier = getAbilityModifier(dexterity);
+    const hasShield =
+        itemIds.includes("shield") ||
+        itemIds.includes("wooden-shield");
+    let armorClass: number;
+
+    if (itemIds.includes("chain-mail")) {
+        armorClass = 16;
+    } else if (itemIds.includes("scale-mail")) {
+        armorClass = 14 + Math.min(2, dexterityModifier);
+    } else if (itemIds.includes("leather-armor")) {
+        armorClass = 11 + dexterityModifier;
+    } else {
+        armorClass = getBaseArmorClass(
+            dexterity,
+            wisdom,
+            characterClass
+        );
+    }
+
+    return armorClass + (hasShield ? 2 : 0);
+}
+
 export function getSavingThrowModifier(
     ability: Ability,
     value: number,
@@ -77,15 +106,10 @@ export function getPassivePerception(
     proficient: boolean,
     proficiencyBonus: number
 ): number {
-    const wisdomModifier =
-        getAbilityModifier(wisdom);
-
     return (
         10 +
-        wisdomModifier +
-        (proficient
-            ? proficiencyBonus
-            : 0)
+        getAbilityModifier(wisdom) +
+        (proficient ? proficiencyBonus : 0)
     );
 }
 

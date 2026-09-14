@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import type {
     Ability,
     CharacterFormData,
@@ -5,6 +7,19 @@ import type {
 
 import { DND_TALENTS } from "../../data/dnd/talents";
 import { DND_RACES } from "../../data/dnd/races";
+import {
+    getRaceDisplayName,
+    getResolvedAbilityScoreChoices,
+    getResolvedAbilityScoreIncrease,
+} from "../../data/dnd/raceResolution";
+import {
+    getAbilityBonuses,
+    getFinalAbilities,
+    getMaxBaseAbilities,
+    MAX_ABILITY_SCORE,
+    MIN_ABILITY_SCORE,
+} from "../../data/dnd/characterStats";
+import { CharacterAsiChoices } from "./CharacterAsiChoices";
 
 import {
     ABILITIES,
@@ -35,19 +50,21 @@ export function CharacterAbilities({
     const selectedRace = DND_RACES.find(
         (race) => race.id === data.raceId
     );
+    const resolvedRaceIncrease = getResolvedAbilityScoreIncrease(data);
+    const resolvedRaceChoices = getResolvedAbilityScoreChoices(data);
 
     const raceChoices = data.raceChoices ?? {};
     const talentChoices = data.talentChoices ?? {};
 
     function getRaceBonus(ability: Ability): number {
-        return selectedRace?.abilityScoreIncrease?.[ability] ?? 0;
+        return resolvedRaceIncrease[ability] ?? 0;
     }
 
     function getRaceChoiceBonus(ability: Ability): number {
         const choices =
             raceChoices["abilityScoreIncrease"] ?? [];
 
-        if (!selectedRace?.abilityScoreChoices) {
+        if (!resolvedRaceChoices) {
             return 0;
         }
 
@@ -55,7 +72,7 @@ export function CharacterAbilities({
             return 0;
         }
 
-        return selectedRace.abilityScoreChoices.amount;
+        return resolvedRaceChoices.amount;
     }
 
     function getTalentAbilityChoices(): Ability[] {
@@ -68,13 +85,17 @@ export function CharacterAbilities({
 
     function getTalentSelectedAbility(): Ability | undefined {
         const selected =
-            talentChoices["abilityScoreIncrease"];
+            talentChoices["abilityScoreIncrease"] ??
+            talentChoices["ability"];
 
         if (!selected) {
-            return undefined;
+            const choices = getTalentAbilityChoices();
+            return choices.length === 1 ? choices[0] : undefined;
         }
 
-        return selected as Ability;
+        return Array.isArray(selected)
+            ? selected[0] as Ability | undefined
+            : selected as Ability;
     }
 
     function getTalentBonus(ability: Ability): number {
@@ -87,14 +108,13 @@ export function CharacterAbilities({
 
         const choices = getTalentAbilityChoices();
 
-        if (choices.length === 0) {
-            return 0;
-        }
-
         const selectedAbility =
             getTalentSelectedAbility();
 
-        if (selectedAbility !== ability) {
+        if (
+            selectedAbility !== ability ||
+            (choices.length > 0 && !choices.includes(ability))
+        ) {
             return 0;
         }
 
@@ -141,26 +161,47 @@ export function CharacterAbilities({
     }
 
     function getTotalAbilityValue(ability: Ability): number {
-        const baseValue = data.abilities[ability] ?? 10;
-        const raceBonus = getRaceBonus(ability);
-        const raceChoiceBonus = getRaceChoiceBonus(ability);
-        const talentBonus = getTalentBonus(ability);
-
-        return baseValue + raceBonus + raceChoiceBonus + talentBonus;
+        return getFinalAbilities(data)[ability];
     }
 
     function updateAbility(ability: Ability, value: number) {
+        const maxBase = maxBaseAbilities[ability];
+        const safeValue = Number.isNaN(value)
+            ? MIN_ABILITY_SCORE
+            : Math.min(maxBase, Math.max(MIN_ABILITY_SCORE, value));
+
         onChange({
             ...data,
             abilities: {
                 ...data.abilities,
-                [ability]: value,
+                [ability]: safeValue,
             },
         });
     }
 
-    const hasRaceAbilityChoices = !!selectedRace?.abilityScoreChoices;
-    const raceChoiceCount = selectedRace?.abilityScoreChoices?.count ?? 0;
+    const abilityBonuses = getAbilityBonuses(data);
+    const maxBaseAbilities = getMaxBaseAbilities(data);
+
+    useEffect(() => {
+        const limits = getMaxBaseAbilities(data);
+        const overflowing = ABILITIES.filter(
+            (ability) => (data.abilities[ability.id] ?? 10) > limits[ability.id]
+        );
+
+        if (overflowing.length === 0) {
+            return;
+        }
+
+        const abilities = { ...data.abilities };
+        overflowing.forEach((ability) => {
+            abilities[ability.id] = limits[ability.id];
+        });
+
+        onChange({ ...data, abilities });
+    }, [data, onChange]);
+
+    const hasRaceAbilityChoices = !!resolvedRaceChoices;
+    const raceChoiceCount = resolvedRaceChoices?.count ?? 0;
     const selectedRaceAbilities = raceChoices["abilityScoreIncrease"] ?? [];
     const talentAbilityChoices = getTalentAbilityChoices();
     const selectedTalentAbility = getTalentSelectedAbility();
@@ -182,18 +223,17 @@ export function CharacterAbilities({
                 <div className="border p-5" style={card}>
                     <div className="mb-4">
                         <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
-                            Raça: {selectedRace.name}
+                            Raça: {getRaceDisplayName(data) || selectedRace.name}
                         </h3>
 
                         <p className="mt-1 text-sm text-[#5C4A38]">
-                            Bônus concedidos pela sua raça.
+                            Bônus concedidos pela sua raça
+                            {data.subraceId ? " e subraça" : ""}.
                         </p>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                        {Object.entries(
-                            selectedRace.abilityScoreIncrease ?? {}
-                        ).map(([ability, bonus]) => {
+                        {Object.entries(resolvedRaceIncrease).map(([ability, bonus]) => {
                             const abilityData = ABILITIES.find(
                                 (item) => item.id === ability
                             );
@@ -255,7 +295,7 @@ export function CharacterAbilities({
                                     >
                                         <option value="">Selecione um atributo</option>
 
-                                        {selectedRace.abilityScoreChoices?.abilities.map(
+                                        {resolvedRaceChoices?.abilities.map(
                                             (ability) => {
                                                 const alreadySelected =
                                                     selectedRaceAbilities.some(
@@ -279,7 +319,7 @@ export function CharacterAbilities({
                                                         disabled={alreadySelected}
                                                     >
                                                         {abilityData.name} (+
-                                                        {selectedRace.abilityScoreChoices?.amount})
+                                                        {resolvedRaceChoices?.amount})
                                                     </option>
                                                 );
                                             }
@@ -357,6 +397,8 @@ export function CharacterAbilities({
                 </div>
             )}
 
+            <CharacterAsiChoices data={data} onChange={onChange} />
+
             <div>
                 <div className="mb-5">
                     <h3 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
@@ -376,6 +418,12 @@ export function CharacterAbilities({
                         const raceChoiceBonus = getRaceChoiceBonus(ability.id);
                         const talentBonus = getTalentBonus(ability.id);
                         const totalValue = getTotalAbilityValue(ability.id);
+                        const progressionBonus =
+                            abilityBonuses[ability.id] -
+                            raceBonus -
+                            raceChoiceBonus -
+                            talentBonus;
+                        const maxBase = maxBaseAbilities[ability.id];
                         const modifier = getAbilityModifier(totalValue);
 
                         return (
@@ -406,8 +454,8 @@ export function CharacterAbilities({
 
                                     <input
                                         type="number"
-                                        min={1}
-                                        max={30}
+                                        min={MIN_ABILITY_SCORE}
+                                        max={maxBase}
                                         value={baseValue}
                                         onChange={(event) =>
                                             updateAbility(ability.id, Number(event.target.value))
@@ -415,6 +463,12 @@ export function CharacterAbilities({
                                         className="w-full border px-4 py-3 text-center text-xl text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]"
                                         style={{ ...nested, fontFamily: "'Cinzel', serif" }}
                                     />
+
+                                    <p className="mt-2 text-xs text-[#8A7860]">
+                                        {abilityBonuses[ability.id] > 0
+                                            ? `Máximo ${maxBase} de base — com +${abilityBonuses[ability.id]} de bônus chega ao teto de ${MAX_ABILITY_SCORE}.`
+                                            : `Máximo ${MAX_ABILITY_SCORE}.`}
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2 text-sm">
@@ -441,6 +495,15 @@ export function CharacterAbilities({
                                         <div className="flex justify-between">
                                             <span className="text-[#5C4A38]">Talento</span>
                                             <span style={{ color: "#9C7A3C" }}>+{talentBonus}</span>
+                                        </div>
+                                    )}
+
+                                    {progressionBonus !== 0 && (
+                                        <div className="flex justify-between">
+                                            <span className="text-[#5C4A38]">Melhorias por nível</span>
+                                            <span style={{ color: "#7A2530" }}>
+                                                +{progressionBonus}
+                                            </span>
                                         </div>
                                     )}
 

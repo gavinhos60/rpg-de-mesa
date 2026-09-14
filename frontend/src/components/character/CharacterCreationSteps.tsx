@@ -3,6 +3,7 @@ import { romanStep } from "../icons/MedievalIcons";
 interface CharacterCreationStepsProps {
     currentStep: number;
     onChangeStep: (step: number) => void;
+    canEnterStep?: (step: number) => boolean;
 }
 
 const steps = [
@@ -13,11 +14,13 @@ const steps = [
     "Equipamentos",
     "Magias",
     "Lore",
+    "Ficha",
 ];
 
 export function CharacterCreationSteps({
     currentStep,
     onChangeStep,
+    canEnterStep,
 }: CharacterCreationStepsProps) {
     return (
         <div className="overflow-x-auto">
@@ -26,13 +29,16 @@ export function CharacterCreationSteps({
                     const stepNumber = index + 1;
                     const active = stepNumber === currentStep;
                     const completed = stepNumber < currentStep;
+                    const locked = stepNumber !== currentStep &&
+                        !(canEnterStep?.(stepNumber) ?? true);
 
                     return (
-                        <div key={step} className="flex items-center">
+                        <div key={`${step}-${stepNumber}`} className="flex items-center">
                             <button
                                 type="button"
                                 onClick={() => onChangeStep(stepNumber)}
-                                className="flex items-center gap-2"
+                                disabled={locked}
+                                className="flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 <div
                                     className="flex h-9 w-9 items-center justify-center border text-sm transition-colors"

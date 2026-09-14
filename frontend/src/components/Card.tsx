@@ -14,7 +14,7 @@ export function Card({
     return (
         <div
             className={`
-                border border-[#6B4423]
+                border border-[#6B4423] 
                 ${hover ? "transition-colors hover:border-[#A67C3D]" : ""}
                 ${className}
             `}

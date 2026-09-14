@@ -42,16 +42,17 @@ model CampaignMember {
 }
 
 model Character {
-  id         Int      @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   name       String
   className  String
   race       String
   level      Int
   avatar     String?
+  sheet      Json?
 
   playerId   Int
-  player     User     @relation(fields: [playerId], references: [id])
+  player     User      @relation(fields: [playerId], references: [id])
 
-  campaignId Int
-  campaign   Campaign @relation(fields: [campaignId], references: [id])
+  campaignId Int?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id])
 }

@@ -10,6 +10,14 @@ import type {
 
 import { CharacterTalentChoices } from "./CharacterTalentChoices";
 import { RibbonButton } from "../icons/MedievalIcons";
+import { getEquipmentItem } from "../../data/dnd/equipment";
+import {
+    getRaceDisplayName,
+    getResolvedAbilityScoreChoices,
+    getResolvedAbilityScoreIncrease,
+    getResolvedRaceTraits,
+    getSelectedSubrace,
+} from "../../data/dnd/raceResolution";
 
 interface CharacterIdentityProps {
     data: CharacterFormData;
@@ -47,6 +55,11 @@ const nested = { backgroundColor: "#EBDFC4", borderColor: "#A67C3D" };
 const inputClass =
     "w-full border px-4 py-3 text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]";
 const labelClass = "mb-2 block text-sm text-[#5C4A38]";
+const LANGUAGES = [
+    "Comum", "Anão", "Élfico", "Gigante", "Gnômico", "Goblin", "Halfling",
+    "Orc", "Abissal", "Celestial", "Dracônico", "Dialeto Subterrâneo",
+    "Infernal", "Primordial", "Silvestre",
+];
 
 export function CharacterIdentity({
     data,
@@ -57,7 +70,14 @@ export function CharacterIdentity({
     onChange,
 }: CharacterIdentityProps) {
     const selectedRace = races.find((race) => race.id === data.raceId);
+    const selectedSubrace = getSelectedSubrace(data);
+    const resolvedRaceTraits = getResolvedRaceTraits(data);
+    const resolvedAbilityIncrease = getResolvedAbilityScoreIncrease(data);
+    const resolvedAbilityChoices = getResolvedAbilityScoreChoices(data);
     const selectedTalent = talents.find((talent) => talent.id === data.talentId);
+    const selectedBackground = backgrounds.find(
+        (background) => background.id === data.backgroundId
+    );
 
     const raceChoices = data.raceChoices ?? {};
 
@@ -72,6 +92,21 @@ export function CharacterIdentity({
         onChange({
             ...data,
             raceId,
+            subraceId: "",
+            raceChoices: {},
+            skillProficiencies: {
+                class: data.skillProficiencies?.class ?? [],
+                race: [],
+                background: data.skillProficiencies?.background ?? [],
+                talent: data.skillProficiencies?.talent ?? [],
+            },
+        });
+    }
+
+    function updateSubrace(subraceId: string) {
+        onChange({
+            ...data,
+            subraceId,
             raceChoices: {},
             skillProficiencies: {
                 class: data.skillProficiencies?.class ?? [],
@@ -102,6 +137,42 @@ export function CharacterIdentity({
                 race: data.skillProficiencies?.race ?? [],
                 background: data.skillProficiencies?.background ?? [],
                 talent: [],
+            },
+        });
+    }
+
+    function updateBackground(backgroundId: string) {
+        const background = backgrounds.find((item) => item.id === backgroundId);
+
+        onChange({
+            ...data,
+            backgroundId,
+            backgroundChoices: {
+                skills: [],
+                tools: [],
+                languages: [],
+            },
+            skillProficiencies: {
+                class: data.skillProficiencies?.class ?? [],
+                race: data.skillProficiencies?.race ?? [],
+                background: background?.skillProficiencies ?? [],
+                talent: data.skillProficiencies?.talent ?? [],
+            },
+        });
+    }
+
+    function updateBackgroundChoice(
+        type: "tools" | "languages",
+        index: number,
+        value: string
+    ) {
+        const values = [...data.backgroundChoices[type]];
+        values[index] = value;
+        onChange({
+            ...data,
+            backgroundChoices: {
+                ...data.backgroundChoices,
+                [type]: values,
             },
         });
     }
@@ -142,17 +213,22 @@ export function CharacterIdentity({
     }
 
     function addClass() {
-        if (classes.length === 0) {
+        const availableClass = classes.find(
+            (characterClass) =>
+                !data.classes.some(
+                    (selection) => selection.classId === characterClass.id
+                )
+        );
+
+        if (!availableClass) {
             return;
         }
-
-        const firstClass = classes[0];
 
         onChange({
             ...data,
             classes: [
                 ...data.classes,
-                { classId: firstClass.id, level: 1, subclassId: "" },
+                { classId: availableClass.id, level: 1, subclassId: "" },
             ],
         });
     }
@@ -172,7 +248,28 @@ export function CharacterIdentity({
         if (field === "classId") {
             updatedClasses[index] = { ...currentClass, classId: String(value), subclassId: "" };
         } else if (field === "level") {
-            updatedClasses[index] = { ...currentClass, level: Number(value), subclassId: "" };
+            const otherLevels = updatedClasses.reduce(
+                (total, selection, classIndex) =>
+                    classIndex === index ? total : total + selection.level,
+                0
+            );
+            const level = Math.min(
+                Math.max(1, Number(value)),
+                Math.max(1, 20 - otherLevels)
+            );
+            const selectedClass = getClass(currentClass.classId);
+            const selectedSubclass = selectedClass?.subclasses.find(
+                (subclass) => subclass.id === currentClass.subclassId
+            );
+
+            updatedClasses[index] = {
+                ...currentClass,
+                level,
+                subclassId:
+                    selectedSubclass && level >= selectedSubclass.level
+                        ? currentClass.subclassId
+                        : "",
+            };
         } else {
             updatedClasses[index] = { ...currentClass, subclassId: String(value) };
         }
@@ -236,10 +333,11 @@ export function CharacterIdentity({
 
                 <div className="grid gap-5 md:grid-cols-2">
                     <div>
-                        <label className={labelClass} style={cinzel}>Nome</label>
+                        <label className={labelClass} style={cinzel}>Nome *</label>
 
                         <input
                             type="text"
+                            required
                             value={data.name}
                             onChange={(event) => updateField("name", event.target.value)}
                             placeholder="Nome do personagem"
@@ -249,9 +347,10 @@ export function CharacterIdentity({
                     </div>
 
                     <div>
-                        <label className={labelClass} style={cinzel}>Raça</label>
+                        <label className={labelClass} style={cinzel}>Raça *</label>
 
                         <select
+                            required
                             value={data.raceId}
                             onChange={(event) => updateRace(event.target.value)}
                             className={inputClass}
@@ -267,12 +366,35 @@ export function CharacterIdentity({
                         </select>
                     </div>
 
+                    {selectedRace?.subraces && selectedRace.subraces.length > 0 && (
+                        <div>
+                            <label className={labelClass} style={cinzel}>Subraça *</label>
+
+                            <select
+                                required
+                                value={data.subraceId}
+                                onChange={(event) => updateSubrace(event.target.value)}
+                                className={inputClass}
+                                style={nested}
+                            >
+                                <option value="">Selecione uma subraça</option>
+
+                                {selectedRace.subraces.map((subrace) => (
+                                    <option key={subrace.id} value={subrace.id}>
+                                        {subrace.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div>
-                        <label className={labelClass} style={cinzel}>Background</label>
+                        <label className={labelClass} style={cinzel}>Background *</label>
 
                         <select
+                            required
                             value={data.backgroundId}
-                            onChange={(event) => updateField("backgroundId", event.target.value)}
+                            onChange={(event) => updateBackground(event.target.value)}
                             className={inputClass}
                             style={nested}
                         >
@@ -287,9 +409,10 @@ export function CharacterIdentity({
                     </div>
 
                     <div>
-                        <label className={labelClass} style={cinzel}>Alinhamento</label>
+                        <label className={labelClass} style={cinzel}>Alinhamento *</label>
 
                         <select
+                            required
                             value={data.alignment}
                             onChange={(event) =>
                                 updateField("alignment", event.target.value as Alignment)
@@ -309,6 +432,148 @@ export function CharacterIdentity({
                 </div>
             </section>
 
+            {selectedBackground && (
+                <section>
+                    <div className="mb-5">
+                        <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            Antecedente: {selectedBackground.name}
+                        </h2>
+                        <p className="mt-1 text-sm text-[#5C4A38]">
+                            Proficiências, recursos e equipamento adquiridos antes
+                            do início da aventura.
+                        </p>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <div className="border p-4" style={card}>
+                            <span className="text-sm text-[#5C4A38]">Perícias</span>
+                            <p className="mt-1 text-[#2A1D14]">
+                                {selectedBackground.skillProficiencies
+                                    .map((skill) => {
+                                        const names: Record<string, string> = {
+                                            insight: "Intuição",
+                                            religion: "Religião",
+                                            deception: "Enganação",
+                                            "sleight-of-hand": "Prestidigitação",
+                                            stealth: "Furtividade",
+                                            acrobatics: "Acrobacia",
+                                            performance: "Atuação",
+                                            "animal-handling": "Adestrar Animais",
+                                            survival: "Sobrevivência",
+                                            persuasion: "Persuasão",
+                                            medicine: "Medicina",
+                                            history: "História",
+                                            athletics: "Atletismo",
+                                            arcana: "Arcanismo",
+                                            perception: "Percepção",
+                                            intimidation: "Intimidação",
+                                        };
+                                        return names[skill] ?? skill;
+                                    })
+                                    .join(", ")}
+                            </p>
+                        </div>
+                        <div className="border p-4" style={card}>
+                            <span className="text-sm text-[#5C4A38]">Moedas iniciais</span>
+                            <p className="mt-1 text-xl text-[#2A1D14]" style={cinzel}>
+                                {selectedBackground.startingGoldGp} PO
+                            </p>
+                        </div>
+                        <div className="border p-4" style={card}>
+                            <span className="text-sm text-[#5C4A38]">Característica</span>
+                            <p className="mt-1 text-[#2A1D14]" style={cinzel}>
+                                {selectedBackground.feature.name}
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                {selectedBackground.feature.description}
+                            </p>
+                        </div>
+                    </div>
+
+                    {(selectedBackground.toolProficiencies?.length ?? 0) > 0 && (
+                        <p className="mt-4 text-sm text-[#5C4A38]">
+                            <span className="text-[#2A1D14]" style={cinzel}>Ferramentas:</span>{" "}
+                            {selectedBackground.toolProficiencies
+                                ?.map((id) => getEquipmentItem(id)?.name ?? formatChoiceName(id))
+                                .join(", ")}
+                        </p>
+                    )}
+
+                    {selectedBackground.toolChoice && (
+                        <div className="mt-5 grid gap-4 md:grid-cols-2">
+                            {Array.from({ length: selectedBackground.toolChoice.count }).map((_, index) => (
+                                <label key={index}>
+                                    <span className={labelClass} style={cinzel}>
+                                        Ferramenta ou conjunto {index + 1} *
+                                    </span>
+                                    <select
+                                        required
+                                        value={data.backgroundChoices.tools[index] ?? ""}
+                                        onChange={(event) =>
+                                            updateBackgroundChoice("tools", index, event.target.value)
+                                        }
+                                        className={inputClass}
+                                        style={nested}
+                                    >
+                                        <option value="">Selecione</option>
+                                        {selectedBackground.toolChoice?.options.map((option) => (
+                                            <option
+                                                key={option}
+                                                value={option}
+                                                disabled={data.backgroundChoices.tools.some(
+                                                    (selected, selectedIndex) =>
+                                                        selected === option && selectedIndex !== index
+                                                )}
+                                            >
+                                                {getEquipmentItem(option)?.name ?? formatChoiceName(option)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+
+                    {(selectedBackground.languageChoices ?? 0) > 0 && (
+                        <div className="mt-5 grid gap-4 md:grid-cols-2">
+                            {Array.from({ length: selectedBackground.languageChoices ?? 0 }).map((_, index) => (
+                                <label key={index}>
+                                    <span className={labelClass} style={cinzel}>
+                                        Idioma adicional {index + 1} *
+                                    </span>
+                                    <select
+                                        required
+                                        value={data.backgroundChoices.languages[index] ?? ""}
+                                        onChange={(event) =>
+                                            updateBackgroundChoice("languages", index, event.target.value)
+                                        }
+                                        className={inputClass}
+                                        style={nested}
+                                    >
+                                        <option value="">Selecione</option>
+                                        {LANGUAGES.map((language) => (
+                                            <option
+                                                key={language}
+                                                value={language}
+                                                disabled={
+                                                    selectedRace?.languages?.includes(language) ||
+                                                    data.backgroundChoices.languages.some(
+                                                        (selected, selectedIndex) =>
+                                                            selected === language && selectedIndex !== index
+                                                    )
+                                                }
+                                            >
+                                                {language}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            )}
+
             {selectedRace && (
                 <section>
                     <div className="mb-5">
@@ -317,11 +582,24 @@ export function CharacterIdentity({
                         </h2>
 
                         <p className="mt-1 text-sm text-[#5C4A38]">
-                            Características recebidas pela escolha da raça.
+                            Características recebidas pela escolha da raça
+                            {selectedSubrace ? ` e da ${selectedSubrace.name}` : ""}.
                         </p>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-3">
+                        <div className="border p-4" style={card}>
+                            <span className="text-sm text-[#5C4A38]">Origem</span>
+                            <div className="mt-1 text-sm text-[#2A1D14]">
+                                {getRaceDisplayName(data) || selectedRace.name}
+                            </div>
+                            {selectedSubrace?.description && (
+                                <p className="mt-2 text-xs leading-5 text-[#5C4A38]">
+                                    {selectedSubrace.description}
+                                </p>
+                            )}
+                        </div>
+
                         {selectedRace.speed !== undefined && (
                             <div className="border p-4" style={card}>
                                 <span className="text-sm text-[#5C4A38]">Deslocamento</span>
@@ -340,25 +618,24 @@ export function CharacterIdentity({
                             </div>
                         )}
 
-                        {selectedRace.abilityScoreIncrease &&
-                            Object.keys(selectedRace.abilityScoreIncrease).length > 0 && (
-                                <div className="border p-4" style={card}>
-                                    <span className="text-sm text-[#5C4A38]">Atributos</span>
-                                    <div className="mt-1 text-sm text-[#2A1D14]">
-                                        {Object.entries(selectedRace.abilityScoreIncrease)
-                                            .map(
-                                                ([ability, value]) =>
-                                                    `${ABILITY_NAMES[ability] ?? ability} +${value}`
-                                            )
-                                            .join(", ")}
-                                    </div>
+                        {Object.keys(resolvedAbilityIncrease).length > 0 && (
+                            <div className="border p-4" style={card}>
+                                <span className="text-sm text-[#5C4A38]">Atributos</span>
+                                <div className="mt-1 text-sm text-[#2A1D14]">
+                                    {Object.entries(resolvedAbilityIncrease)
+                                        .map(
+                                            ([ability, value]) =>
+                                                `${ABILITY_NAMES[ability] ?? ability} +${value}`
+                                        )
+                                        .join(", ")}
                                 </div>
-                            )}
+                            </div>
+                        )}
                     </div>
 
-                    {selectedRace.traits && selectedRace.traits.length > 0 && (
+                    {resolvedRaceTraits.length > 0 && (
                         <div className="mt-5 space-y-3">
-                            {selectedRace.traits.map((trait) => (
+                            {resolvedRaceTraits.map((trait) => (
                                 <div key={trait.id} className="border p-4" style={card}>
                                     <h3 className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
                                         {trait.name}
@@ -374,7 +651,7 @@ export function CharacterIdentity({
                 </section>
             )}
 
-            {selectedRace?.abilityScoreChoices && (
+            {resolvedAbilityChoices && (
                 <section>
                     <div className="mb-5">
                         <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
@@ -387,14 +664,15 @@ export function CharacterIdentity({
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
-                        {Array.from({ length: selectedRace.abilityScoreChoices.count }).map(
+                        {Array.from({ length: resolvedAbilityChoices.count }).map(
                             (_, index) => (
                                 <div key={index}>
                                     <label className={labelClass} style={cinzel}>
-                                        Escolha {index + 1}
+                                        Escolha {index + 1} *
                                     </label>
 
                                     <select
+                                        required
                                         value={raceChoices["abilityScoreIncrease"]?.[index] ?? ""}
                                         onChange={(event) =>
                                             updateRaceAbilityChoice(index, event.target.value)
@@ -404,7 +682,7 @@ export function CharacterIdentity({
                                     >
                                         <option value="">Selecione</option>
 
-                                        {selectedRace.abilityScoreChoices.abilities.map((ability) => (
+                                        {resolvedAbilityChoices.abilities.map((ability) => (
                                             <option key={ability} value={ability}>
                                                 {ABILITY_NAMES[ability]}
                                             </option>
@@ -475,9 +753,10 @@ export function CharacterIdentity({
 
                                     <div className="grid gap-5 md:grid-cols-3">
                                         <div>
-                                            <label className={labelClass} style={cinzel}>Classe</label>
+                                            <label className={labelClass} style={cinzel}>Classe *</label>
 
                                             <select
+                                                required
                                                 value={characterClass.classId}
                                                 onChange={(event) =>
                                                     updateClass(index, "classId", event.target.value)
@@ -486,7 +765,15 @@ export function CharacterIdentity({
                                                 style={nested}
                                             >
                                                 {classes.map((item) => (
-                                                    <option key={item.id} value={item.id}>
+                                                    <option
+                                                        key={item.id}
+                                                        value={item.id}
+                                                        disabled={data.classes.some(
+                                                            (selection, selectionIndex) =>
+                                                                selectionIndex !== index &&
+                                                                selection.classId === item.id
+                                                        )}
+                                                    >
                                                         {item.name}
                                                     </option>
                                                 ))}
@@ -494,10 +781,11 @@ export function CharacterIdentity({
                                         </div>
 
                                         <div>
-                                            <label className={labelClass} style={cinzel}>Nível</label>
+                                            <label className={labelClass} style={cinzel}>Nível *</label>
 
                                             <input
                                                 type="number"
+                                                required
                                                 min={1}
                                                 max={20}
                                                 value={characterClass.level}
@@ -510,9 +798,12 @@ export function CharacterIdentity({
                                         </div>
 
                                         <div>
-                                            <label className={labelClass} style={cinzel}>Subclasse</label>
+                                            <label className={labelClass} style={cinzel}>
+                                                Subclasse{availableSubclasses.length > 0 ? " *" : ""}
+                                            </label>
 
                                             <select
+                                                required={availableSubclasses.length > 0}
                                                 value={characterClass.subclassId}
                                                 onChange={(event) =>
                                                     updateClass(index, "subclassId", event.target.value)
@@ -549,6 +840,7 @@ export function CharacterIdentity({
                 </div>
 
                 <select
+                    required
                     value={data.talentId}
                     onChange={(event) => updateTalent(event.target.value)}
                     className={inputClass}
@@ -608,4 +900,11 @@ export function CharacterIdentity({
             </section>
         </div>
     );
+}
+
+function formatChoiceName(value: string): string {
+    return value
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
 }

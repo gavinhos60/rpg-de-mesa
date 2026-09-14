@@ -117,7 +117,7 @@ export function Campaigns() {
                                 onClick={() =>
                                     navigate(`/campaigns/${campaign.id}`)
                                 }
-                                className="group relative pl-5 pr-5 pt-5 pb-4 border border-[#6B4423] hover:border-[#A67C3D] transition-colors cursor-pointer"
+                                className="group relative pl-5 pr-5 pt-5 pb-4 border border-[#6B4423] cursor-pointer hover:border-[#A67C3D] transition-colors cursor-pointer"
                                 style={{ backgroundColor: "#DCCBA0" }}
                             >
                                 <div

@@ -462,11 +462,7 @@ export const DND_TALENTS: CharacterTalent[] = [
                     "Escolha uma classe para determinar sua lista de magias de ritual.",
                 count: 1,
                 options: [
-                    "bard",
                     "cleric",
-                    "druid",
-                    "sorcerer",
-                    "warlock",
                     "wizard",
                 ],
             },

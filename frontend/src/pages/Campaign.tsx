@@ -10,8 +10,8 @@ import {
     type CampaignDetails,
 } from "../services/campaign.service";
 
-import { CreateCharacterModal } from "../components/CreateCharacterModal";
 import { AddPlayerModal } from "../components/AddPlayerModal";
+import { AddCharacterToCampaignModal } from "../components/AddCharacterToCampaignModal";
 import { StatCard } from "../components/StatCard";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -42,10 +42,10 @@ export function Campaign() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
-    const [showCreateCharacterModal, setShowCreateCharacterModal] =
+    const [showAddPlayerModal, setShowAddPlayerModal] =
         useState(false);
 
-    const [showAddPlayerModal, setShowAddPlayerModal] =
+    const [showAddCharacterModal, setShowAddCharacterModal] =
         useState(false);
 
     async function loadCampaign() {
@@ -163,6 +163,10 @@ export function Campaign() {
         (member) =>
             member.userId === user?.id &&
             member.role === "MASTER"
+    );
+
+    const currentUserIsMember = campaign.members.some(
+        (member) => member.userId === user?.id
     );
 
     return (
@@ -310,9 +314,29 @@ export function Campaign() {
                             </h2>
                         </div>
 
-                        <RibbonButton onClick={() => setShowCreateCharacterModal(true)}>
-                            Novo personagem
-                        </RibbonButton>
+                        {currentUserIsMember && (
+                            <div className="flex flex-wrap items-center gap-3">
+                                <RibbonButton onClick={() => setShowAddCharacterModal(true)}>
+                                    Adicionar ficha
+                                </RibbonButton>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        navigate(
+                                            `/characters/new?campaignId=${campaign.id}`
+                                        )
+                                    }
+                                    className="border px-4 py-2 text-sm text-[#5C4A38] transition-colors hover:border-[#7A2530] hover:text-[#2A1D14]"
+                                    style={{
+                                        borderColor: "#A67C3D",
+                                        fontFamily: "'Cinzel', serif",
+                                        backgroundColor: "#EBDFC4",
+                                    }}
+                                >
+                                    Criar nova ficha
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {campaign.characters.length === 0 ? (
@@ -323,13 +347,23 @@ export function Campaign() {
                             <p className="text-[#5C4A38]">
                                 Nenhum personagem nesta campanha.
                             </p>
+                            {currentUserIsMember && (
+                                <p className="mt-2 text-sm text-[#8A7860]">
+                                    Jogadores podem adicionar fichas já criadas ou criar uma
+                                    nova para esta mesa.
+                                </p>
+                            )}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                             {campaign.characters.map((character) => (
-                                <div
+                                <button
                                     key={character.id}
-                                    className="border border-[#6B4423] hover:border-[#A67C3D] transition-colors overflow-hidden"
+                                    type="button"
+                                    onClick={() =>
+                                        navigate(`/characters/${character.id}`)
+                                    }
+                                    className="border border-[#6B4423] hover:border-[#A67C3D] transition-colors overflow-hidden text-left"
                                     style={{ backgroundColor: "#DCCBA0" }}
                                 >
                                     {character.avatar ? (
@@ -373,25 +407,19 @@ export function Campaign() {
                                             </p>
                                         </div>
                                     </div>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     )}
                 </section>
 
-                {/* Modal de criação de personagem */}
-                {showCreateCharacterModal &&
-                    user &&
-                    campaign && (
-                        <CreateCharacterModal
-                            campaignId={campaign.id}
-                            playerId={user.id}
-                            onClose={() =>
-                                setShowCreateCharacterModal(false)
-                            }
-                            onCreated={loadCampaign}
-                        />
-                    )}
+                {showAddCharacterModal && campaign && (
+                    <AddCharacterToCampaignModal
+                        campaignId={campaign.id}
+                        onClose={() => setShowAddCharacterModal(false)}
+                        onAdded={loadCampaign}
+                    />
+                )}
 
                 {/* Modal de adicionar jogador */}
                 {showAddPlayerModal &&

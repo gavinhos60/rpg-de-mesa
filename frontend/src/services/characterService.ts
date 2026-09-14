@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Character } from "../types/Character";
+import type { Character } from "../types/character";
 
 const api = axios.create({
     baseURL: "http://localhost:3000/api",

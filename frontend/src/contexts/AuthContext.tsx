@@ -6,7 +6,11 @@ import {
   type ReactNode,
 } from "react";
 
-import { getMe, login as loginApi } from "../services/auth.service";
+import {
+  getMe,
+  login as loginApi,
+  register as registerApi,
+} from "../services/auth.service";
 
 interface User {
   id: number;
@@ -18,6 +22,11 @@ interface AuthContextData {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  register: (
+    name: string,
+    email: string,
+    password: string
+  ) => Promise<void>;
   logout: () => void;
 }
 
@@ -68,6 +77,15 @@ export function AuthProvider({
     setUser(result.user);
   }
 
+  async function register(
+    name: string,
+    email: string,
+    password: string
+  ) {
+    await registerApi({ name, email, password });
+    await login(email, password);
+  }
+
   function logout() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -81,6 +99,7 @@ export function AuthProvider({
         user,
         loading,
         login,
+        register,
         logout,
       }}
     >
