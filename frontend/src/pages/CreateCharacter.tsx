@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+    useLocation,
+    useNavigate,
+    useParams,
+    useSearchParams,
+} from "react-router-dom";
 
 import { DND_CLASSES } from "../data/dnd/classes";
 import { DND_RACES } from "../data/dnd/races";
@@ -21,7 +26,12 @@ import {
     canEnterStep,
     getStepIssues,
 } from "../data/dnd/characterCreation";
-import { createCharacterFromForm } from "../services/character.service";
+import {
+    createCharacterFromForm,
+    getCharacterById,
+    updateCharacterFromForm,
+    type SavedCharacter,
+} from "../services/character.service";
 
 import {
     RibbonButton,
@@ -41,27 +51,20 @@ const STEP_TITLES = [
 
 const initialData: CharacterFormData = {
     name: "",
-
+    avatar: null,
     raceId: "",
     subraceId: "",
-
     raceChoices: {},
-
     classes: [],
-
     talentId: "",
-
     talentChoices: {},
-
     backgroundId: "",
     backgroundChoices: {
         skills: [],
         tools: [],
         languages: [],
     },
-
     alignment: "",
-
     abilities: {
         strength: 10,
         dexterity: 10,
@@ -70,7 +73,6 @@ const initialData: CharacterFormData = {
         wisdom: 10,
         charisma: 10,
     },
-
     skills: {
         acrobatics: { proficient: false, expertise: false },
         "animal-handling": { proficient: false, expertise: false },
@@ -91,20 +93,18 @@ const initialData: CharacterFormData = {
         stealth: { proficient: false, expertise: false },
         survival: { proficient: false, expertise: false },
     },
-
     skillProficiencies: {
         class: [],
         race: [],
         background: [],
         talent: [],
     },
-
     equipment: {
         classId: "",
         choiceSelections: {},
         manualItems: [],
+        customItems: [],
     },
-
     spells: {
         byClass: {},
         talent: {
@@ -113,7 +113,6 @@ const initialData: CharacterFormData = {
         },
         byFeat: {},
     },
-
     lore: "",
     quests: "",
     loreDetails: {
@@ -128,19 +127,116 @@ const initialData: CharacterFormData = {
     featureChoices: {},
 };
 
+function parseSheetPayload(raw: unknown): CharacterFormData | null {
+    if (!raw) return null;
+    if (typeof raw === "string") {
+        try {
+            return parseSheetPayload(JSON.parse(raw));
+        } catch {
+            return null;
+        }
+    }
+    if (typeof raw !== "object") return null;
+    return raw as CharacterFormData;
+}
+
+function mergeSheet(
+    sheet: CharacterFormData | null | undefined,
+    avatar?: string | null,
+    fallbackName?: string
+): CharacterFormData {
+    if (!sheet) {
+        return {
+            ...initialData,
+            name: fallbackName?.trim() || "",
+            avatar: avatar ?? null,
+        };
+    }
+
+    return {
+        ...initialData,
+        ...sheet,
+        name: sheet.name?.trim() || fallbackName?.trim() || "",
+        avatar: sheet.avatar ?? avatar ?? null,
+        raceChoices: sheet.raceChoices ?? {},
+        talentChoices: sheet.talentChoices ?? {},
+        backgroundChoices: {
+            skills: sheet.backgroundChoices?.skills ?? [],
+            tools: sheet.backgroundChoices?.tools ?? [],
+            languages: sheet.backgroundChoices?.languages ?? [],
+        },
+        abilities: { ...initialData.abilities, ...(sheet.abilities ?? {}) },
+        skills: { ...initialData.skills, ...(sheet.skills ?? {}) },
+        skillProficiencies: {
+            class: sheet.skillProficiencies?.class ?? [],
+            race: sheet.skillProficiencies?.race ?? [],
+            background: sheet.skillProficiencies?.background ?? [],
+            talent: sheet.skillProficiencies?.talent ?? [],
+        },
+        equipment: {
+            classId: sheet.equipment?.classId ?? "",
+            choiceSelections: sheet.equipment?.choiceSelections ?? {},
+            manualItems: sheet.equipment?.manualItems ?? [],
+            customItems: sheet.equipment?.customItems ?? [],
+        },
+        spells: {
+            byClass: sheet.spells?.byClass ?? {},
+            talent: {
+                cantrips: sheet.spells?.talent?.cantrips ?? [],
+                spells: sheet.spells?.talent?.spells ?? [],
+            },
+            byFeat: sheet.spells?.byFeat ?? {},
+        },
+        loreDetails: {
+            appearance: sheet.loreDetails?.appearance ?? "",
+            personalityTraits: sheet.loreDetails?.personalityTraits ?? "",
+            ideals: sheet.loreDetails?.ideals ?? "",
+            bonds: sheet.loreDetails?.bonds ?? "",
+            flaws: sheet.loreDetails?.flaws ?? "",
+        },
+        asiSelections: sheet.asiSelections ?? {},
+        featureChoices: sheet.featureChoices ?? {},
+        classes: Array.isArray(sheet.classes) ? sheet.classes : [],
+    };
+}
+
+function sheetFromCharacter(character: SavedCharacter): CharacterFormData {
+    return mergeSheet(
+        parseSheetPayload(character.sheet),
+        character.avatar,
+        character.name
+    );
+}
+
 export function CreateCharacter() {
+    const { id: editIdParam } = useParams();
+    const editId =
+        editIdParam && /^\d+$/.test(editIdParam) ? Number(editIdParam) : null;
+
+    return <CreateCharacterForm key={editId ?? "new"} editId={editId} />;
+}
+
+function CreateCharacterForm({ editId }: { editId: number | null }) {
     const navigate = useNavigate();
+    const location = useLocation();
     const [searchParams] = useSearchParams();
     const campaignIdParam = searchParams.get("campaignId");
     const campaignId = campaignIdParam ? Number(campaignIdParam) : null;
+    const isEdit = Boolean(editId);
 
-    const [currentStep, setCurrentStep] =
-        useState(1);
+    const preloaded = (location.state as { character?: SavedCharacter } | null)
+        ?.character;
+    const hasPreload =
+        Boolean(isEdit && editId && preloaded && preloaded.id === editId);
 
-    const [data, setData] =
-        useState<CharacterFormData>(initialData);
+    const [currentStep, setCurrentStep] = useState(1);
+    const [data, setData] = useState<CharacterFormData>(() =>
+        hasPreload && preloaded ? sheetFromCharacter(preloaded) : initialData
+    );
     const [saving, setSaving] = useState(false);
+    const [loadingEdit, setLoadingEdit] = useState(isEdit && !hasPreload);
     const [saveError, setSaveError] = useState("");
+    const [loadError, setLoadError] = useState("");
 
     const stepIssues = getStepIssues(currentStep, data);
     const canProceed = stepIssues.length === 0;
@@ -148,6 +244,36 @@ export function CreateCharacter() {
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
     }, [currentStep]);
+
+    useEffect(() => {
+        if (!editId) return;
+
+        let cancelled = false;
+
+        async function load() {
+            try {
+                setLoadingEdit(true);
+                setLoadError("");
+                const character = await getCharacterById(editId!);
+                if (cancelled) return;
+                setData(sheetFromCharacter(character));
+            } catch (error) {
+                console.error(error);
+                if (!cancelled) {
+                    setLoadError(
+                        "Não foi possível carregar a ficha para edição."
+                    );
+                }
+            } finally {
+                if (!cancelled) setLoadingEdit(false);
+            }
+        }
+
+        void load();
+        return () => {
+            cancelled = true;
+        };
+    }, [editId]);
 
     function handleNext() {
         if (currentStep < 8 && canProceed) {
@@ -173,17 +299,22 @@ export function CreateCharacter() {
         try {
             setSaving(true);
             setSaveError("");
-            const character = await createCharacterFromForm(data, {
-                campaignId:
-                    campaignId != null && !Number.isNaN(campaignId)
-                        ? campaignId
-                        : null,
-            });
-            navigate(`/characters/${character.id}`);
+            const character =
+                isEdit && editId
+                    ? await updateCharacterFromForm(editId, data)
+                    : await createCharacterFromForm(data, {
+                          campaignId:
+                              campaignId != null && !Number.isNaN(campaignId)
+                                  ? campaignId
+                                  : null,
+                      });
+            navigate(`/characters/${character.id}`, { replace: true });
         } catch (error) {
             console.error(error);
             setSaveError(
-                "Não foi possível salvar o personagem. Verifique se você está logado e tente novamente."
+                isEdit
+                    ? "Não foi possível atualizar o personagem. Tente novamente."
+                    : "Não foi possível salvar o personagem. Verifique se você está logado e tente novamente."
             );
         } finally {
             setSaving(false);
@@ -192,172 +323,179 @@ export function CreateCharacter() {
 
     return (
         <div
-            className="min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+            className="min-h-[calc(100vh-4rem)] text-[var(--color-ink)]"
             style={{
                 fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "#EBDFC4",
+                backgroundColor: "var(--color-parchment)",
                 backgroundImage:
                     "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
             }}
         >
-            <div className="max-w-6xl mx-auto px-6 py-10">
-
-                {/* Cabeçalho */}
-                <div className="mb-8 border-b border-[#6B4423] pb-6">
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6 sm:py-10">
+                <div className="mb-8 border-b border-[var(--color-border-strong)] pb-6">
                     <button
                         type="button"
-                        onClick={() => navigate("/characters")}
-                        className="mb-5 text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors"
+                        onClick={() =>
+                            navigate(
+                                isEdit && editId
+                                    ? `/characters/${editId}`
+                                    : "/characters"
+                            )
+                        }
+                        className="mb-5 text-sm text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
                     >
-                        ← Voltar para personagens
+                        ← Voltar
                     </button>
 
                     <h1
-                        className="text-3xl text-[#2A1D14]"
+                        className="text-3xl text-[var(--color-ink)]"
                         style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                     >
-                        Criar personagem
+                        {isEdit ? "Editar personagem" : "Criar personagem"}
                     </h1>
 
-                    <p className="mt-2 text-[#5C4A38]">
-                        Monte sua ficha seguindo as regras de D&D 5e.
+                    <p className="mt-2 text-[var(--color-ink-muted)]">
+                        {isEdit
+                            ? "Atualize a ficha e a foto do seu personagem."
+                            : "Monte sua ficha seguindo as regras de D&D 5e."}
                     </p>
                 </div>
 
-                {/* Indicador das etapas */}
-                <CharacterCreationSteps
-                    currentStep={currentStep}
-                    onChangeStep={handleChangeStep}
-                    canEnterStep={(step) => canEnterStep(step, data)}
-                />
+                {loadingEdit && (
+                    <p className="text-[var(--color-ink-muted)]">Carregando ficha...</p>
+                )}
 
-                {/* Conteúdo da etapa atual — página do manuscrito */}
-                <div
-                    className="border border-[#6B4423] p-6 md:p-8 mt-6"
-                    style={{ backgroundColor: "#DCCBA0" }}
-                >
-                    <div className="flex items-center gap-3 mb-6 pb-4 border-b border-[#A67C3D]/50">
-                        <span
-                            className="w-9 h-9 shrink-0 flex items-center justify-center border border-[#6B4423] text-sm text-[#6B4423]"
-                            style={{ fontFamily: "'Cinzel', serif" }}
-                        >
-                            {romanStep(currentStep)}
-                        </span>
-                        <h2
-                            className="text-xl text-[#2A1D14]"
-                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-                        >
-                            {STEP_TITLES[currentStep - 1]}
-                        </h2>
+                {!loadingEdit && loadError && (
+                    <div
+                        className="border border-[var(--color-crimson)] p-6 text-[var(--color-crimson)]"
+                        style={{ backgroundColor: "var(--color-surface)" }}
+                    >
+                        {loadError}
                     </div>
+                )}
 
-                    {currentStep === 1 && (
-                        <CharacterIdentity
-                            data={data}
-                            races={DND_RACES}
-                            classes={DND_CLASSES}
-                            backgrounds={DND_BACKGROUNDS}
-                            talents={DND_TALENTS}
-                            onChange={setData}
+                {!loadingEdit && !loadError && (
+                    <>
+                        <CharacterCreationSteps
+                            currentStep={currentStep}
+                            onChangeStep={handleChangeStep}
+                            canEnterStep={(step) => canEnterStep(step, data)}
                         />
-                    )}
 
-                    {currentStep === 2 && (
-                        <CharacterAbilities
-                            data={data}
-                            onChange={setData}
-                        />
-                    )}
-
-                    {currentStep === 3 && (
-                        <CharacterSkills
-                            data={data}
-                            races={DND_RACES}
-                            onChange={setData}
-                        />
-                    )}
-
-                    {currentStep === 4 && (
-                        <CharacterCombat
-                            data={data}
-                            onChange={setData}
-                        />
-                    )}
-
-                    {currentStep === 5 && (
-                        <CharacterEquipment
-                            data={data}
-                            onChange={setData}
-                        />
-                    )}
-
-                    {currentStep === 6 && (
-                        <CharacterSpells
-                            data={data}
-                            onChange={setData}
-                        />
-                    )}
-
-                    {currentStep === 7 && (
-                        <CharacterLore
-                            data={data}
-                            onChange={setData}
-                        />
-                    )}
-
-                    {currentStep === 8 && (
-                        <CharacterSheetReview
-                            data={data}
-                            backgrounds={DND_BACKGROUNDS}
-                        />
-                    )}
-
-                    {/* Navegação */}
-                    <div className="mt-8 border-t border-[#6B4423] pt-6">
-                        {!canProceed && (
-                            <ul className="mb-4 space-y-1 text-sm text-[#7A2530]">
-                                {stepIssues.map((issue) => (
-                                    <li key={issue}>• {issue}</li>
-                                ))}
-                            </ul>
-                        )}
-
-                        {saveError && (
-                            <p className="mb-4 text-sm text-[#7A2530]">{saveError}</p>
-                        )}
-
-                        <div className="flex items-center justify-between">
-                            <button
-                                type="button"
-                                onClick={handlePrevious}
-                                disabled={currentStep === 1 || saving}
-                                className="text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors disabled:cursor-not-allowed disabled:opacity-30"
-                                style={{ fontFamily: "'Cinzel', serif" }}
-                            >
-                                ← Anterior
-                            </button>
-
-                            {currentStep < 8 ? (
-                                <RibbonButton
-                                    type="button"
-                                    onClick={handleNext}
-                                    disabled={!canProceed}
+                        <div
+                            className="mt-6 border border-[var(--color-border-strong)] p-6 md:p-8"
+                            style={{ backgroundColor: "var(--color-surface)" }}
+                        >
+                            <div className="mb-6 flex items-center gap-3 border-b border-[var(--color-border)]/50 pb-4">
+                                <span
+                                    className="flex h-9 w-9 shrink-0 items-center justify-center border border-[var(--color-border-strong)] text-sm text-[var(--color-border-strong)]"
+                                    style={{ fontFamily: "'Cinzel', serif" }}
                                 >
-                                    Próximo
-                                </RibbonButton>
-                            ) : (
-                                <RibbonButton
-                                    type="button"
-                                    onClick={handleSave}
-                                    disabled={saving}
-                                    style={{ backgroundColor: "#5C4A1E" }}
+                                    {romanStep(currentStep)}
+                                </span>
+                                <h2
+                                    className="text-xl text-[var(--color-ink)]"
+                                    style={{
+                                        fontFamily: "'Cinzel', serif",
+                                        fontWeight: 600,
+                                    }}
                                 >
-                                    {saving ? "Salvando..." : "Criar personagem"}
-                                </RibbonButton>
+                                    {STEP_TITLES[currentStep - 1]}
+                                </h2>
+                            </div>
+
+                            {currentStep === 1 && (
+                                <CharacterIdentity
+                                    data={data}
+                                    races={DND_RACES}
+                                    classes={DND_CLASSES}
+                                    backgrounds={DND_BACKGROUNDS}
+                                    talents={DND_TALENTS}
+                                    onChange={setData}
+                                />
                             )}
+                            {currentStep === 2 && (
+                                <CharacterAbilities data={data} onChange={setData} />
+                            )}
+                            {currentStep === 3 && (
+                                <CharacterSkills
+                                    data={data}
+                                    races={DND_RACES}
+                                    onChange={setData}
+                                />
+                            )}
+                            {currentStep === 4 && (
+                                <CharacterCombat data={data} onChange={setData} />
+                            )}
+                            {currentStep === 5 && (
+                                <CharacterEquipment data={data} onChange={setData} />
+                            )}
+                            {currentStep === 6 && (
+                                <CharacterSpells data={data} onChange={setData} />
+                            )}
+                            {currentStep === 7 && (
+                                <CharacterLore data={data} onChange={setData} />
+                            )}
+                            {currentStep === 8 && (
+                                <CharacterSheetReview
+                                    data={data}
+                                    backgrounds={DND_BACKGROUNDS}
+                                />
+                            )}
+
+                            <div className="mt-8 border-t border-[var(--color-border-strong)] pt-6">
+                                {!canProceed && (
+                                    <ul className="mb-4 space-y-1 text-sm text-[var(--color-crimson)]">
+                                        {stepIssues.map((issue) => (
+                                            <li key={issue}>• {issue}</li>
+                                        ))}
+                                    </ul>
+                                )}
+
+                                {saveError && (
+                                    <p className="mb-4 text-sm text-[var(--color-crimson)]">
+                                        {saveError}
+                                    </p>
+                                )}
+
+                                <div className="flex items-center justify-between">
+                                    <button
+                                        type="button"
+                                        onClick={handlePrevious}
+                                        disabled={currentStep === 1 || saving}
+                                        className="text-sm text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)] disabled:cursor-not-allowed disabled:opacity-30"
+                                        style={{ fontFamily: "'Cinzel', serif" }}
+                                    >
+                                        ← Anterior
+                                    </button>
+
+                                    {currentStep < 8 ? (
+                                        <RibbonButton
+                                            type="button"
+                                            onClick={handleNext}
+                                            disabled={!canProceed}
+                                        >
+                                            Próximo
+                                        </RibbonButton>
+                                    ) : (
+                                        <RibbonButton
+                                            type="button"
+                                            onClick={handleSave}
+                                            disabled={saving}
+                                            style={{ backgroundColor: "#5C4A1E" }}
+                                        >
+                                            {saving
+                                                ? "Salvando..."
+                                                : isEdit
+                                                  ? "Salvar alterações"
+                                                  : "Criar personagem"}
+                                        </RibbonButton>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
+                    </>
+                )}
             </div>
         </div>
     );

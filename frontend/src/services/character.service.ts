@@ -29,7 +29,7 @@ export interface CreateCharacterPayload {
   className: string;
   race: string;
   level: number;
-  avatar?: string;
+  avatar?: string | null;
   sheet?: CharacterFormData;
   playerId?: number;
   campaignId?: number | null;
@@ -88,14 +88,38 @@ export async function createCharacter(
 
 export async function createCharacterFromForm(
   data: CharacterFormData,
-  options?: { campaignId?: number | null; avatar?: string }
+  options?: { campaignId?: number | null; avatar?: string | null }
 ): Promise<SavedCharacter> {
   const summary = buildCharacterSummary(data);
+  const avatar = options?.avatar ?? data.avatar ?? undefined;
 
   return createCharacter({
     ...summary,
-    avatar: options?.avatar,
+    avatar: avatar || undefined,
     campaignId: options?.campaignId ?? null,
+    sheet: data,
+  });
+}
+
+export async function updateCharacter(
+  id: number,
+  payload: Partial<CreateCharacterPayload>
+): Promise<SavedCharacter> {
+  const response = await api.patch<SavedCharacter>(`/characters/${id}`, payload);
+  return response.data;
+}
+
+export async function updateCharacterFromForm(
+  id: number,
+  data: CharacterFormData,
+  options?: { avatar?: string | null }
+): Promise<SavedCharacter> {
+  const summary = buildCharacterSummary(data);
+  const nextAvatar = options?.avatar !== undefined ? options.avatar : data.avatar ?? null;
+
+  return updateCharacter(id, {
+    ...summary,
+    avatar: nextAvatar,
     sheet: data,
   });
 }
@@ -107,6 +131,35 @@ export async function assignCharacterToCampaign(
   const response = await api.post<SavedCharacter>(
     `/characters/${characterId}/assign-campaign`,
     { campaignId }
+  );
+  return response.data;
+}
+
+export async function removeCharacterFromCampaign(
+  characterId: number
+): Promise<SavedCharacter> {
+  const response = await api.post<SavedCharacter>(
+    `/characters/${characterId}/remove-campaign`
+  );
+  return response.data;
+}
+
+export async function deleteCharacter(characterId: number): Promise<void> {
+  await api.delete(`/characters/${characterId}`);
+}
+
+export async function grantCustomItem(
+  characterId: number,
+  payload: {
+    name: string;
+    description?: string;
+    quantity?: number;
+    weight?: number;
+  }
+): Promise<SavedCharacter> {
+  const response = await api.post<SavedCharacter>(
+    `/characters/${characterId}/grant-item`,
+    payload
   );
   return response.data;
 }

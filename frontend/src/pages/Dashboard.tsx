@@ -48,28 +48,28 @@ export function Dashboard() {
 
     return (
         <div
-            className="relative min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+            className="relative min-h-[calc(100vh-4rem)] text-[var(--color-ink)]"
             style={{
                 fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "#EBDFC4",
+                backgroundColor: "var(--color-parchment)",
                 backgroundImage:
                     "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
             }}
         >
-            <div className="max-w-6xl mx-auto px-6 py-10">
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6 sm:py-10">
 
                 {/* Cabeçalho — banner de manuscrito */}
-                <header className="mb-10 border-t-2 border-b border-[#6B4423] pt-5 pb-6">
+                <header className="mb-10 border-t-2 border-b border-[var(--color-border-strong)] pt-5 pb-6">
                     <div className="flex items-center gap-4">
-                        <EmblemIcon className="w-10 h-10 text-[#6B4423] shrink-0" />
+                        <EmblemIcon className="w-10 h-10 text-[var(--color-border-strong)] shrink-0" />
                         <div>
                             <h1
-                                className="text-3xl text-[#2A1D14] leading-tight"
+                                className="text-3xl text-[var(--color-ink)] leading-tight"
                                 style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                             >
                                 Saudações, {user?.name}
                             </h1>
-                            <p className="text-[#5C4A38] mt-1 italic">
+                            <p className="text-[var(--color-ink-muted)] mt-1 italic">
                                 Bem-vindo ao seu refúgio de campanhas.
                             </p>
                         </div>
@@ -78,14 +78,14 @@ export function Dashboard() {
 
                 {/* Título da seção + ação principal */}
                 <div className="flex items-end justify-between mb-6 gap-4 flex-wrap">
-                    <div className="border-l-2 border-[#A67C3D] pl-4">
+                    <div className="border-l-2 border-[var(--color-border)] pl-4">
                         <h2
-                            className="text-2xl text-[#2A1D14]"
+                            className="text-2xl text-[var(--color-ink)]"
                             style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                         >
                             Suas campanhas
                         </h2>
-                        <p className="text-[#5C4A38] mt-1">
+                        <p className="text-[var(--color-ink-muted)] mt-1">
                             Aventure-se pelas histórias que você construiu.
                         </p>
                     </div>
@@ -97,25 +97,25 @@ export function Dashboard() {
 
                 {/* Conteúdo */}
                 {loading ? (
-                    <div className="flex items-center gap-3 text-[#5C4A38] py-10">
+                    <div className="flex items-center gap-3 text-[var(--color-ink-muted)] py-10">
                         <QuillIcon className="w-5 h-5 animate-pulse" />
                         <span className="italic">Consultando os arquivos do reino...</span>
                     </div>
                 ) : campaigns.length === 0 ? (
                     <div
-                        className="relative border border-[#6B4423] p-12 text-center"
-                        style={{ backgroundColor: "#DCCBA0" }}
+                        className="relative border border-[var(--color-border-strong)] p-12 text-center"
+                        style={{ backgroundColor: "var(--color-surface)" }}
                     >
                         <BrokenSealIcon className="w-16 h-16 mx-auto mb-4" />
 
                         <h3
-                            className="text-xl text-[#2A1D14]"
+                            className="text-xl text-[var(--color-ink)]"
                             style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                         >
                             Nenhuma campanha registrada
                         </h3>
 
-                        <p className="text-[#5C4A38] mt-2 max-w-md mx-auto">
+                        <p className="text-[var(--color-ink-muted)] mt-2 max-w-md mx-auto">
                             Os arquivos estão em branco. Crie sua primeira campanha
                             para começar a escrever esta história.
                         </p>
@@ -133,38 +133,38 @@ export function Dashboard() {
                             <div
                                 key={campaign.id}
                                 onClick={() => navigate(`/campaigns/${campaign.id}`)}
-                                className="group relative pl-5 pr-5 pt-5 pb-4 border border-[#6B4423] hover:border-[#A67C3D] transition-colors cursor-pointer"
-                                style={{ backgroundColor: "#DCCBA0" }}
+                                className="group relative pl-5 pr-5 pt-5 pb-4 border border-[var(--color-border-strong)] hover:border-[var(--color-border)] transition-colors cursor-pointer"
+                                style={{ backgroundColor: "var(--color-surface)" }}
                             >
                                 {/* Lombada */}
                                 <div
                                     className="absolute left-0 top-0 bottom-0 w-2"
                                     style={{
-                                        backgroundColor: "#4A2F18",
+                                        backgroundColor: "var(--color-border-wood)",
                                         backgroundImage:
                                             "repeating-linear-gradient(0deg, rgba(233,220,180,0.15) 0px, rgba(233,220,180,0.15) 2px, transparent 2px, transparent 8px)",
                                     }}
                                 />
 
                                 <div className="flex items-start justify-between">
-                                    <EmblemIcon className="w-8 h-8 text-[#6B4423]" />
+                                    <EmblemIcon className="w-8 h-8 text-[var(--color-border-strong)]" />
                                     <WaxSealIcon className="w-9 h-9" label={campaign.id} />
                                 </div>
 
                                 <h3
-                                    className="text-xl text-[#2A1D14] mt-4"
+                                    className="text-xl text-[var(--color-ink)] mt-4"
                                     style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                                 >
                                     {campaign.name}
                                 </h3>
 
-                                <p className="text-[#5C4A38] text-sm mt-2">
+                                <p className="text-[var(--color-ink-muted)] text-sm mt-2">
                                     {campaign.characters.length} personagem
                                     {campaign.characters.length !== 1 ? "ns" : ""} nesta jornada
                                 </p>
 
-                                <div className="mt-5 pt-3 border-t border-[#A67C3D]/50">
-                                    <span className="text-sm text-[#7A2530] group-hover:text-[#5C1D26]">
+                                <div className="mt-5 pt-3 border-t border-[var(--color-border)]/50">
+                                    <span className="text-sm text-[var(--color-crimson)] group-hover:text-[#5C1D26]">
                                         Abrir campanha
                                     </span>
                                 </div>

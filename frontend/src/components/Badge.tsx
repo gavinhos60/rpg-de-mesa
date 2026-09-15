@@ -12,12 +12,12 @@ export function Badge({
     const variants = {
         success: "border-[#4A6B3D] text-[#4A6B3D]",
         warning: "border-[#9C7A3C] text-[#9C7A3C]",
-        danger: "border-[#7A2530] text-[#7A2530]",
-        info: "border-transparent text-[#EBDFC4]",
-        neutral: "border-[#6B4423] text-[#5C4A38]",
+        danger: "border-[var(--color-crimson)] text-[var(--color-crimson)]",
+        info: "border-transparent text-[var(--color-ink-inverse)]",
+        neutral: "border-[var(--color-border-strong)] text-[var(--color-ink-muted)]",
     };
 
-    const infoBg = variant === "info" ? { backgroundColor: "#7A2530" } : undefined;
+    const infoBg = variant === "info" ? { backgroundColor: "var(--color-crimson)" } : undefined;
 
     return (
         <span

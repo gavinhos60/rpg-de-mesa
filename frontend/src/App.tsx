@@ -11,6 +11,7 @@ import { Campaign } from "./pages/Campaign";
 import { CreateCharacter } from "./pages/CreateCharacter";
 import { Characters } from "./pages/Characters";
 import { CharacterSheet } from "./pages/CharacterSheet";
+import { GameRoom } from "./pages/GameRoom";
 import { AppLayout } from "./components/AppLayout";
 
 function App() {
@@ -46,12 +47,20 @@ function App() {
                         element={<CreateCharacter />}
                     />
                     <Route
+                        path="/characters/:id/edit"
+                        element={<CreateCharacter />}
+                    />
+                    <Route
                         path="/characters/:id"
                         element={<CharacterSheet />}
                     />
                     <Route
                         path="/campaigns/:id"
                         element={<Campaign />}
+                    />
+                    <Route
+                        path="/campaigns/:id/play"
+                        element={<GameRoom />}
                     />
                 </Route>
             </Routes>

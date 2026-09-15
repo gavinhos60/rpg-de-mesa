@@ -1,13 +1,21 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { CharacterBackground, CharacterFormData, Spell } from "../../types/character";
+import type {
+    Ability,
+    CharacterBackground,
+    CharacterFormData,
+    Skill,
+    Spell,
+} from "../../types/character";
 import { ABILITIES, getAbilityModifier } from "../../data/dnd/abilities";
 import { DND_CLASSES } from "../../data/dnd/classes";
 import { DND_RACES } from "../../data/dnd/races";
 import {
     getRaceDisplayName,
     getResolvedRaceTraits,
+    getResolvedSpeed,
 } from "../../data/dnd/raceResolution";
+import { formatMeters } from "../../utils/units";
 import {
     DND_SKILLS,
     getProficientSkills,
@@ -43,10 +51,16 @@ import {
     getSpellcastingAbility,
 } from "../../data/dnd/spellcasting";
 import { getLanguageOptions } from "../character/CharacterTalentChoices";
+import { AdvantageConfirm } from "../game/AdvantageConfirm";
 
 interface CharacterSheetReviewProps {
     data: CharacterFormData;
     backgrounds: CharacterBackground[];
+    onRollAbility?: (ability: Ability, options?: { advantage?: boolean }) => void;
+    onRollSkill?: (skill: Skill, options?: { advantage?: boolean }) => void;
+    onUseFeature?: (name: string, description: string) => void;
+    onCastSpell?: (spell: Spell, options?: { advantage?: boolean }) => void;
+    canRoll?: boolean;
 }
 
 const ALIGNMENT_NAMES: Record<string, string> = {
@@ -93,11 +107,26 @@ interface ReviewInventoryRow {
 export function CharacterSheetReview({
     data,
     backgrounds,
+    onRollAbility,
+    onRollSkill,
+    onUseFeature,
+    onCastSpell,
+    canRoll = false,
 }: CharacterSheetReviewProps) {
     const [activeTab, setActiveTab] = useState<
         "summary" | "combat" | "spells" | "inventory" | "story"
     >("summary");
+    const [pendingRoll, setPendingRoll] = useState<{
+        type: "skill" | "ability" | "spell";
+        key: Ability | Skill | string;
+        label: string;
+        spell?: Spell;
+    } | null>(null);
     const abilities = getFinalAbilities(data);
+    const rollAbilities = Boolean(canRoll && onRollAbility);
+    const rollSkills = Boolean(canRoll && onRollSkill);
+    const useFeatures = Boolean(canRoll && onUseFeature);
+    const castSpells = Boolean(canRoll && onCastSpell);
     const race = DND_RACES.find((item) => item.id === data.raceId);
     const raceTraits = getResolvedRaceTraits(data);
     const raceLabel = getRaceDisplayName(data) || race?.name;
@@ -121,7 +150,7 @@ export function CharacterSheetReview({
     const initiative =
         getInitiative(abilities.dexterity) +
         (hasSelectedFeat(data, "alert") ? 5 : 0);
-    const movement = race?.speed ?? 30;
+    const movement = getResolvedSpeed(data);
     const carryingCapacity = getCarryingCapacity(abilities.strength);
 
     const proficientSkills = getProficientSkills(data);
@@ -153,7 +182,10 @@ export function CharacterSheetReview({
         const item = getEquipmentItem(row.itemId);
         return total + (item?.weight ?? 0) *
             (row.classQuantity + row.manualQuantity);
-    }, 0);
+    }, 0) + (data.equipment.customItems ?? []).reduce(
+        (total, item) => total + (item.weight ?? 0) * item.quantity,
+        0
+    );
     const isOverCapacity = inventoryWeight > carryingCapacity;
 
     const slots = getCombinedSpellSlots(data.classes);
@@ -171,33 +203,45 @@ export function CharacterSheetReview({
         <div
             className="border px-5 py-6 md:px-8 md:py-8"
             style={{
-                backgroundColor: "#F3E6C4",
-                borderColor: "#6B4423",
-                boxShadow: "inset 0 0 0 1px #A67C3D",
+                backgroundColor: "var(--color-parchment)",
+                borderColor: "var(--color-border-strong)",
+                boxShadow: "inset 0 0 0 1px var(--color-border)",
             }}
         >
-            <div className="mb-6 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center" style={{ borderColor: "#A67C3D" }}>
-                <div
-                    className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl"
-                    style={{
-                        ...cinzel,
-                        fontWeight: 600,
-                        color: "#F3E6C4",
-                        background: "radial-gradient(circle at 30% 25%, #9A3340, #5A1A22 70%)",
-                        boxShadow: "0 0 0 3px #C09A5A, 0 0 0 5px #6B4423",
-                    }}
-                >
-                    {getInitials(data.name)}
-                </div>
+            <div className="mb-6 flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-center" style={{ borderColor: "var(--color-border)" }}>
+                {data.avatar ? (
+                    <img
+                        src={data.avatar}
+                        alt={data.name || "Avatar"}
+                        className="h-20 w-20 shrink-0 rounded-full object-cover"
+                        style={{
+                            boxShadow: "0 0 0 3px var(--color-border), 0 0 0 5px var(--color-border-strong)",
+                            backgroundColor: "#1A140F",
+                        }}
+                    />
+                ) : (
+                    <div
+                        className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full text-2xl"
+                        style={{
+                            ...cinzel,
+                            fontWeight: 600,
+                            color: "var(--color-ink-inverse)",
+                            background: "radial-gradient(circle at 30% 25%, #9A3340, #5A1A22 70%)",
+                            boxShadow: "0 0 0 3px var(--color-border), 0 0 0 5px var(--color-border-strong)",
+                        }}
+                    >
+                        {getInitials(data.name)}
+                    </div>
+                )}
 
                 <div className="min-w-0 flex-1">
                     <h2
-                        className="text-3xl leading-tight text-[#2A1D14] md:text-4xl"
+                        className="text-3xl leading-tight text-[var(--color-ink)] md:text-4xl"
                         style={{ ...cinzel, fontWeight: 600, letterSpacing: "0.02em" }}
                     >
                         {data.name.trim() || "Herói sem nome"}
                     </h2>
-                    <p className="mt-1 text-sm italic text-[#7A6A52]">
+                    <p className="mt-1 text-sm italic text-[var(--color-ink-muted)]">
                         {[
                             raceLabel,
                             classLine,
@@ -220,7 +264,7 @@ export function CharacterSheetReview({
                 </div>
             </div>
 
-            <div className="mb-6 flex overflow-x-auto border-y" style={{ borderColor: "#6B4423" }}>
+            <div className="mb-6 flex overflow-x-auto border-y" style={{ borderColor: "var(--color-border-strong)" }}>
                 {([
                     ["summary", "Resumo"],
                     ["combat", "Combate"],
@@ -235,8 +279,8 @@ export function CharacterSheetReview({
                         className="min-w-fit flex-1 px-4 py-3 text-sm transition-colors"
                         style={{
                             ...cinzel,
-                            backgroundColor: activeTab === id ? "#7A2530" : "transparent",
-                            color: activeTab === id ? "#F3E6C4" : "#5C4A38",
+                            backgroundColor: activeTab === id ? "var(--color-crimson)" : "transparent",
+                            color: activeTab === id ? "var(--color-ink-inverse)" : "var(--color-ink-muted)",
                         }}
                     >
                         {label}
@@ -246,6 +290,11 @@ export function CharacterSheetReview({
 
             <div className={activeTab === "summary" ? "" : "hidden"}>
                 <RuleTitle>Atributos</RuleTitle>
+                {rollAbilities && (
+                    <p className="mb-2 text-xs text-[var(--color-ink-soft)]">
+                        Clique em um atributo para rolar no chat.
+                    </p>
+                )}
                 <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                     {ABILITIES.map((ability) => (
                         <AbilityHex
@@ -253,6 +302,16 @@ export function CharacterSheetReview({
                             name={ability.name}
                             score={abilities[ability.id]}
                             modifier={formatModifier(getAbilityModifier(abilities[ability.id]))}
+                            onRoll={
+                                rollAbilities
+                                    ? () =>
+                                          setPendingRoll({
+                                              type: "ability",
+                                              key: ability.id,
+                                              label: ability.name,
+                                          })
+                                    : undefined
+                            }
                         />
                     ))}
                 </div>
@@ -279,10 +338,10 @@ export function CharacterSheetReview({
 
                 <RuleTitle>Origem &amp; Progressão</RuleTitle>
                 <div className="mb-6 grid gap-6 md:grid-cols-[1.1fr_1fr]">
-                    <section className="border p-5" style={{ borderColor: "#6B4423", backgroundColor: "#E8D7AD" }}>
+                    <section className="border p-5" style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface)" }}>
                         <SectionTitle>Identidade e origem</SectionTitle>
-                        <p className="text-sm leading-6 text-[#5C4A38]">
-                            <span className="text-[#2A1D14]" style={cinzel}>
+                        <p className="text-sm leading-6 text-[var(--color-ink-muted)]">
+                            <span className="text-[var(--color-ink)]" style={cinzel}>
                                 {data.name.trim() || "Este aventureiro"}
                             </span>{" "}
                             é {raceLabel ? `um membro da raça ${raceLabel}` : "de origem desconhecida"}
@@ -291,8 +350,8 @@ export function CharacterSheetReview({
                         </p>
                         {((race?.languages?.length ?? 0) > 0 ||
                             data.backgroundChoices.languages.length > 0) && (
-                                <p className="mt-3 text-sm text-[#5C4A38]">
-                                    <span className="text-[#2A1D14]" style={cinzel}>
+                                <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
+                                    <span className="text-[var(--color-ink)]" style={cinzel}>
                                         Idiomas:
                                     </span>{" "}
                                     {[
@@ -306,14 +365,14 @@ export function CharacterSheetReview({
                                 </p>
                             )}
                         {background && (
-                            <div className="mt-4 border-t pt-3" style={{ borderColor: "#A67C3D" }}>
-                                <p className="text-sm text-[#2A1D14]" style={cinzel}>
+                            <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
+                                <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
                                     {background.feature.name}
                                 </p>
-                                <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
                                     {background.feature.description}
                                 </p>
-                                <p className="mt-2 text-xs text-[#8A7860]">
+                                <p className="mt-2 text-xs text-[var(--color-ink-soft)]">
                                     Ferramentas: {[
                                         ...(background.toolProficiencies ?? []),
                                         ...data.backgroundChoices.tools,
@@ -327,8 +386,8 @@ export function CharacterSheetReview({
                                     <span
                                         key={trait.id}
                                         title={trait.description}
-                                        className="border px-2 py-1 text-xs text-[#5C4A38]"
-                                        style={{ borderColor: "#A67C3D" }}
+                                        className="border px-2 py-1 text-xs text-[var(--color-ink-muted)]"
+                                        style={{ borderColor: "var(--color-border)" }}
                                     >
                                         {trait.name}
                                     </span>
@@ -337,14 +396,14 @@ export function CharacterSheetReview({
                         )}
                     </section>
 
-                    <section className="border p-5" style={{ borderColor: "#6B4423", backgroundColor: "#E8D7AD" }}>
+                    <section className="border p-5" style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface)" }}>
                         <SectionTitle>Talentos e melhorias</SectionTitle>
                         {talent && (
                             <div className="mb-3">
-                                <p className="text-sm text-[#2A1D14]" style={cinzel}>
+                                <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
                                     Talento inicial — {talent.name}
                                 </p>
-                                <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
                                     {talent.description}
                                 </p>
                             </div>
@@ -363,11 +422,11 @@ export function CharacterSheetReview({
                                 : [];
 
                             return (
-                                <div key={milestone.key} className="border-t py-2 text-sm" style={{ borderColor: "#A67C3D" }}>
-                                    <span className="text-[#8A7860]">
+                                <div key={milestone.key} className="border-t py-2 text-sm" style={{ borderColor: "var(--color-border)" }}>
+                                    <span className="text-[var(--color-ink-soft)]">
                                         {sourceClass?.name} {milestone.classLevel}:
                                     </span>{" "}
-                                    <span className="text-[#2A1D14]">
+                                    <span className="text-[var(--color-ink)]">
                                         {!selection && "Pendente"}
                                         {selection?.kind === "feat" && (feat?.name || "Talento não escolhido")}
                                         {selection?.kind === "ability" &&
@@ -379,7 +438,7 @@ export function CharacterSheetReview({
                             );
                         })}
                         {!talent && asiChoices.length === 0 && (
-                            <p className="text-sm italic text-[#5C4A38]">Nenhum talento registrado.</p>
+                            <p className="text-sm italic text-[var(--color-ink-muted)]">Nenhum talento registrado.</p>
                         )}
                     </section>
                 </div>
@@ -401,7 +460,7 @@ export function CharacterSheetReview({
                                 const proficient = savingThrowProficiencies.includes(ability.id);
 
                                 return (
-                                    <div key={ability.id} className="flex items-center justify-between border px-3 py-2" style={{ borderColor: "#A67C3D" }}>
+                                    <div key={ability.id} className="flex items-center justify-between border px-3 py-2" style={{ borderColor: "var(--color-border)" }}>
                                         <span className="text-sm">
                                             {proficient ? "●" : "○"} {ability.name}
                                         </span>
@@ -410,7 +469,7 @@ export function CharacterSheetReview({
                                 );
                             })}
                         </div>
-                        <p className="mt-3 text-xs text-[#8A7860]">
+                        <p className="mt-3 text-xs text-[var(--color-ink-soft)]">
                             Percepção passiva {getPassivePerception(
                                 abilities.wisdom,
                                 proficientSkills.has("perception"),
@@ -421,20 +480,50 @@ export function CharacterSheetReview({
 
                     <section>
                         <SectionTitle>Perícias</SectionTitle>
+                        {rollSkills && (
+                            <p className="mb-2 text-xs text-[var(--color-ink-soft)]">
+                                Clique em uma perícia para rolar no chat.
+                            </p>
+                        )}
                         <div className="grid grid-cols-1 gap-1">
                             {DND_SKILLS.map((skill) => {
                                 const modifier = getAbilityModifier(abilities[skill.ability]) +
                                     (proficientSkills.has(skill.id) ? proficiencyBonus : 0) +
                                     getSkillExtraBonus(data, skill.id, abilities);
                                 const ability = ABILITIES.find((item) => item.id === skill.ability);
+                                const row = (
+                                    <>
+                                        <span>
+                                            {proficientSkills.has(skill.id) ? "●" : "○"} {skill.name}
+                                            <span className="ml-1 text-xs text-[var(--color-ink-soft)]">{ability?.shortName}</span>
+                                        </span>
+                                        <span style={cinzel}>{formatModifier(modifier)}</span>
+                                    </>
+                                );
+
+                                if (rollSkills) {
+                                    return (
+                                        <button
+                                            key={skill.id}
+                                            type="button"
+                                            onClick={() =>
+                                                setPendingRoll({
+                                                    type: "skill",
+                                                    key: skill.id,
+                                                    label: skill.name,
+                                                })
+                                            }
+                                            title={`Rolar ${skill.name}`}
+                                            className="flex w-full items-center justify-between px-1 py-0.5 text-left text-sm transition hover:bg-[#E8D7AD]"
+                                        >
+                                            {row}
+                                        </button>
+                                    );
+                                }
 
                                 return (
                                     <div key={skill.id} className="flex items-center justify-between px-1 py-0.5 text-sm">
-                                        <span>
-                                            {proficientSkills.has(skill.id) ? "●" : "○"} {skill.name}
-                                            <span className="ml-1 text-xs text-[#8A7860]">{ability?.shortName}</span>
-                                        </span>
-                                        <span style={cinzel}>{formatModifier(modifier)}</span>
+                                        {row}
                                     </div>
                                 );
                             })}
@@ -444,53 +533,88 @@ export function CharacterSheetReview({
 
                 <section>
                     <RuleTitle>Habilidades</RuleTitle>
-                    <CharacterAbilityTabs data={data} variant="sheet" />
+                    <CharacterAbilityTabs
+                        data={data}
+                        variant="sheet"
+                        onUseFeature={useFeatures ? onUseFeature : undefined}
+                    />
                 </section>
             </div>
 
             <section className={activeTab === "inventory" ? "" : "hidden"}>
-                <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b pb-1" style={{ borderColor: "#A67C3D" }}>
-                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <div className="mb-3 flex flex-wrap items-end justify-between gap-3 border-b pb-1" style={{ borderColor: "var(--color-border)" }}>
+                    <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Inventário
                     </h3>
-                    <span className={isOverCapacity ? "text-sm text-[#8B3A2E]" : "text-sm text-[#5C4A38]"}>
+                    <span className={isOverCapacity ? "text-sm text-[var(--color-danger)]" : "text-sm text-[var(--color-ink-muted)]"}>
                         {background ? `${background.startingGoldGp} PO • ` : ""}
                         {formatMetricWeight(inventoryWeight)} / {formatMetricWeight(carryingCapacity)}
                         {isOverCapacity ? " • Sobrecarga" : ""}
                     </span>
                 </div>
-                {inventory.length === 0 ? (
-                    <p className="text-sm italic text-[#5C4A38]">Nenhum item registrado.</p>
+                {inventory.length === 0 &&
+                (data.equipment.customItems ?? []).length === 0 ? (
+                    <p className="text-sm italic text-[var(--color-ink-muted)]">Nenhum item registrado.</p>
                 ) : (
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {Object.entries(groupInventory(inventory)).map(([category, rows]) => (
-                            <div key={category} className="border p-3" style={{ borderColor: "#A67C3D" }}>
-                                <p className="mb-2 text-sm text-[#2A1D14]" style={cinzel}>
-                                    {EQUIPMENT_CATEGORY_NAMES[category] ?? category}
-                                </p>
-                                <ul className="space-y-2 text-sm">
-                                    {rows.map((row) => {
-                                        const item = getEquipmentItem(row.itemId);
-                                        const quantity = row.classQuantity + row.manualQuantity;
-                                        return (
-                                            <li key={row.itemId} className="flex justify-between gap-3">
-                                                <span>
-                                                    {item?.name ?? row.itemId} × {quantity}
-                                                    <span className="block text-xs text-[#8A7860]">
-                                                        {row.classQuantity > 0 ? "Inicial" : ""}
-                                                        {row.classQuantity > 0 && row.manualQuantity > 0 ? " + " : ""}
-                                                        {row.manualQuantity > 0 ? "Adicionado" : ""}
+                    <div className="space-y-4">
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                            {Object.entries(groupInventory(inventory)).map(([category, rows]) => (
+                                <div key={category} className="border p-3" style={{ borderColor: "var(--color-border)" }}>
+                                    <p className="mb-2 text-sm text-[var(--color-ink)]" style={cinzel}>
+                                        {EQUIPMENT_CATEGORY_NAMES[category] ?? category}
+                                    </p>
+                                    <ul className="space-y-2 text-sm">
+                                        {rows.map((row) => {
+                                            const item = getEquipmentItem(row.itemId);
+                                            const quantity = row.classQuantity + row.manualQuantity;
+                                            return (
+                                                <li key={row.itemId} className="flex justify-between gap-3">
+                                                    <span>
+                                                        {item?.name ?? row.itemId} × {quantity}
+                                                        <span className="block text-xs text-[var(--color-ink-soft)]">
+                                                            {row.classQuantity > 0 ? "Inicial" : ""}
+                                                            {row.classQuantity > 0 && row.manualQuantity > 0 ? " + " : ""}
+                                                            {row.manualQuantity > 0 ? "Adicionado" : ""}
+                                                        </span>
                                                     </span>
-                                                </span>
-                                                <span className="shrink-0 text-xs text-[#8A7860]">
-                                                    {formatMetricWeight((item?.weight ?? 0) * quantity)}
-                                                </span>
-                                            </li>
-                                        );
-                                    })}
+                                                    <span className="shrink-0 text-xs text-[var(--color-ink-soft)]">
+                                                        {formatMetricWeight((item?.weight ?? 0) * quantity)}
+                                                    </span>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+                            ))}
+                        </div>
+
+                        {(data.equipment.customItems ?? []).length > 0 && (
+                            <div className="border p-3" style={{ borderColor: "var(--color-crimson)" }}>
+                                <p className="mb-2 text-sm text-[var(--color-ink)]" style={cinzel}>
+                                    Itens especiais
+                                </p>
+                                <ul className="space-y-3 text-sm">
+                                    {(data.equipment.customItems ?? []).map((item) => (
+                                        <li key={item.id}>
+                                            <p className="text-[var(--color-ink)]" style={cinzel}>
+                                                {item.name}
+                                                {item.quantity > 1 ? ` × ${item.quantity}` : ""}
+                                            </p>
+                                            {item.description ? (
+                                                <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-ink-muted)]">
+                                                    {item.description}
+                                                </p>
+                                            ) : null}
+                                            {item.grantedByName ? (
+                                                <p className="mt-0.5 text-[10px] text-[var(--color-ink-soft)]">
+                                                    Concedido por {item.grantedByName}
+                                                </p>
+                                            ) : null}
+                                        </li>
+                                    ))}
                                 </ul>
                             </div>
-                        ))}
+                        )}
                     </div>
                 )}
             </section>
@@ -499,7 +623,7 @@ export function CharacterSheetReview({
                 <RuleTitle>Grimório</RuleTitle>
                 {slots.length > 0 && (
                     <div className="mb-6">
-                        <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[#8B5A2B]" style={cinzel}>
+                        <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--color-border)]" style={cinzel}>
                             Espaços de magia
                         </p>
                         <div className="flex flex-wrap gap-3">
@@ -509,15 +633,15 @@ export function CharacterSheetReview({
                                     className="flex h-14 w-14 flex-col items-center justify-center rounded-full"
                                     style={{
                                         ...cinzel,
-                                        background: "radial-gradient(circle at 35% 25%, #F5E8C0, #D9C08A)",
-                                        boxShadow: "0 0 0 1px #C09A5A, inset 0 0 8px rgba(122,37,48,0.18)",
+                                        background: "radial-gradient(circle at 35% 25%, var(--color-parchment), var(--color-parchment-soft))",
+                                        boxShadow: "0 0 0 1px var(--color-border), inset 0 0 8px rgba(122,37,48,0.18)",
                                     }}
                                     title={`${index + 1}º círculo`}
                                 >
-                                    <span className="text-lg leading-none text-[#5A1A22]" style={{ fontWeight: 700 }}>
+                                    <span className="text-lg leading-none text-[var(--color-crimson)]" style={{ fontWeight: 700 }}>
                                         {count}
                                     </span>
-                                    <span className="text-[10px] text-[#8B5A2B]">{index + 1}º</span>
+                                    <span className="text-[10px] text-[var(--color-border)]">{index + 1}º</span>
                                 </div>
                             ))}
                         </div>
@@ -539,30 +663,30 @@ export function CharacterSheetReview({
                             <div
                                 key={selection.classId}
                                 className="border p-4"
-                                style={{ borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+                                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
                             >
-                                <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                     {characterClass?.name}
                                 </p>
-                                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[#8B5A2B]" style={cinzel}>
+                                <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--color-border)]" style={cinzel}>
                                     Conjuração por {ability?.name ?? "—"}
                                 </p>
-                                <div className="mt-3 flex gap-4 text-sm text-[#5C4A38]">
+                                <div className="mt-3 flex gap-4 text-sm text-[var(--color-ink-muted)]">
                                     <span>
                                         CD{" "}
-                                        <strong className="text-[#5A1A22]" style={cinzel}>
+                                        <strong className="text-[var(--color-crimson)]" style={cinzel}>
                                             {8 + proficiencyBonus + modifier}
                                         </strong>
                                     </span>
                                     <span>
                                         Ataque{" "}
-                                        <strong className="text-[#5A1A22]" style={cinzel}>
+                                        <strong className="text-[var(--color-crimson)]" style={cinzel}>
                                             {formatModifier(proficiencyBonus + modifier)}
                                         </strong>
                                     </span>
                                 </div>
                                 {limits.pact && (
-                                    <p className="mt-2 text-xs text-[#8A7860]">
+                                    <p className="mt-2 text-xs text-[var(--color-ink-soft)]">
                                         Magia de Pacto: {limits.pact.count} espaço(s) de {limits.pact.level}º círculo
                                     </p>
                                 )}
@@ -572,7 +696,7 @@ export function CharacterSheetReview({
                 </div>
 
                 {spellGroups.length === 0 ? (
-                    <p className="text-sm italic text-[#5C4A38]">
+                    <p className="text-sm italic text-[var(--color-ink-muted)]">
                         Este herói não conjura magias — sua força vem do aço e da coragem.
                     </p>
                 ) : (
@@ -581,13 +705,32 @@ export function CharacterSheetReview({
                             <RuleTitle>{group.title}</RuleTitle>
                             {Object.entries(groupSpellsByLevel(group.spells)).map(([level, spells]) => (
                                 <div key={level} className="mb-4 last:mb-0">
-                                    <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[#8B5A2B]" style={cinzel}>
+                                    <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--color-border)]" style={cinzel}>
                                         {level === "0" ? "Truques" : `${level}º círculo`}
-                                        <span className="ml-2 text-[#B09B74]">({spells.length})</span>
+                                        <span className="ml-2 text-[var(--color-ink-soft)]">({spells.length})</span>
                                     </p>
                                     <div className="grid gap-3 md:grid-cols-2">
                                         {spells.map((spell) => (
-                                            <SpellCard key={spell.id} spell={spell} />
+                                            <SpellCard
+                                                key={spell.id}
+                                                spell={spell}
+                                                onCast={
+                                                    castSpells
+                                                        ? () => {
+                                                              if (spell.attack) {
+                                                                  setPendingRoll({
+                                                                      type: "spell",
+                                                                      key: spell.id,
+                                                                      label: spell.name,
+                                                                      spell,
+                                                                  });
+                                                              } else {
+                                                                  onCastSpell?.(spell);
+                                                              }
+                                                          }
+                                                        : undefined
+                                                }
+                                            />
                                         ))}
                                     </div>
                                 </div>
@@ -611,7 +754,7 @@ export function CharacterSheetReview({
 
                 <section className="mb-6">
                     <SectionTitle>História</SectionTitle>
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-[#2A1D14]">
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-ink)]">
                         {data.lore.trim() || "Ainda não há uma história escrita neste pergaminho."}
                     </p>
                 </section>
@@ -619,7 +762,7 @@ export function CharacterSheetReview({
                 <section>
                     <SectionTitle>Missões</SectionTitle>
                     {questLines.length === 0 ? (
-                        <p className="text-sm italic text-[#5C4A38]">
+                        <p className="text-sm italic text-[var(--color-ink-muted)]">
                             Nenhuma missão registrada — o destino deste herói ainda está em aberto.
                         </p>
                     ) : (
@@ -627,10 +770,10 @@ export function CharacterSheetReview({
                             {questLines.map((quest, index) => (
                                 <li
                                     key={index}
-                                    className="flex gap-3 border px-3 py-2 text-sm leading-6 text-[#2A1D14]"
-                                    style={{ borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+                                    className="flex gap-3 border px-3 py-2 text-sm leading-6 text-[var(--color-ink)]"
+                                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
                                 >
-                                    <span className="text-[#7A2530]">❖</span>
+                                    <span className="text-[var(--color-crimson)]">❖</span>
                                     <span className="whitespace-pre-wrap">{quest}</span>
                                 </li>
                             ))}
@@ -638,6 +781,27 @@ export function CharacterSheetReview({
                     )}
                 </section>
             </div>
+
+            {pendingRoll && (
+                <AdvantageConfirm
+                    title={
+                        pendingRoll.type === "spell"
+                            ? `Conjurar ${pendingRoll.label}`
+                            : `Teste de ${pendingRoll.label}`
+                    }
+                    onCancel={() => setPendingRoll(null)}
+                    onConfirm={(advantage) => {
+                        if (pendingRoll.type === "skill") {
+                            onRollSkill?.(pendingRoll.key as Skill, { advantage });
+                        } else if (pendingRoll.type === "spell" && pendingRoll.spell) {
+                            onCastSpell?.(pendingRoll.spell, { advantage });
+                        } else {
+                            onRollAbility?.(pendingRoll.key as Ability, { advantage });
+                        }
+                        setPendingRoll(null);
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -645,8 +809,8 @@ export function CharacterSheetReview({
 function Badge({ children }: { children: ReactNode }) {
     return (
         <span
-            className="border px-3 py-1 text-xs uppercase tracking-[0.12em] text-[#6B4423]"
-            style={{ ...cinzel, borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+            className="border px-3 py-1 text-xs uppercase tracking-[0.12em] text-[var(--color-border-strong)]"
+            style={{ ...cinzel, borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
         >
             {children}
         </span>
@@ -657,12 +821,12 @@ function RuleTitle({ children }: { children: ReactNode }) {
     return (
         <div className="mb-3 flex items-center gap-3">
             <span
-                className="shrink-0 text-sm uppercase tracking-[0.25em] text-[#7A2530]"
+                className="shrink-0 text-sm uppercase tracking-[0.25em] text-[var(--color-crimson)]"
                 style={{ ...cinzel, fontWeight: 600 }}
             >
                 {children}
             </span>
-            <span className="h-px flex-1" style={{ backgroundColor: "#C09A5A" }} />
+            <span className="h-px flex-1" style={{ backgroundColor: "var(--color-border)" }} />
         </div>
     );
 }
@@ -671,36 +835,60 @@ function AbilityHex({
     name,
     score,
     modifier,
+    onRoll,
 }: {
     name: string;
     score: number;
     modifier: string;
+    onRoll?: () => void;
 }) {
+    const body = (
+        <>
+            <p
+                className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-border)]"
+                style={cinzel}
+            >
+                {name}
+            </p>
+            <p
+                className="mt-1 text-3xl leading-none text-[var(--color-crimson)]"
+                style={{ ...cinzel, fontWeight: 700 }}
+            >
+                {modifier}
+            </p>
+            <p className="mt-1 text-xs text-[var(--color-ink-soft)]" style={cinzel}>
+                {score}
+            </p>
+        </>
+    );
+
+    const hexStyle = {
+        clipPath: "polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%)",
+        background:
+            "linear-gradient(180deg, var(--color-parchment) 0%, var(--color-parchment-soft) 100%)",
+        boxShadow: "inset 0 0 0 1px var(--color-border)",
+    } as const;
+
+    if (onRoll) {
+        return (
+            <div className="relative">
+                <button
+                    type="button"
+                    onClick={onRoll}
+                    title={`Rolar teste de ${name}`}
+                    className="flex w-full flex-col items-center px-2 pb-8 pt-3 transition hover:brightness-95"
+                    style={hexStyle}
+                >
+                    {body}
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div className="relative">
-            <div
-                className="flex flex-col items-center px-2 pb-8 pt-3"
-                style={{
-                    clipPath: "polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%)",
-                    background: "linear-gradient(180deg, #F1E2B8 0%, #DCC794 100%)",
-                    boxShadow: "inset 0 0 0 1px #C09A5A",
-                }}
-            >
-                <p
-                    className="text-[10px] uppercase tracking-[0.18em] text-[#8B5A2B]"
-                    style={cinzel}
-                >
-                    {name}
-                </p>
-                <p
-                    className="mt-1 text-3xl leading-none text-[#5A1A22]"
-                    style={{ ...cinzel, fontWeight: 700 }}
-                >
-                    {modifier}
-                </p>
-                <p className="mt-1 text-xs text-[#8A7860]" style={cinzel}>
-                    {score}
-                </p>
+            <div className="flex flex-col items-center px-2 pb-8 pt-3" style={hexStyle}>
+                {body}
             </div>
         </div>
     );
@@ -718,32 +906,35 @@ function StatBox({
     return (
         <div
             className="border px-3 py-4 text-center"
-            style={{ borderColor: "#C09A5A", backgroundColor: "#EFE1BB" }}
+            style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
         >
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[#8B5A2B]" style={cinzel}>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--color-border)]" style={cinzel}>
                 {label}
             </p>
             <p
-                className="mt-2 text-2xl leading-none text-[#5A1A22]"
+                className="mt-2 text-2xl leading-none text-[var(--color-crimson)]"
                 style={{ ...cinzel, fontWeight: 600 }}
             >
                 {value}
             </p>
-            {hint && <p className="mt-1 text-[10px] text-[#8A7860]">{hint}</p>}
+            {hint && <p className="mt-1 text-[10px] text-[var(--color-ink-soft)]">{hint}</p>}
         </div>
     );
 }
 
-function SpellCard({ spell }: { spell: Spell }) {
+function SpellCard({
+    spell,
+    onCast,
+}: {
+    spell: Spell;
+    onCast?: () => void;
+}) {
     const [expanded, setExpanded] = useState(false);
-    const accent = SCHOOL_ACCENTS[spell.school] ?? "#A67C3D";
+    const accent = SCHOOL_ACCENTS[spell.school] ?? "var(--color-border)";
     const detail = getSpellDetail(spell.id);
 
-    return (
-        <article
-            className="relative overflow-hidden border px-4 py-3 pl-5"
-            style={{ borderColor: "#C09A5A", backgroundColor: "#F3E7C3" }}
-        >
+    const cardBody = (
+        <>
             <span
                 className="absolute left-0 top-0 h-full w-[3px]"
                 style={{ backgroundColor: accent }}
@@ -754,15 +945,15 @@ function SpellCard({ spell }: { spell: Spell }) {
                     style={{
                         ...cinzel,
                         fontWeight: 700,
-                        color: "#F3E6C4",
+                        color: "var(--color-ink-inverse)",
                         background: `radial-gradient(circle at 35% 25%, ${accent}, #3A2A1C 140%)`,
-                        boxShadow: "0 0 0 1px #C09A5A",
+                        boxShadow: "0 0 0 1px var(--color-border)",
                     }}
                 >
                     {spell.level === 0 ? "✦" : spell.level}
                 </div>
                 <div className="min-w-0 flex-1">
-                    <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         {spell.name}
                     </p>
                     <p className="mt-0.5 text-[11px] uppercase tracking-[0.14em]" style={{ ...cinzel, color: accent }}>
@@ -774,12 +965,15 @@ function SpellCard({ spell }: { spell: Spell }) {
                 {detail && (
                     <button
                         type="button"
-                        onClick={() => setExpanded((current) => !current)}
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            setExpanded((current) => !current);
+                        }}
                         aria-expanded={expanded}
                         aria-label={expanded ? "Recolher descrição" : "Ver descrição completa"}
                         className="flex h-7 w-7 shrink-0 items-center justify-center border text-xs transition-transform"
                         style={{
-                            borderColor: "#C09A5A",
+                            borderColor: "var(--color-border)",
                             color: accent,
                             transform: expanded ? "rotate(180deg)" : "none",
                         }}
@@ -789,22 +983,27 @@ function SpellCard({ spell }: { spell: Spell }) {
                 )}
             </div>
 
-            <p className="mt-2 text-sm italic leading-6 text-[#5C4A38]">
+            <p className="mt-2 text-sm italic leading-6 text-[var(--color-ink-muted)]">
                 {spell.description ?? "Os detalhes desta magia permanecem selados no grimório."}
             </p>
+            {onCast && (
+                <p className="mt-2 text-[10px] uppercase tracking-wide text-[var(--color-crimson)]">
+                    {spell.attack ? "Clique para rolar ataque/dano" : "Clique para enviar / rolar magia"}
+                </p>
+            )}
 
             {detail && expanded && (
-                <div className="mt-3 border-t pt-3" style={{ borderColor: "#DBC392" }}>
+                <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--color-border)" }}>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                         <SpellMeta label="Tempo de conjuração" value={detail.castingTime} />
                         <SpellMeta label="Alcance" value={detail.range} />
                         <SpellMeta label="Componentes" value={detail.components} />
                         <SpellMeta label="Duração" value={detail.duration} />
                     </dl>
-                    <p className="mt-3 text-sm leading-6 text-[#2A1D14]">{detail.text}</p>
+                    <p className="mt-3 text-sm leading-6 text-[var(--color-ink)]">{detail.text}</p>
                     {detail.higherLevels && (
-                        <p className="mt-2 text-sm leading-6 text-[#5C4A38]">
-                            <span className="text-[#7A2530]" style={cinzel}>
+                        <p className="mt-2 text-sm leading-6 text-[var(--color-ink-muted)]">
+                            <span className="text-[var(--color-crimson)]" style={cinzel}>
                                 Em níveis superiores.
                             </span>{" "}
                             {detail.higherLevels}
@@ -812,6 +1011,28 @@ function SpellCard({ spell }: { spell: Spell }) {
                     )}
                 </div>
             )}
+        </>
+    );
+
+    if (onCast) {
+        return (
+            <button
+                type="button"
+                onClick={onCast}
+                className="relative block w-full overflow-hidden border px-4 py-3 pl-5 text-left transition hover:border-[var(--color-crimson)]"
+                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment-soft)" }}
+            >
+                {cardBody}
+            </button>
+        );
+    }
+
+    return (
+        <article
+            className="relative overflow-hidden border px-4 py-3 pl-5"
+            style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment-soft)" }}
+        >
+            {cardBody}
         </article>
     );
 }
@@ -819,10 +1040,10 @@ function SpellCard({ spell }: { spell: Spell }) {
 function SpellMeta({ label, value }: { label: string; value: string }) {
     return (
         <div>
-            <dt className="text-[10px] uppercase tracking-[0.14em] text-[#8B5A2B]" style={cinzel}>
+            <dt className="text-[10px] uppercase tracking-[0.14em] text-[var(--color-border)]" style={cinzel}>
                 {label}
             </dt>
-            <dd className="text-[#2A1D14]">{value}</dd>
+            <dd className="text-[var(--color-ink)]">{value}</dd>
         </div>
     );
 }
@@ -836,17 +1057,11 @@ function getInitials(name: string): string {
         .join("");
 }
 
-function formatMeters(feet: number): string {
-    const meters = feet * 0.3;
-    const rounded = Number.isInteger(meters) ? String(meters) : meters.toFixed(1);
-    return `${rounded.replace(".", ",")} m`;
-}
-
 function DetailBox({ label, value }: { label: string; value: string }) {
     return (
-        <div className="border p-3" style={{ borderColor: "#A67C3D" }}>
-            <p className="text-xs uppercase tracking-wide text-[#8A7860]">{label}</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[#2A1D14]">
+        <div className="border p-3" style={{ borderColor: "var(--color-border)" }}>
+            <p className="text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">{label}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-[var(--color-ink)]">
                 {value.trim() || "—"}
             </p>
         </div>
@@ -856,8 +1071,8 @@ function DetailBox({ label, value }: { label: string; value: string }) {
 function SectionTitle({ children }: { children: string }) {
     return (
         <h3
-            className="mb-3 border-b pb-1 text-lg text-[#2A1D14]"
-            style={{ ...cinzel, fontWeight: 600, borderColor: "#A67C3D" }}
+            className="mb-3 border-b pb-1 text-lg text-[var(--color-ink)]"
+            style={{ ...cinzel, fontWeight: 600, borderColor: "var(--color-border)" }}
         >
             {children}
         </h3>

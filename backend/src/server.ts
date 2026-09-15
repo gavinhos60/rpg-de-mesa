@@ -1,55 +1,43 @@
 import express from "express";
 import cors from "cors";
+import http from "http";
+import "dotenv/config";
 
 import authRoutes from "./routes/auth.routes";
 import charactersRoutes from "./routes/characters.routes";
 import usersRoutes from "./routes/users.routes";
 import campaignsRoutes from "./routes/campaigns.routes";
 import campaignMembersRoutes from "./routes/campaign-members.routes";
+import sessionsRoutes from "./routes/sessions.routes";
 
 import { authMiddleware } from "./middleware/auth.middleware";
+import { attachGameSocket } from "./socket/game.gateway";
 
 const app = express();
+const server = http.createServer(app);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
-app.get("/", (req, res) => {
+app.get("/", (_req, res) => {
   res.json({
     message: "RPG API funcionando!",
   });
 });
 
-// Autenticação
 app.use("/auth", authRoutes);
-
-// Personagens
-// O authMiddleware já está dentro de characters.routes.ts
 app.use("/characters", charactersRoutes);
-
-// Usuários
+app.use("/users", authMiddleware, usersRoutes);
+app.use("/campaigns", authMiddleware, campaignsRoutes);
+app.use("/campaigns", authMiddleware, campaignMembersRoutes);
 app.use(
-  "/users",
+  "/campaigns/:campaignId/sessions",
   authMiddleware,
-  usersRoutes
+  sessionsRoutes
 );
 
-// Campanhas
-app.use(
-  "/campaigns",
-  authMiddleware,
-  campaignsRoutes
-);
+attachGameSocket(server);
 
-// Membros das campanhas
-app.use(
-  "/campaigns",
-  authMiddleware,
-  campaignMembersRoutes
-);
-
-app.listen(3000, () => {
-  console.log(
-    "🚀 API rodando em http://localhost:3000"
-  );
+server.listen(3000, () => {
+  console.log("🚀 API rodando em http://localhost:3000");
 });

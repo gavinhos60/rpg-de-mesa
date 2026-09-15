@@ -8,6 +8,7 @@ import {
     BrokenSealIcon,
     RibbonButton,
 } from "../components/icons/MedievalIcons";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 type AuthTab = "login" | "register";
 
@@ -82,8 +83,8 @@ export function Login() {
     }
 
     const fieldClass =
-        "w-full border px-4 py-3 text-[#2A1D14] outline-none focus:border-[#7A2530] transition-colors";
-    const fieldStyle = { backgroundColor: "#EBDFC4", borderColor: "#A67C3D" };
+        "w-full border px-4 py-3 text-[var(--color-ink)] outline-none focus:border-[var(--color-crimson)] transition-colors";
+    const fieldStyle = { backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border)" };
     const labelStyle = { fontFamily: "'Cinzel', serif" } as const;
 
     return (
@@ -91,27 +92,30 @@ export function Login() {
             className="min-h-screen flex items-center justify-center px-4"
             style={{
                 fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "#150E09",
+                backgroundColor: "var(--color-shell-deep)",
                 backgroundImage:
                     "repeating-linear-gradient(115deg, rgba(184,147,78,0.035) 0px, rgba(184,147,78,0.035) 1px, transparent 1px, transparent 5px)",
             }}
         >
+            <div className="absolute right-4 top-4">
+                <ThemeToggle />
+            </div>
             <div className="w-full max-w-md">
                 <div
                     className="border-2 p-8"
-                    style={{ backgroundColor: "#DCCBA0", borderColor: "#4A2F18" }}
+                    style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-wood)" }}
                 >
                     <div className="text-center mb-6">
-                        <EmblemIcon className="w-10 h-10 mx-auto mb-3 text-[#6B4423]" />
+                        <EmblemIcon className="w-10 h-10 mx-auto mb-3 text-[var(--color-border-strong)]" />
 
                         <h1
-                            className="text-3xl text-[#2A1D14]"
+                            className="text-3xl text-[var(--color-ink)]"
                             style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                         >
                             SUA MESA!
                         </h1>
 
-                        <p className="text-[#5C4A38] mt-2">
+                        <p className="text-[var(--color-ink-muted)] mt-2">
                             {tab === "login"
                                 ? "Entre para continuar sua jornada"
                                 : "Crie sua conta de aventureiro"}
@@ -120,7 +124,7 @@ export function Login() {
 
                     <div
                         className="mb-6 grid grid-cols-2 border"
-                        style={{ borderColor: "#6B4423" }}
+                        style={{ borderColor: "var(--color-border-strong)" }}
                     >
                         <button
                             type="button"
@@ -128,8 +132,8 @@ export function Login() {
                             className="px-4 py-3 text-sm transition-colors"
                             style={{
                                 fontFamily: "'Cinzel', serif",
-                                backgroundColor: tab === "login" ? "#7A2530" : "transparent",
-                                color: tab === "login" ? "#F3E6C4" : "#5C4A38",
+                                backgroundColor: tab === "login" ? "var(--color-crimson)" : "transparent",
+                                color: tab === "login" ? "var(--color-ink-inverse)" : "var(--color-ink-muted)",
                             }}
                         >
                             Entrar
@@ -140,8 +144,8 @@ export function Login() {
                             className="px-4 py-3 text-sm transition-colors"
                             style={{
                                 fontFamily: "'Cinzel', serif",
-                                backgroundColor: tab === "register" ? "#7A2530" : "transparent",
-                                color: tab === "register" ? "#F3E6C4" : "#5C4A38",
+                                backgroundColor: tab === "register" ? "var(--color-crimson)" : "transparent",
+                                color: tab === "register" ? "var(--color-ink-inverse)" : "var(--color-ink-muted)",
                             }}
                         >
                             Cadastrar
@@ -153,7 +157,7 @@ export function Login() {
                             <div>
                                 <label
                                     htmlFor="name"
-                                    className="block text-sm text-[#5C4A38] mb-2"
+                                    className="block text-sm text-[var(--color-ink-muted)] mb-2"
                                     style={labelStyle}
                                 >
                                     Nome
@@ -175,7 +179,7 @@ export function Login() {
                         <div>
                             <label
                                 htmlFor="email"
-                                className="block text-sm text-[#5C4A38] mb-2"
+                                className="block text-sm text-[var(--color-ink-muted)] mb-2"
                                 style={labelStyle}
                             >
                                 Email
@@ -196,7 +200,7 @@ export function Login() {
                         <div>
                             <label
                                 htmlFor="password"
-                                className="block text-sm text-[#5C4A38] mb-2"
+                                className="block text-sm text-[var(--color-ink-muted)] mb-2"
                                 style={labelStyle}
                             >
                                 Senha
@@ -214,7 +218,7 @@ export function Login() {
                                     className={`${fieldClass} pr-11`}
                                     style={fieldStyle}
                                 />
-                                <KeyIcon className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-[#A67C3D]" />
+                                <KeyIcon className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-border)]" />
                             </div>
                         </div>
 
@@ -222,7 +226,7 @@ export function Login() {
                             <div>
                                 <label
                                     htmlFor="confirm-password"
-                                    className="block text-sm text-[#5C4A38] mb-2"
+                                    className="block text-sm text-[var(--color-ink-muted)] mb-2"
                                     style={labelStyle}
                                 >
                                     Confirmar senha
@@ -248,12 +252,12 @@ export function Login() {
                             <div
                                 className="flex items-center gap-3 border px-4 py-3 text-sm"
                                 style={{
-                                    backgroundColor: "#E8D4C4",
-                                    borderColor: "#7A2530",
-                                    color: "#5C1D26",
+                                    backgroundColor: "var(--color-parchment-soft)",
+                                    borderColor: "var(--color-crimson)",
+                                    color: "var(--color-crimson-deep)",
                                 }}
                             >
-                                <BrokenSealIcon className="w-8 h-8 shrink-0" color="#7A2530" />
+                                <BrokenSealIcon className="w-8 h-8 shrink-0" color="var(--color-crimson)" />
                                 {error}
                             </div>
                         )}

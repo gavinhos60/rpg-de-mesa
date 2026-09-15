@@ -32,7 +32,7 @@ interface CharacterSpellsProps {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
 
 export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
     const [levelFilter, setLevelFilter] = useState<"all" | number>("all");
@@ -311,10 +311,10 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
     ) {
         return (
             <div className="border p-8 text-center" style={card}>
-                <p className="text-[#2A1D14]" style={cinzel}>
+                <p className="text-[var(--color-ink)]" style={cinzel}>
                     Este personagem ainda não conjura magias
                 </p>
-                <p className="mt-2 text-sm text-[#5C4A38]">
+                <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
                     Escolha uma classe conjuradora, um arquétipo como Cavaleiro Arcano
                     ou Trapaceiro Arcano, ou um talento como Iniciado em Magia.
                 </p>
@@ -327,10 +327,10 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
     return (
         <div>
             <div className="mb-8">
-                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h2 className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Magias
                 </h2>
-                <p className="mt-2 text-[#5C4A38]">
+                <p className="mt-2 text-[var(--color-ink-muted)]">
                     Truques, magias conhecidas ou preparadas e espaços seguem o PHB 2014.
                     Cada classe usa apenas a própria lista, salvo talentos e listas expandidas.
                 </p>
@@ -339,13 +339,13 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
             <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {slots.length > 0 && (
                     <div className="border p-4 sm:col-span-2" style={card}>
-                        <p className="text-sm text-[#5C4A38]">Espaços de magia</p>
+                        <p className="text-sm text-[var(--color-ink-muted)]">Espaços de magia</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                             {slots.map((count, index) => (
                                 <span
                                     key={index}
                                     className="border px-2 py-1 text-sm"
-                                    style={{ borderColor: "#A67C3D" }}
+                                    style={{ borderColor: "var(--color-border)" }}
                                 >
                                     {index + 1}º: {count}
                                 </span>
@@ -355,8 +355,8 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
                 )}
                 {warlock?.limits.pact && (
                     <div className="border p-4" style={card}>
-                        <p className="text-sm text-[#5C4A38]">Magia do Pacto</p>
-                        <p className="mt-1 text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <p className="text-sm text-[var(--color-ink-muted)]">Magia do Pacto</p>
+                        <p className="mt-1 text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             {warlock.limits.pact.count} espaço(s) de {warlock.limits.pact.level}º
                         </p>
                     </div>
@@ -367,11 +367,11 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
 
                     return (
                         <div key={`${entry.selection.classId}-dc`} className="border p-4" style={card}>
-                            <p className="text-sm text-[#5C4A38]">{entry.name}</p>
-                            <p className="mt-1 text-[#2A1D14]" style={cinzel}>
+                            <p className="text-sm text-[var(--color-ink-muted)]">{entry.name}</p>
+                            <p className="mt-1 text-[var(--color-ink)]" style={cinzel}>
                                 CD {8 + proficiencyBonus + modifier} • Ataque {formatModifier(proficiencyBonus + modifier)}
                             </p>
-                            <p className="mt-1 text-xs text-[#8A7860]">{abilityName}</p>
+                            <p className="mt-1 text-xs text-[var(--color-ink-soft)]">{abilityName}</p>
                         </div>
                     );
                 })}
@@ -391,10 +391,10 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
 
                 return (
                     <section key={entry.selection.classId} className="mb-10">
-                        <h3 className="mb-2 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h3 className="mb-2 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             {entry.name}
                         </h3>
-                        <p className="mb-4 text-sm text-[#5C4A38]">
+                        <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
                             {entry.limits.spellbook
                                 ? "O mago grava magias no grimório e prepara uma seleção diária."
                                 : entry.limits.prepared !== null
@@ -575,10 +575,10 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
 
             {hasTalentSpells && (
                 <section>
-                    <h3 className="mb-2 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h3 className="mb-2 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Magias do talento
                     </h3>
-                    <p className="mb-4 text-sm text-[#5C4A38]">
+                    <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
                         {data.talentId === "magic-initiate" &&
                             "Dois truques e uma magia de 1º nível da lista escolhida. A magia de 1º nível pode ser conjurada uma vez por descanso longo sem espaço."}
                         {data.talentId === "ritual-caster" &&
@@ -588,7 +588,7 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
                     </p>
 
                     {data.talentId === "magic-initiate" && !getTalentSpellClass(data.talentId, data.talentChoices) && (
-                        <p className="mb-4 text-sm text-[#7A2530]">
+                        <p className="mb-4 text-sm text-[var(--color-crimson)]">
                             Escolha a classe de conjuração do talento na etapa Identidade.
                         </p>
                     )}
@@ -662,14 +662,14 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
                             : "Atirador de Magia";
 
                 return (
-                    <section key={feat.key} className="mt-8 border-t pt-6" style={{ borderColor: "#A67C3D" }}>
-                        <h3 className="mb-2 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <section key={feat.key} className="mt-8 border-t pt-6" style={{ borderColor: "var(--color-border)" }}>
+                        <h3 className="mb-2 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             {featName} — {feat.key.replace(":", " nível ")}
                         </h3>
 
                         {feat.options.cantrips.length === 0 &&
                             feat.options.spells.length === 0 && (
-                                <p className="mb-4 text-sm text-[#7A2530]">
+                                <p className="mb-4 text-sm text-[var(--color-crimson)]">
                                     Complete as escolhas desse talento na etapa Atributos.
                                 </p>
                             )}
@@ -738,9 +738,9 @@ function LevelFilters({
                     onClick={() => onChange(level)}
                     className="border px-3 py-1 text-sm"
                     style={{
-                        borderColor: value === level ? "#5C1D26" : "#A67C3D",
-                        backgroundColor: value === level ? "#7A2530" : "#EBDFC4",
-                        color: value === level ? "#EBDFC4" : "#2A1D14",
+                        borderColor: value === level ? "var(--color-crimson-deep)" : "var(--color-border)",
+                        backgroundColor: value === level ? "var(--color-crimson)" : "var(--color-parchment)",
+                        color: value === level ? "var(--color-parchment)" : "var(--color-ink)",
                     }}
                 >
                     {level === "all" ? "Todos" : `${level}º`}
@@ -772,10 +772,10 @@ function Picker({
     return (
         <div className="mb-6">
             <div className="mb-3 flex items-center justify-between gap-4">
-                <h4 className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>{title}</h4>
+                <h4 className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>{title}</h4>
                 <span
                     className="px-3 py-1.5 text-sm"
-                    style={{ ...cinzel, backgroundColor: "#7A2530", color: "#EBDFC4" }}
+                    style={{ ...cinzel, backgroundColor: "var(--color-crimson)", color: "var(--color-ink-inverse)" }}
                 >
                     {counter}
                 </span>
@@ -813,8 +813,8 @@ function PickerOption({
         <div
             className="border"
             style={{
-                backgroundColor: isSelected ? "#DCCBA0" : "#EBDFC4",
-                borderColor: isSelected ? "#7A2530" : "#A67C3D",
+                backgroundColor: isSelected ? "var(--color-surface)" : "var(--color-parchment)",
+                borderColor: isSelected ? "var(--color-crimson)" : "var(--color-border)",
             }}
         >
             <div className="flex items-start">
@@ -825,19 +825,19 @@ function PickerOption({
                     className="flex flex-1 items-center justify-between gap-3 p-3 text-left disabled:opacity-80"
                 >
                     <span>
-                        <span className="block text-[#2A1D14]" style={cinzel}>{spell.name}</span>
-                        <span className="text-xs text-[#8A7860]">
+                        <span className="block text-[var(--color-ink)]" style={cinzel}>{spell.name}</span>
+                        <span className="text-xs text-[var(--color-ink-soft)]">
                             {spell.level === 0 ? "Truque" : `${spell.level}º`} • {SPELL_SCHOOLS[spell.school]}
                             {spell.ritual ? " • Ritual" : ""}
                             {spell.attack ? " • Ataque" : ""}
                         </span>
                         {spell.description && (
-                            <span className="mt-1 block text-xs italic leading-5 text-[#5C4A38]">
+                            <span className="mt-1 block text-xs italic leading-5 text-[var(--color-ink-muted)]">
                                 {spell.description}
                             </span>
                         )}
                     </span>
-                    <span className="text-sm text-[#7A2530]">
+                    <span className="text-sm text-[var(--color-crimson)]">
                         {isLocked ? "Fixo" : isSelected ? "✓" : "+"}
                     </span>
                 </button>
@@ -847,9 +847,9 @@ function PickerOption({
                         onClick={() => setExpanded((current) => !current)}
                         aria-expanded={expanded}
                         aria-label={expanded ? "Recolher descrição" : "Ver descrição completa"}
-                        className="mr-2 mt-3 flex h-7 w-7 shrink-0 items-center justify-center border text-xs text-[#7A2530] transition-transform"
+                        className="mr-2 mt-3 flex h-7 w-7 shrink-0 items-center justify-center border text-xs text-[var(--color-crimson)] transition-transform"
                         style={{
-                            borderColor: "#A67C3D",
+                            borderColor: "var(--color-border)",
                             transform: expanded ? "rotate(180deg)" : "none",
                         }}
                     >
@@ -860,16 +860,16 @@ function PickerOption({
 
             {detail && expanded && (
                 <div className="border-t px-3 py-3" style={{ borderColor: "#C09A5A" }}>
-                    <p className="text-xs text-[#5C4A38]">
+                    <p className="text-xs text-[var(--color-ink-muted)]">
                         <span style={cinzel}>Conjuração</span> {detail.castingTime} •{" "}
                         <span style={cinzel}>Alcance</span> {detail.range} •{" "}
                         <span style={cinzel}>Componentes</span> {detail.components} •{" "}
                         <span style={cinzel}>Duração</span> {detail.duration}
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-[#2A1D14]">{detail.text}</p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--color-ink)]">{detail.text}</p>
                     {detail.higherLevels && (
-                        <p className="mt-2 text-sm leading-6 text-[#5C4A38]">
-                            <span className="text-[#7A2530]" style={cinzel}>
+                        <p className="mt-2 text-sm leading-6 text-[var(--color-ink-muted)]">
+                            <span className="text-[var(--color-crimson)]" style={cinzel}>
                                 Em níveis superiores.
                             </span>{" "}
                             {detail.higherLevels}

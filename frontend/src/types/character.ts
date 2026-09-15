@@ -33,6 +33,8 @@ export interface CharacterSubrace {
         count: number;
         abilities: Ability[];
     };
+    /** Deslocamento em pés (sobrescreve o da raça base, se definido). */
+    speed?: number;
     skillProficiencies?: Skill[];
     skillChoices?: {
         count: number;
@@ -238,6 +240,19 @@ export interface CharacterEquipmentData {
     classId: string;
     choiceSelections: Record<string, string>;
     manualItems: EquipmentStack[];
+    /** Itens customizados (ex.: dados pelo mestre). */
+    customItems?: CustomInventoryItem[];
+}
+
+export interface CustomInventoryItem {
+    id: string;
+    name: string;
+    description?: string;
+    quantity: number;
+    weight?: number;
+    category?: EquipmentCategory;
+    /** Quem concedeu o item (opcional). */
+    grantedByName?: string;
 }
 
 export type SpellSchool =
@@ -299,6 +314,8 @@ export interface CharacterLoreDetails {
 
 export interface CharacterFormData {
     name: string;
+    /** Foto do personagem (data URL ou URL). */
+    avatar?: string | null;
     raceId: string;
     subraceId: string;
     raceChoices: Record<string, string[]>;

@@ -34,7 +34,7 @@ interface CharacterSkillsProps {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
 
 export function CharacterSkills({
     data,
@@ -324,8 +324,8 @@ export function CharacterSkills({
                 onClick={onClick}
                 className="flex w-full items-center justify-between border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-30"
                 style={{
-                    backgroundColor: selected ? "#DCCBA0" : "#EBDFC4",
-                    borderColor: selected ? "#7A2530" : "#A67C3D",
+                    backgroundColor: selected ? "var(--color-surface)" : "var(--color-parchment)",
+                    borderColor: selected ? "var(--color-crimson)" : "var(--color-border)",
                 }}
             >
                 <div className="flex items-center gap-3">
@@ -333,23 +333,25 @@ export function CharacterSkills({
                         className="flex h-8 w-8 shrink-0 items-center justify-center border text-sm"
                         style={{
                             ...cinzel,
-                            borderColor: selected ? "#5C1D26" : "#A67C3D",
-                            backgroundColor: selected ? "#7A2530" : "transparent",
-                            color: selected ? "#EBDFC4" : "#8A7860",
+                            borderColor: selected ? "var(--color-crimson-deep)" : "var(--color-border)",
+                            backgroundColor: selected ? "var(--color-crimson)" : "transparent",
+                            color: selected
+                                ? "var(--color-ink-inverse)"
+                                : "var(--color-ink-soft)",
                         }}
                     >
                         {selected ? "✓" : ""}
                     </div>
 
                     <div>
-                        <p className="text-[#2A1D14]" style={cinzel}>{skillData.name}</p>
-                        <p className="text-xs text-[#8A7860]">{ability?.shortName}</p>
+                        <p className="text-[var(--color-ink)]" style={cinzel}>{skillData.name}</p>
+                        <p className="text-xs text-[var(--color-ink-soft)]">{ability?.shortName}</p>
                     </div>
                 </div>
 
                 <p
                     className="text-lg"
-                    style={{ ...cinzel, color: modifier >= 0 ? "#3F5B34" : "#8B3A2E" }}
+                    style={{ ...cinzel, color: modifier >= 0 ? "var(--color-green)" : "#8B3A2E" }}
                 >
                     {modifier >= 0 ? "+" : ""}
                     {modifier}
@@ -361,33 +363,33 @@ export function CharacterSkills({
     return (
         <div>
             <div className="mb-8">
-                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h2 className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Perícias
                 </h2>
 
-                <p className="mt-2 text-[#5C4A38]">
+                <p className="mt-2 text-[var(--color-ink-muted)]">
                     Escolha as perícias concedidas pela sua classe e pela sua raça.
                 </p>
             </div>
 
             <div className="mb-8 grid gap-4 md:grid-cols-3">
                 <div className="border p-4" style={card}>
-                    <p className="text-sm text-[#5C4A38]">Nível total</p>
-                    <p className="mt-1 text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <p className="text-sm text-[var(--color-ink-muted)]">Nível total</p>
+                    <p className="mt-1 text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         {totalLevel}
                     </p>
                 </div>
 
                 <div className="border p-4" style={card}>
-                    <p className="text-sm text-[#5C4A38]">Bônus de proficiência</p>
-                    <p className="mt-1 text-2xl text-[#7A2530]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <p className="text-sm text-[var(--color-ink-muted)]">Bônus de proficiência</p>
+                    <p className="mt-1 text-2xl text-[var(--color-crimson)]" style={{ ...cinzel, fontWeight: 600 }}>
                         +{proficiencyBonus}
                     </p>
                 </div>
 
                 <div className="border p-4" style={card}>
-                    <p className="text-sm text-[#5C4A38]">Percepção passiva</p>
-                    <p className="mt-1 text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <p className="text-sm text-[var(--color-ink-muted)]">Percepção passiva</p>
+                    <p className="mt-1 text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         {passivePerception}
                     </p>
                 </div>
@@ -397,18 +399,18 @@ export function CharacterSkills({
                 <section className="mb-8">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                 Perícias de {selectedClass?.name}
                             </h3>
 
-                            <p className="mt-1 text-sm text-[#5C4A38]">
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                                 Escolha {classSkillLimit} perícias.
                             </p>
                         </div>
 
                         <div
                             className="px-3 py-1.5 text-sm"
-                            style={{ ...cinzel, backgroundColor: "#7A2530", color: "#EBDFC4" }}
+                            style={{ ...cinzel, backgroundColor: "var(--color-crimson)", color: "var(--color-ink-inverse)" }}
                         >
                             {selectedClassSkills.length} / {classSkillLimit}
                         </div>
@@ -432,18 +434,18 @@ export function CharacterSkills({
                 <section className="mb-8">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                 Perícias de {getRaceDisplayName(data) || selectedRace?.name}
                             </h3>
 
-                            <p className="mt-1 text-sm text-[#5C4A38]">
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                                 Escolha {raceSkillLimit} perícias.
                             </p>
                         </div>
 
                         <div
                             className="px-3 py-1.5 text-sm"
-                            style={{ ...cinzel, backgroundColor: "#3F5B34", color: "#EBDFC4" }}
+                            style={{ ...cinzel, backgroundColor: "var(--color-green)", color: "var(--color-ink-inverse)" }}
                         >
                             {selectedRaceSkills.length} / {raceSkillLimit}
                         </div>
@@ -466,10 +468,10 @@ export function CharacterSkills({
             {backgroundReplacementCount > 0 && (
                 <section className="mb-8">
                     <div className="mb-4">
-                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Substituições do antecedente
                         </h3>
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Uma proficiência do antecedente já veio de outra
                             fonte. Escolha {backgroundReplacementCount} perícia
                             diferente, conforme a regra do PHB.
@@ -478,7 +480,7 @@ export function CharacterSkills({
                     <div className="grid gap-4 md:grid-cols-2">
                         {Array.from({ length: backgroundReplacementCount }).map((_, index) => (
                             <label key={index} className="border p-4" style={card}>
-                                <span className="mb-2 block text-sm text-[#5C4A38]">
+                                <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                                     Perícia substituta {index + 1}
                                 </span>
                                 <select
@@ -489,8 +491,8 @@ export function CharacterSkills({
                                             event.target.value as Skill | ""
                                         )
                                     }
-                                    className="w-full border bg-[#EBDFC4] px-3 py-2 text-[#2A1D14] outline-none"
-                                    style={{ borderColor: "#A67C3D" }}
+                                    className="w-full border bg-[var(--color-parchment)] px-3 py-2 text-[var(--color-ink)] outline-none"
+                                    style={{ borderColor: "var(--color-border)" }}
                                 >
                                     <option value="">Selecione</option>
                                     {DND_SKILLS.map((skill) => (
@@ -521,18 +523,18 @@ export function CharacterSkills({
                 <section className="mb-8">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
-                            <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                 Perícias do talento
                             </h3>
 
-                            <p className="mt-1 text-sm text-[#5C4A38]">
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                                 Perícias recebidas através do Talento Inicial.
                             </p>
                         </div>
 
                         <div
                             className="px-3 py-1.5 text-sm"
-                            style={{ ...cinzel, backgroundColor: "#9C7A3C", color: "#EBDFC4" }}
+                            style={{ ...cinzel, backgroundColor: "#9C7A3C", color: "var(--color-ink-inverse)" }}
                         >
                             {selectedTalentSkills.length}
                         </div>
@@ -554,11 +556,11 @@ export function CharacterSkills({
 
             <section className="mb-8">
                 <div className="mb-4">
-                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Resumo das proficiências
                     </h3>
 
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         Suas proficiências podem vir de diferentes fontes.
                     </p>
                 </div>
@@ -585,13 +587,13 @@ export function CharacterSkills({
                             <div key={skill.id} className="border p-4" style={card}>
                                 <div className="flex items-center justify-between gap-4">
                                     <div>
-                                        <p className="text-[#2A1D14]" style={cinzel}>{skill.name}</p>
-                                        <p className="mt-1 text-xs text-[#8A7860]">
+                                        <p className="text-[var(--color-ink)]" style={cinzel}>{skill.name}</p>
+                                        <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
                                             {sources.join(" • ")}
                                         </p>
                                     </div>
 
-                                    <p className="text-lg" style={{ ...cinzel, color: "#3F5B34" }}>
+                                    <p className="text-lg" style={{ ...cinzel, color: "var(--color-green)" }}>
                                         {modifier >= 0 ? "+" : ""}
                                         {modifier}
                                     </p>
@@ -603,7 +605,7 @@ export function CharacterSkills({
             </section>
 
             <div className="border p-4" style={card}>
-                <p className="text-sm leading-6 text-[#5C4A38]">
+                <p className="text-sm leading-6 text-[var(--color-ink-muted)]">
                     As perícias recebidas de diferentes fontes não acumulam o
                     bônus de proficiência. Uma perícia continua sendo apenas
                     uma proficiência.

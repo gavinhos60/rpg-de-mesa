@@ -5,6 +5,9 @@ import {
   createCharacter,
   updateCharacter,
   assignCharacterToCampaign,
+  removeCharacterFromCampaign,
+  deleteCharacter,
+  grantCustomItemToCharacter,
 } from "../services/characters.service";
 
 function mapCharacterError(error: unknown, res: Response, fallback: string) {
@@ -28,6 +31,17 @@ function mapCharacterError(error: unknown, res: Response, fallback: string) {
         error: "Este personagem já está nesta campanha",
       });
       return true;
+    case "ONE_CHARACTER_PER_CAMPAIGN":
+      res.status(409).json({
+        error:
+          "Cada jogador só pode ter um personagem por mesa/campanha",
+      });
+      return true;
+    case "CHARACTER_NOT_IN_CAMPAIGN":
+      res.status(400).json({
+        error: "Este personagem não está em nenhuma campanha",
+      });
+      return true;
     case "PLAYER_CANNOT_CREATE_FOR_OTHER":
       res.status(403).json({
         error: "Jogadores só podem criar personagens para si mesmos",
@@ -36,6 +50,16 @@ function mapCharacterError(error: unknown, res: Response, fallback: string) {
     case "TARGET_NOT_CAMPAIGN_MEMBER":
       res.status(400).json({
         error: "O jogador selecionado não pertence à campanha",
+      });
+      return true;
+    case "MASTER_REQUIRED":
+      res.status(403).json({
+        error: "Apenas o mestre pode realizar esta ação",
+      });
+      return true;
+    case "ITEM_NAME_REQUIRED":
+      res.status(400).json({
+        error: "Informe o nome do item",
       });
       return true;
     default:
@@ -108,7 +132,7 @@ export async function createCharacterController(req: Request, res: Response) {
       className: String(className).trim(),
       race: String(race).trim(),
       level: Number(level),
-      avatar: avatar ? String(avatar).trim() : undefined,
+        avatar: avatar ? String(avatar) : undefined,
       sheet: sheet ?? undefined,
       playerId: playerId != null ? Number(playerId) : undefined,
       campaignId:
@@ -187,5 +211,72 @@ export async function updateCharacterController(req: Request, res: Response) {
     console.error(error);
     if (mapCharacterError(error, res, "Erro ao atualizar personagem")) return;
     res.status(500).json({ error: "Erro ao atualizar personagem" });
+  }
+}
+
+export async function removeCharacterFromCampaignController(
+  req: Request,
+  res: Response
+) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await removeCharacterFromCampaign(
+      Number(req.params.id),
+      req.user.userId
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao remover personagem da campanha"))
+      return;
+    res.status(500).json({ error: "Erro ao remover personagem da campanha" });
+  }
+}
+
+export async function deleteCharacterController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    await deleteCharacter(Number(req.params.id), req.user.userId);
+    res.status(204).send();
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao excluir personagem")) return;
+    res.status(500).json({ error: "Erro ao excluir personagem" });
+  }
+}
+
+export async function grantCustomItemController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await grantCustomItemToCharacter(
+      Number(req.params.id),
+      req.user.userId,
+      {
+        name: req.body.name,
+        description: req.body.description,
+        quantity:
+          req.body.quantity != null ? Number(req.body.quantity) : undefined,
+        weight: req.body.weight != null ? Number(req.body.weight) : undefined,
+      }
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao conceder item")) return;
+    res.status(500).json({ error: "Erro ao conceder item" });
   }
 }

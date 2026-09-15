@@ -11,7 +11,8 @@ import { DND_CLASSES } from "../../data/dnd/classes";
 import { DND_RACES } from "../../data/dnd/races";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
-import { getRaceDisplayName } from "../../data/dnd/raceResolution";
+import { getRaceDisplayName, getResolvedSpeed } from "../../data/dnd/raceResolution";
+import { formatMeters } from "../../utils/units";
 
 import {
     getBaseArmorClass,
@@ -32,7 +33,7 @@ interface CharacterCombatProps {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
 
 export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
     const primaryClassSelection = data.classes[0];
@@ -69,7 +70,7 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
 
     const armorClass = getBaseArmorClass(dexterity, wisdom, selectedClass);
     const initiative = getInitiative(dexterity);
-    const movement = selectedRace?.speed ?? 30;
+    const movement = getResolvedSpeed(data);
     const carryingCapacity = getCarryingCapacity(strength);
 
     const proficientSkills = getProficientSkills(data);
@@ -101,11 +102,11 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
     return (
         <div>
             <div className="mb-8">
-                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h2 className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Combate
                 </h2>
 
-                <p className="mt-2 text-[#5C4A38]">
+                <p className="mt-2 text-[var(--color-ink-muted)]">
                     Os valores abaixo são calculados automaticamente. Use as
                     sub-abas para ver habilidades de raça e de cada classe.
                 </p>
@@ -142,7 +143,7 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
 
                 <CombatCard
                     title="Deslocamento"
-                    value={`${movement} ft`}
+                    value={formatMeters(movement)}
                     description={
                         selectedRace
                             ? getRaceDisplayName(data) || selectedRace.name
@@ -152,7 +153,7 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
             </div>
 
             <section className="mb-8">
-                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Informações de combate
                 </h3>
 
@@ -171,11 +172,11 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
 
             <section className="mb-8">
                 <div className="mb-4">
-                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Testes de resistência
                     </h3>
 
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         As resistências proficientes recebem automaticamente o
                         bônus de proficiência.
                     </p>
@@ -200,8 +201,8 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                                 key={ability.id}
                                 className="flex items-center justify-between border p-4"
                                 style={{
-                                    backgroundColor: proficient ? "#DCCBA0" : "#EBDFC4",
-                                    borderColor: proficient ? "#7A2530" : "#A67C3D",
+                                    backgroundColor: proficient ? "var(--color-surface)" : "var(--color-parchment)",
+                                    borderColor: proficient ? "var(--color-crimson)" : "var(--color-border)",
                                 }}
                             >
                                 <div className="flex items-center gap-3">
@@ -209,17 +210,17 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                                         className="flex h-9 w-9 items-center justify-center border text-xs"
                                         style={{
                                             ...cinzel,
-                                            backgroundColor: proficient ? "#7A2530" : "transparent",
-                                            borderColor: proficient ? "#5C1D26" : "#A67C3D",
-                                            color: proficient ? "#EBDFC4" : "#8A7860",
+                                            backgroundColor: proficient ? "var(--color-crimson)" : "transparent",
+                                            borderColor: proficient ? "var(--color-crimson-deep)" : "var(--color-border)",
+                                            color: proficient ? "var(--color-parchment)" : "var(--color-ink-soft)",
                                         }}
                                     >
                                         {ability.shortName}
                                     </div>
 
                                     <div>
-                                        <p className="text-[#2A1D14]" style={cinzel}>{ability.name}</p>
-                                        <p className="text-xs text-[#8A7860]">
+                                        <p className="text-[var(--color-ink)]" style={cinzel}>{ability.name}</p>
+                                        <p className="text-xs text-[var(--color-ink-soft)]">
                                             {proficient ? "Proficiente" : "Não proficiente"}
                                         </p>
                                     </div>
@@ -227,7 +228,7 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
 
                                 <p
                                     className="text-xl"
-                                    style={{ ...cinzel, color: modifier >= 0 ? "#3F5B34" : "#8B3A2E" }}
+                                    style={{ ...cinzel, color: modifier >= 0 ? "var(--color-green)" : "#8B3A2E" }}
                                 >
                                     {formatModifier(modifier)}
                                 </p>
@@ -238,11 +239,11 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
             </section>
 
             <section className="mb-8">
-                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Atributos finais
                 </h3>
 
-                <p className="mb-4 text-sm text-[#5C4A38]">
+                <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
                     Os valores abaixo já incluem os bônus provenientes da raça.
                 </p>
 
@@ -258,18 +259,18 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                                 style={card}
                             >
                                 <div>
-                                    <p className="text-[#2A1D14]" style={cinzel}>{ability.name}</p>
-                                    <p className="text-xs text-[#8A7860]">{ability.shortName}</p>
+                                    <p className="text-[var(--color-ink)]" style={cinzel}>{ability.name}</p>
+                                    <p className="text-xs text-[var(--color-ink-soft)]">{ability.shortName}</p>
                                 </div>
 
                                 <div className="text-right">
-                                    <p className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                    <p className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                         {value}
                                     </p>
 
                                     <p
                                         className="text-sm"
-                                        style={{ color: modifier >= 0 ? "#3F5B34" : "#8B3A2E" }}
+                                        style={{ color: modifier >= 0 ? "var(--color-green)" : "#8B3A2E" }}
                                     >
                                         {formatModifier(modifier)}
                                     </p>
@@ -281,18 +282,18 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
             </section>
 
             <section className="mb-8">
-                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Percepção
                 </h3>
 
                 <div className="border p-5" style={card}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                 Percepção
                             </p>
 
-                            <p className="mt-1 text-sm text-[#8A7860]">
+                            <p className="mt-1 text-sm text-[var(--color-ink-soft)]">
                                 {perceptionProficient
                                     ? "Sabedoria + bônus de proficiência"
                                     : "Sabedoria"}
@@ -300,21 +301,21 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                         </div>
 
                         <div className="text-right">
-                            <p className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                            <p className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                 {formatModifier(getSkillModifier("perception"))}
                             </p>
 
-                            <p className="text-xs text-[#8A7860]">Percepção</p>
+                            <p className="text-xs text-[var(--color-ink-soft)]">Percepção</p>
                         </div>
                     </div>
                 </div>
             </section>
 
             <section className="mt-8">
-                <h3 className="mb-2 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-2 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Habilidades
                 </h3>
-                <p className="mb-4 text-sm text-[#5C4A38]">
+                <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
                     Separe por raça e por cada classe do personagem. As habilidades
                     aparecem ordenadas por nível.
                 </p>
@@ -333,11 +334,11 @@ interface CombatCardProps {
 function CombatCard({ title, value, description }: CombatCardProps) {
     return (
         <div className="border p-5" style={card}>
-            <p className="text-sm text-[#5C4A38]">{title}</p>
-            <p className="mt-2 text-3xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+            <p className="text-sm text-[var(--color-ink-muted)]">{title}</p>
+            <p className="mt-2 text-3xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                 {value}
             </p>
-            <p className="mt-2 text-xs text-[#8A7860]">{description}</p>
+            <p className="mt-2 text-xs text-[var(--color-ink-soft)]">{description}</p>
         </div>
     );
 }
@@ -350,8 +351,8 @@ interface InfoCardProps {
 function InfoCard({ label, value }: InfoCardProps) {
     return (
         <div className="border p-4" style={card}>
-            <p className="text-sm text-[#8A7860]">{label}</p>
-            <p className="mt-1 text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+            <p className="text-sm text-[var(--color-ink-soft)]">{label}</p>
+            <p className="mt-1 text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                 {value}
             </p>
         </div>

@@ -1,7 +1,8 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "https://finite-arc-shirts-anaheim.trycloudflare.com",
+  // API local — altere se estiver usando um túnel (Cloudflare etc.)
+  baseURL: "https://numbers-excited-dealing-innocent.trycloudflare.com",
 });
 
 api.interceptors.request.use((config) => {

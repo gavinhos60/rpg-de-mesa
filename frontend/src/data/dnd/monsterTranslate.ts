@@ -1,0 +1,93 @@
+/** Tradução leve em tempo de execução para textos de fichas de monstros (EN → PT). */
+
+const PHRASE_PT: Array<[RegExp, string | ((substring: string, ...args: string[]) => string)]> = [
+  [/Multiattack/gi, "Ataque Múltiplo"],
+  [/Melee Weapon Attack:/gi, "Ataque corpo a corpo com arma:"],
+  [/Ranged Weapon Attack:/gi, "Ataque à distância com arma:"],
+  [/Melee Spell Attack:/gi, "Ataque corpo a corpo com magia:"],
+  [/Ranged Spell Attack:/gi, "Ataque à distância com magia:"],
+  [/to hit/gi, "para acertar"],
+  [/Hit:/gi, "Acerto:"],
+  [/one target/gi, "um alvo"],
+  [/one creature/gi, "uma criatura"],
+  [/saving throw/gi, "teste de resistência"],
+  [/bonus action/gi, "ação bônus"],
+  [/as a bonus action/gi, "como ação bônus"],
+  [/on each of its turns/gi, "em cada um de seus turnos"],
+  [/can take the Disengage or Hide action/gi, "pode realizar as ações Desengajar ou Esconder"],
+  [/Disengage/gi, "Desengajar"],
+  [/Nimble Escape/gi, "Fuga Ágil"],
+  [/Magic Resistance/gi, "Resistência à Magia"],
+  [/Legendary Resistance/gi, "Resistência Lendária"],
+  [/Innate Spellcasting/gi, "Conjuração Inata"],
+  [/Spellcasting/gi, "Conjuração"],
+  [/Pack Tactics/gi, "Táticas de Bando"],
+  [/Keen Smell/gi, "Olfato Aguçado"],
+  [/Keen Sight/gi, "Visão Aguçada"],
+  [/Keen Hearing/gi, "Audição Aguçada"],
+  [/Amphibious/gi, "Anfíbio"],
+  [/Immutable Form/gi, "Forma Imutável"],
+  [/darkvision/gi, "visão no escuro"],
+  [/blindsight/gi, "visão às cegas"],
+  [/tremorsense/gi, "sentido sísmico"],
+  [/truesight/gi, "visão verdadeira"],
+  [/passive Perception/gi, "Percepção passiva"],
+  [/passive_perception/gi, "percepção passiva"],
+  [/Strength/g, "Força"],
+  [/Dexterity/g, "Destreza"],
+  [/Constitution/g, "Constituição"],
+  [/Intelligence/g, "Inteligência"],
+  [/Wisdom/g, "Sabedoria"],
+  [/Charisma/g, "Carisma"],
+  [/piercing damage/gi, "dano perfurante"],
+  [/slashing damage/gi, "dano cortante"],
+  [/bludgeoning damage/gi, "dano de concussão"],
+  [/fire damage/gi, "dano de fogo"],
+  [/cold damage/gi, "dano de frio"],
+  [/lightning damage/gi, "dano elétrico"],
+  [/acid damage/gi, "dano de ácido"],
+  [/poison damage/gi, "dano de veneno"],
+  [/necrotic damage/gi, "dano necrótico"],
+  [/radiant damage/gi, "dano radiante"],
+  [/psychic damage/gi, "dano psíquico"],
+  [/thunder damage/gi, "dano de trovão"],
+  [/force damage/gi, "dano de força"],
+  [/stealth/gi, "Furtividade"],
+  [/perception/gi, "Percepção"],
+  [/athletics/gi, "Atletismo"],
+  [/acrobatics/gi, "Acrobacia"],
+  [/insight/gi, "Intuição"],
+  [/survival/gi, "Sobrevivência"],
+  [/Scimitar/gi, "Cimitarra"],
+  [/Shortbow/gi, "Arco curto"],
+  [/Longsword/gi, "Espada longa"],
+  [/Shortsword/gi, "Espada curta"],
+  [/Greataxe/gi, "Machado grande"],
+  [/Bite/gi, "Mordida"],
+  [/Claw/gi, "Garra"],
+  [/Claws/gi, "Garras"],
+  [/Tail/gi, "Cauda"],
+  [/Slam/gi, "Pancada"],
+  [/Common/g, "Comum"],
+  [/walk:/gi, "caminhada:"],
+  [/fly:/gi, "voo:"],
+  [/swim:/gi, "natação:"],
+  [/climb:/gi, "escalada:"],
+  [/burrow:/gi, "escavação:"],
+  [/(\d+)\s*ft\.?/gi, (_, n) => `${Math.round(Number(n) * 0.3 * 10) / 10} m`],
+  [/O\(a\)\s+/g, "O "],
+];
+
+export function translateMonsterText(input: string | null | undefined): string {
+  if (!input) return "";
+  let text = String(input);
+  for (const [pattern, replacement] of PHRASE_PT) {
+    text = text.replace(pattern, replacement as never);
+  }
+  // Open5e às vezes devolve só o número da velocidade
+  text = text.replace(
+    /\b(caminhada|voo|natação|escalada|escavação):\s*(\d+(?:\.\d+)?)(?!\s*m)/gi,
+    "$1: $2 m"
+  );
+  return text;
+}

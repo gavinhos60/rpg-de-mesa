@@ -14,11 +14,11 @@ export function Card({
     return (
         <div
             className={`
-                border border-[#6B4423] 
-                ${hover ? "transition-colors hover:border-[#A67C3D]" : ""}
+                border border-[var(--color-border-strong)] 
+                ${hover ? "transition-colors hover:border-[var(--color-border)]" : ""}
                 ${className}
             `}
-            style={{ backgroundColor: "#DCCBA0" }}
+            style={{ backgroundColor: "var(--color-surface)" }}
         >
             {children}
         </div>

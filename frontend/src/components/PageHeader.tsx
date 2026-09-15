@@ -12,17 +12,17 @@ export function PageHeader({
     action,
 }: PageHeaderProps) {
     return (
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-[#6B4423] pb-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-[var(--color-border-strong)] pb-5">
             <div>
                 <h1
-                    className="text-2xl sm:text-3xl text-[#2A1D14]"
+                    className="text-2xl sm:text-3xl text-[var(--color-ink)]"
                     style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                 >
                     {title}
                 </h1>
 
                 {description && (
-                    <p className="mt-1.5 text-sm sm:text-base text-[#5C4A38]">
+                    <p className="mt-1.5 text-sm sm:text-base text-[var(--color-ink-muted)]">
                         {description}
                     </p>
                 )}

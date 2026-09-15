@@ -1,17 +1,56 @@
-import { Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Outlet, useLocation } from "react-router-dom";
 
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
 export function AppLayout() {
+    const location = useLocation();
+    const [navOpen, setNavOpen] = useState(false);
+    const isPlayRoom = /\/campaigns\/[^/]+\/play\/?$/.test(location.pathname);
+
+    useEffect(() => {
+        setNavOpen(false);
+    }, [location.pathname]);
+
+    useEffect(() => {
+        if (!navOpen) return;
+        const previous = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        return () => {
+            document.body.style.overflow = previous;
+        };
+    }, [navOpen]);
+
     return (
-        <div className="min-h-screen" style={{ backgroundColor: "#1A120B" }}>
-            <Sidebar />
+        <div
+            className="min-h-screen overflow-x-hidden"
+            style={{ backgroundColor: "var(--color-shell)" }}
+        >
+            {navOpen ? (
+                <button
+                    type="button"
+                    aria-label="Fechar menu"
+                    className={`fixed inset-0 z-40 ${isPlayRoom ? "" : "lg:hidden"}`}
+                    style={{ backgroundColor: "var(--color-overlay)" }}
+                    onClick={() => setNavOpen(false)}
+                />
+            ) : null}
 
-            <div className="ml-64">
-                <Header />
+            <Sidebar
+                open={navOpen}
+                onClose={() => setNavOpen(false)}
+                drawerOnly={isPlayRoom}
+            />
 
-                <main>
+            <div className={`min-w-0 ${isPlayRoom ? "" : "lg:ml-64"}`}>
+                <Header
+                    onMenuClick={() => setNavOpen(true)}
+                    forceMenuButton={isPlayRoom}
+                    compact={isPlayRoom}
+                />
+
+                <main className="min-w-0 overflow-x-hidden">
                     <Outlet />
                 </main>
             </div>

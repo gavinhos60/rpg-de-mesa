@@ -27,7 +27,7 @@ interface InventoryRow {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
 
 export function CharacterEquipment({
     data,
@@ -162,10 +162,10 @@ export function CharacterEquipment({
     if (!selectedClass || !startingEquipment) {
         return (
             <div className="border p-8 text-center" style={card}>
-                <p className="text-[#2A1D14]" style={cinzel}>
+                <p className="text-[var(--color-ink)]" style={cinzel}>
                     Selecione uma classe na etapa Identidade
                 </p>
-                <p className="mt-2 text-sm text-[#5C4A38]">
+                <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
                     O equipamento inicial será preparado automaticamente.
                 </p>
             </div>
@@ -175,10 +175,10 @@ export function CharacterEquipment({
     return (
         <div>
             <div className="mb-8">
-                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h2 className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Equipamentos de {selectedClass.name}
                 </h2>
-                <p className="mt-2 text-[#5C4A38]">
+                <p className="mt-2 text-[var(--color-ink-muted)]">
                     Escolha o conjunto inicial do PHB 2014 e acrescente outros
                     itens ao inventário.
                 </p>
@@ -191,7 +191,7 @@ export function CharacterEquipment({
             </div>
 
             <section className="mb-8">
-                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Escolhas da classe
                 </h3>
                 <div className="grid gap-4 md:grid-cols-2">
@@ -203,15 +203,15 @@ export function CharacterEquipment({
 
                         return (
                             <label key={choice.id} className="border p-4" style={card}>
-                                <span className="mb-2 block text-sm text-[#5C4A38]">
+                                <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                                     {choice.label}
                                 </span>
                                 <select
                                     required
                                     value={selectedId}
                                     onChange={(event) => choose(choice.id, event.target.value)}
-                                    className="w-full border bg-[#EBDFC4] px-3 py-2 text-[#2A1D14] outline-none"
-                                    style={{ borderColor: "#A67C3D" }}
+                                    className="w-full border bg-[var(--color-parchment)] px-3 py-2 text-[var(--color-ink)] outline-none"
+                                    style={{ borderColor: "var(--color-border)" }}
                                 >
                                     {choice.alternatives.map((alternative) => (
                                         <option key={alternative.id} value={alternative.id}>
@@ -227,10 +227,10 @@ export function CharacterEquipment({
 
             <section className="mb-8">
                 <div className="mb-4">
-                    <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Adicionar equipamento
                     </h3>
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         Digite para buscar ou escolha um item da lista.
                     </p>
                 </div>
@@ -255,8 +255,8 @@ export function CharacterEquipment({
                                 }
                             }}
                             placeholder="Buscar ou selecionar um equipamento..."
-                            className="w-full border bg-[#EBDFC4] px-4 py-3 text-[#2A1D14] outline-none"
-                            style={{ borderColor: "#6B4423" }}
+                            className="w-full border bg-[var(--color-parchment)] px-4 py-3 text-[var(--color-ink)] outline-none"
+                            style={{ borderColor: "var(--color-border-strong)" }}
                             autoComplete="off"
                             role="combobox"
                             aria-expanded={isListOpen}
@@ -266,15 +266,15 @@ export function CharacterEquipment({
                             <ul
                                 id="equipment-options"
                                 role="listbox"
-                                className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto border bg-[#EBDFC4]"
-                                style={{ borderColor: "#6B4423" }}
+                                className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto border bg-[var(--color-parchment)]"
+                                style={{ borderColor: "var(--color-border-strong)" }}
                             >
                                 {matchingItems.map((equipment) => (
                                     <li key={equipment.id}>
                                         <button
                                             type="button"
                                             role="option"
-                                            className="flex w-full items-center justify-between gap-3 px-4 py-2 text-left hover:bg-[#DCCBA0]"
+                                            className="flex w-full items-center justify-between gap-3 px-4 py-2 text-left hover:bg-[var(--color-surface)]"
                                             onMouseDown={(event) => event.preventDefault()}
                                             onClick={() => {
                                                 setQuery(equipment.name);
@@ -282,14 +282,14 @@ export function CharacterEquipment({
                                             }}
                                         >
                                             <span>{equipment.name}</span>
-                                            <span className="text-xs text-[#8A7860]">
+                                            <span className="text-xs text-[var(--color-ink-soft)]">
                                                 {formatMetricWeight(equipment.weight)}
                                             </span>
                                         </button>
                                     </li>
                                 ))}
                                 {matchingItems.length === 0 && (
-                                    <li className="px-4 py-3 text-sm italic text-[#5C4A38]">
+                                    <li className="px-4 py-3 text-sm italic text-[var(--color-ink-muted)]">
                                         Nenhum equipamento encontrado.
                                     </li>
                                 )}
@@ -308,8 +308,8 @@ export function CharacterEquipment({
                             setQuery("");
                             setIsListOpen(false);
                         }}
-                        className="border bg-[#7A2530] px-6 py-3 text-[#EBDFC4] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-                        style={{ ...cinzel, borderColor: "#5C1D26" }}
+                        className="border bg-[var(--color-crimson)] px-6 py-3 text-[var(--color-ink-inverse)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                        style={{ ...cinzel, borderColor: "var(--color-crimson-deep)" }}
                     >
                         Adicionar
                     </button>
@@ -317,7 +317,7 @@ export function CharacterEquipment({
             </section>
 
             <section>
-                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Inventário
                 </h3>
                 <div className="space-y-3">
@@ -333,8 +333,8 @@ export function CharacterEquipment({
                                 style={card}
                             >
                                 <div>
-                                    <p className="text-[#2A1D14]" style={cinzel}>{equipment.name}</p>
-                                    <p className="mt-1 text-xs text-[#8A7860]">
+                                    <p className="text-[var(--color-ink)]" style={cinzel}>{equipment.name}</p>
+                                    <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
                                         {row.classQuantity > 0 && `${row.classQuantity} inicial`}
                                         {row.classQuantity > 0 && row.manualQuantity > 0 && " • "}
                                         {row.manualQuantity > 0 && `${row.manualQuantity} manual`}
@@ -346,8 +346,8 @@ export function CharacterEquipment({
                                         <button
                                             type="button"
                                             onClick={() => changeManualItem(row.itemId, -1)}
-                                            className="h-8 w-8 border text-[#7A2530]"
-                                            style={{ borderColor: "#A67C3D" }}
+                                            className="h-8 w-8 border text-[var(--color-crimson)]"
+                                            style={{ borderColor: "var(--color-border)" }}
                                             aria-label={`Remover um ${equipment.name}`}
                                         >
                                             −
@@ -359,8 +359,8 @@ export function CharacterEquipment({
                                     <button
                                         type="button"
                                         onClick={() => changeManualItem(row.itemId, 1)}
-                                        className="h-8 w-8 border text-[#3F5B34]"
-                                        style={{ borderColor: "#A67C3D" }}
+                                        className="h-8 w-8 border text-[var(--color-green)]"
+                                        style={{ borderColor: "var(--color-border)" }}
                                         aria-label={`Adicionar um ${equipment.name}`}
                                     >
                                         +
@@ -370,6 +370,30 @@ export function CharacterEquipment({
                         );
                     })}
                 </div>
+
+                {(data.equipment.customItems ?? []).length > 0 && (
+                    <div className="mt-6 space-y-3">
+                        <h4 className="text-base text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
+                            Itens especiais
+                        </h4>
+                        {(data.equipment.customItems ?? []).map((item) => (
+                            <div key={item.id} className="border p-4" style={card}>
+                                <p className="text-[var(--color-ink)]" style={cinzel}>
+                                    {item.name}
+                                    {item.quantity > 1 ? ` × ${item.quantity}` : ""}
+                                </p>
+                                {item.description ? (
+                                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{item.description}</p>
+                                ) : null}
+                                {item.grantedByName ? (
+                                    <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
+                                        Concedido por {item.grantedByName}
+                                    </p>
+                                ) : null}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </section>
         </div>
     );
@@ -407,8 +431,8 @@ function consolidateInventory(
 function SummaryCard({ label, value }: { label: string; value: string | number }) {
     return (
         <div className="border p-4" style={card}>
-            <p className="text-sm text-[#5C4A38]">{label}</p>
-            <p className="mt-1 text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+            <p className="text-sm text-[var(--color-ink-muted)]">{label}</p>
+            <p className="mt-1 text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                 {value}
             </p>
         </div>

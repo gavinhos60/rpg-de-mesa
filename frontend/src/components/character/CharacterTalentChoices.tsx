@@ -30,11 +30,11 @@ export function CharacterTalentChoices({
     return (
         <div className="mt-8 space-y-6">
             <div>
-                <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Escolhas do talento
                 </h3>
 
-                <p className="mt-1 text-sm text-[#5C4A38]">
+                <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                     Algumas opções do talento precisam ser escolhidas.
                 </p>
             </div>
@@ -98,14 +98,14 @@ function TalentChoice({
     const complete = selectedValues.length === choice.count;
 
     return (
-        <section className="border p-5" style={{ backgroundColor: "#EBDFC4", borderColor: "#6B4423" }}>
+        <section className="border p-5" style={{ backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border-strong)" }}>
             <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
-                    <h4 className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h4 className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         {choice.name}
                     </h4>
 
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         {choice.description}
                     </p>
                 </div>
@@ -114,8 +114,8 @@ function TalentChoice({
                     className="shrink-0 px-3 py-1 text-sm"
                     style={{
                         ...cinzel,
-                        backgroundColor: complete ? "#3F5B34" : "#7A2530",
-                        color: "#EBDFC4",
+                        backgroundColor: complete ? "var(--color-green)" : "var(--color-crimson)",
+                        color: "var(--color-ink-inverse)",
                     }}
                 >
                     {selectedValues.length}/{choice.count}
@@ -133,23 +133,27 @@ function TalentChoice({
                             onClick={() => toggleValue(option.id)}
                             className="border p-4 text-left transition-colors"
                             style={{
-                                backgroundColor: selected ? "#DCCBA0" : "#F3EAD4",
-                                borderColor: selected ? "#7A2530" : "#A67C3D",
+                                backgroundColor: selected
+                                    ? "var(--color-surface)"
+                                    : "var(--color-parchment-soft)",
+                                borderColor: selected
+                                    ? "var(--color-crimson)"
+                                    : "var(--color-border)",
                             }}
                         >
                             <div className="flex items-center gap-3">
                                 <div
                                     className="flex h-5 w-5 items-center justify-center border text-xs"
                                     style={{
-                                        borderColor: selected ? "#5C1D26" : "#A67C3D",
-                                        backgroundColor: selected ? "#7A2530" : "transparent",
-                                        color: "#EBDFC4",
+                                        borderColor: selected ? "var(--color-crimson-deep)" : "var(--color-border)",
+                                        backgroundColor: selected ? "var(--color-crimson)" : "transparent",
+                                        color: "var(--color-ink-inverse)",
                                     }}
                                 >
                                     {selected && "✓"}
                                 </div>
 
-                                <span className="text-[#2A1D14]">{option.name}</span>
+                                <span className="text-[var(--color-ink)]">{option.name}</span>
                             </div>
                         </button>
                     );
@@ -157,7 +161,7 @@ function TalentChoice({
             </div>
 
             {selectedValues.length < choice.count && (
-                <p className="mt-4 text-sm text-[#9C7A3C]">
+                <p className="mt-4 text-sm text-[var(--color-border)]">
                     Escolha mais {choice.count - selectedValues.length} opção
                     {choice.count - selectedValues.length !== 1 ? "ões" : ""}.
                 </p>

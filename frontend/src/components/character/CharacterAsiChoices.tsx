@@ -12,8 +12,8 @@ interface CharacterAsiChoicesProps {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
-const nested = { backgroundColor: "#EBDFC4", borderColor: "#A67C3D" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
+const nested = { backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border)" };
 
 export function CharacterAsiChoices({
     data,
@@ -43,10 +43,10 @@ export function CharacterAsiChoices({
     if (milestones.length === 0) {
         return (
             <div className="border p-5" style={card}>
-                <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Melhorias por nível
                 </h3>
-                <p className="mt-2 text-sm text-[#5C4A38]">
+                <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
                     Nenhuma classe alcançou ainda um nível de Melhoria no Valor
                     de Habilidade.
                 </p>
@@ -57,10 +57,10 @@ export function CharacterAsiChoices({
     return (
         <section>
             <div className="mb-5">
-                <h3 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Melhorias por nível
                 </h3>
-                <p className="mt-1 text-sm text-[#5C4A38]">
+                <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                     Cada marco pertence à classe que o concedeu. Escolha +2 em
                     um atributo, +1 em dois atributos diferentes ou um talento.
                 </p>
@@ -90,10 +90,10 @@ export function CharacterAsiChoices({
                         <div key={milestone.key} className="border p-5" style={card}>
                             <div className="mb-4 flex items-start justify-between gap-4">
                                 <div>
-                                    <p className="text-xs uppercase tracking-wide text-[#8A7860]">
+                                    <p className="text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">
                                         Melhoria {index + 1}
                                     </p>
-                                    <h4 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                    <h4 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                         {characterClass?.name ?? milestone.classId} — nível {milestone.classLevel}
                                     </h4>
                                 </div>
@@ -101,8 +101,8 @@ export function CharacterAsiChoices({
                                     className="px-3 py-1 text-xs"
                                     style={{
                                         ...cinzel,
-                                        backgroundColor: selection ? "#3F5B34" : "#7A2530",
-                                        color: "#EBDFC4",
+                                        backgroundColor: selection ? "var(--color-green)" : "var(--color-crimson)",
+                                        color: "var(--color-ink-inverse)",
                                     }}
                                 >
                                     {selection ? "Definida" : "Pendente"}
@@ -151,7 +151,7 @@ export function CharacterAsiChoices({
                                         length: selection.mode === "single" ? 1 : 2,
                                     }).map((_, abilityIndex) => (
                                         <label key={abilityIndex}>
-                                            <span className="mb-2 block text-sm text-[#5C4A38]">
+                                            <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                                                 Atributo {abilityIndex + 1}
                                             </span>
                                             <select
@@ -165,7 +165,7 @@ export function CharacterAsiChoices({
                                                         abilities,
                                                     });
                                                 }}
-                                                className="w-full border px-4 py-3 text-[#2A1D14] outline-none"
+                                                className="w-full border px-4 py-3 text-[var(--color-ink)] outline-none"
                                                 style={nested}
                                             >
                                                 <option value="">Selecione</option>
@@ -203,7 +203,7 @@ export function CharacterAsiChoices({
                             {selection?.kind === "feat" && (
                                 <div>
                                     <label>
-                                        <span className="mb-2 block text-sm text-[#5C4A38]">
+                                        <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                                             Talento
                                         </span>
                                         <select
@@ -216,7 +216,7 @@ export function CharacterAsiChoices({
                                                     featChoices: {},
                                                 })
                                             }
-                                            className="w-full border px-4 py-3 text-[#2A1D14] outline-none"
+                                            className="w-full border px-4 py-3 text-[var(--color-ink)] outline-none"
                                             style={nested}
                                         >
                                             <option value="">Selecione um talento</option>
@@ -237,10 +237,10 @@ export function CharacterAsiChoices({
 
                                     {selectedTalent && (
                                         <div className="mt-4 border p-4" style={nested}>
-                                            <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                            <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                                 {selectedTalent.name}
                                             </p>
-                                            <p className="mt-2 text-sm leading-6 text-[#5C4A38]">
+                                            <p className="mt-2 text-sm leading-6 text-[var(--color-ink-muted)]">
                                                 {selectedTalent.description}
                                             </p>
                                             <CharacterTalentChoices
@@ -284,9 +284,9 @@ function ModeButton({
             onClick={onClick}
             className="border px-3 py-3 text-sm"
             style={{
-                borderColor: active ? "#5C1D26" : "#A67C3D",
-                backgroundColor: active ? "#7A2530" : "#EBDFC4",
-                color: active ? "#EBDFC4" : "#2A1D14",
+                borderColor: active ? "var(--color-crimson-deep)" : "var(--color-border)",
+                backgroundColor: active ? "var(--color-crimson)" : "var(--color-parchment)",
+                color: active ? "var(--color-parchment)" : "var(--color-ink)",
             }}
         >
             {label}

@@ -16,8 +16,11 @@ import {
     getResolvedAbilityScoreChoices,
     getResolvedAbilityScoreIncrease,
     getResolvedRaceTraits,
+    getResolvedSpeed,
     getSelectedSubrace,
 } from "../../data/dnd/raceResolution";
+import { readImageAsDataUrl } from "../../utils/imageUpload";
+import { formatMeters } from "../../utils/units";
 
 interface CharacterIdentityProps {
     data: CharacterFormData;
@@ -50,11 +53,11 @@ const ABILITY_NAMES: Record<string, string> = {
 };
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
-const nested = { backgroundColor: "#EBDFC4", borderColor: "#A67C3D" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
+const nested = { backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border)" };
 const inputClass =
-    "w-full border px-4 py-3 text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]";
-const labelClass = "mb-2 block text-sm text-[#5C4A38]";
+    "w-full border px-4 py-3 text-[var(--color-ink)] outline-none transition-colors focus:border-[var(--color-crimson)]";
+const labelClass = "mb-2 block text-sm text-[var(--color-ink-muted)]";
 const LANGUAGES = [
     "Comum", "Anão", "Élfico", "Gigante", "Gnômico", "Goblin", "Halfling",
     "Orc", "Abissal", "Celestial", "Dracônico", "Dialeto Subterrâneo",
@@ -322,11 +325,11 @@ export function CharacterIdentity({
         <div className="space-y-10">
             <section>
                 <div className="mb-5">
-                    <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h2 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Identidade
                     </h2>
 
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         Defina as informações básicas do seu personagem.
                     </p>
                 </div>
@@ -344,6 +347,73 @@ export function CharacterIdentity({
                             className={inputClass}
                             style={nested}
                         />
+                    </div>
+
+                    <div>
+                        <label className={labelClass} style={cinzel}>Foto do personagem</label>
+                        <div className="flex items-center gap-3">
+                            {data.avatar ? (
+                                <img
+                                    src={data.avatar}
+                                    alt={data.name || "Avatar"}
+                                    className="h-16 w-16 rounded-full object-cover"
+                                    style={{
+                                        backgroundColor: "#1A140F",
+                                        boxShadow: "0 0 0 2px #C09A5A, 0 0 0 4px #6B4423",
+                                    }}
+                                />
+                            ) : (
+                                <div
+                                    className="flex h-16 w-16 items-center justify-center rounded-full text-sm text-[var(--color-ink-inverse)]"
+                                    style={{
+                                        backgroundColor: "var(--color-crimson)",
+                                        boxShadow: "0 0 0 2px #C09A5A, 0 0 0 4px #6B4423",
+                                        fontFamily: "'Cinzel', serif",
+                                    }}
+                                >
+                                    {(data.name || "?").slice(0, 2).toUpperCase()}
+                                </div>
+                            )}
+                            <div className="min-w-0 flex-1 space-y-1">
+                                <label
+                                    className="inline-block cursor-pointer border px-3 py-2 text-sm text-[var(--color-ink-muted)]"
+                                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment)" }}
+                                >
+                                    Enviar foto
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(event) => {
+                                            const file = event.target.files?.[0] ?? null;
+                                            event.target.value = "";
+                                            if (!file) return;
+                                            if (!file.type.startsWith("image/")) {
+                                                window.alert("Selecione um arquivo de imagem.");
+                                                return;
+                                            }
+                                            void readImageAsDataUrl(file, 512)
+                                                .then((url) => updateField("avatar", url))
+                                                .catch(() =>
+                                                    window.alert("Não foi possível ler a imagem.")
+                                                );
+                                        }}
+                                    />
+                                </label>
+                                {data.avatar && (
+                                    <button
+                                        type="button"
+                                        className="ml-2 text-xs text-[var(--color-crimson)] underline"
+                                        onClick={() => updateField("avatar", null)}
+                                    >
+                                        Remover
+                                    </button>
+                                )}
+                                <p className="text-xs text-[var(--color-ink-soft)]">
+                                    Usada na lista, na ficha e no token da mesa.
+                                </p>
+                            </div>
+                        </div>
                     </div>
 
                     <div>
@@ -435,10 +505,10 @@ export function CharacterIdentity({
             {selectedBackground && (
                 <section>
                     <div className="mb-5">
-                        <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h2 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Antecedente: {selectedBackground.name}
                         </h2>
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Proficiências, recursos e equipamento adquiridos antes
                             do início da aventura.
                         </p>
@@ -446,8 +516,8 @@ export function CharacterIdentity({
 
                     <div className="grid gap-4 md:grid-cols-3">
                         <div className="border p-4" style={card}>
-                            <span className="text-sm text-[#5C4A38]">Perícias</span>
-                            <p className="mt-1 text-[#2A1D14]">
+                            <span className="text-sm text-[var(--color-ink-muted)]">Perícias</span>
+                            <p className="mt-1 text-[var(--color-ink)]">
                                 {selectedBackground.skillProficiencies
                                     .map((skill) => {
                                         const names: Record<string, string> = {
@@ -474,25 +544,25 @@ export function CharacterIdentity({
                             </p>
                         </div>
                         <div className="border p-4" style={card}>
-                            <span className="text-sm text-[#5C4A38]">Moedas iniciais</span>
-                            <p className="mt-1 text-xl text-[#2A1D14]" style={cinzel}>
+                            <span className="text-sm text-[var(--color-ink-muted)]">Moedas iniciais</span>
+                            <p className="mt-1 text-xl text-[var(--color-ink)]" style={cinzel}>
                                 {selectedBackground.startingGoldGp} PO
                             </p>
                         </div>
                         <div className="border p-4" style={card}>
-                            <span className="text-sm text-[#5C4A38]">Característica</span>
-                            <p className="mt-1 text-[#2A1D14]" style={cinzel}>
+                            <span className="text-sm text-[var(--color-ink-muted)]">Característica</span>
+                            <p className="mt-1 text-[var(--color-ink)]" style={cinzel}>
                                 {selectedBackground.feature.name}
                             </p>
-                            <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                            <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
                                 {selectedBackground.feature.description}
                             </p>
                         </div>
                     </div>
 
                     {(selectedBackground.toolProficiencies?.length ?? 0) > 0 && (
-                        <p className="mt-4 text-sm text-[#5C4A38]">
-                            <span className="text-[#2A1D14]" style={cinzel}>Ferramentas:</span>{" "}
+                        <p className="mt-4 text-sm text-[var(--color-ink-muted)]">
+                            <span className="text-[var(--color-ink)]" style={cinzel}>Ferramentas:</span>{" "}
                             {selectedBackground.toolProficiencies
                                 ?.map((id) => getEquipmentItem(id)?.name ?? formatChoiceName(id))
                                 .join(", ")}
@@ -577,11 +647,11 @@ export function CharacterIdentity({
             {selectedRace && (
                 <section>
                     <div className="mb-5">
-                        <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h2 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Detalhes da raça
                         </h2>
 
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Características recebidas pela escolha da raça
                             {selectedSubrace ? ` e da ${selectedSubrace.name}` : ""}.
                         </p>
@@ -589,30 +659,30 @@ export function CharacterIdentity({
 
                     <div className="grid gap-4 md:grid-cols-3">
                         <div className="border p-4" style={card}>
-                            <span className="text-sm text-[#5C4A38]">Origem</span>
-                            <div className="mt-1 text-sm text-[#2A1D14]">
+                            <span className="text-sm text-[var(--color-ink-muted)]">Origem</span>
+                            <div className="mt-1 text-sm text-[var(--color-ink)]">
                                 {getRaceDisplayName(data) || selectedRace.name}
                             </div>
                             {selectedSubrace?.description && (
-                                <p className="mt-2 text-xs leading-5 text-[#5C4A38]">
+                                <p className="mt-2 text-xs leading-5 text-[var(--color-ink-muted)]">
                                     {selectedSubrace.description}
                                 </p>
                             )}
                         </div>
 
-                        {selectedRace.speed !== undefined && (
+                        {(selectedSubrace?.speed ?? selectedRace.speed) !== undefined && (
                             <div className="border p-4" style={card}>
-                                <span className="text-sm text-[#5C4A38]">Deslocamento</span>
-                                <div className="mt-1 text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
-                                    {selectedRace.speed} pés
+                                <span className="text-sm text-[var(--color-ink-muted)]">Deslocamento</span>
+                                <div className="mt-1 text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
+                                    {formatMeters(getResolvedSpeed(data, selectedRace.speed ?? 30))}
                                 </div>
                             </div>
                         )}
 
                         {selectedRace.languages && selectedRace.languages.length > 0 && (
                             <div className="border p-4" style={card}>
-                                <span className="text-sm text-[#5C4A38]">Idiomas</span>
-                                <div className="mt-1 text-sm text-[#2A1D14]">
+                                <span className="text-sm text-[var(--color-ink-muted)]">Idiomas</span>
+                                <div className="mt-1 text-sm text-[var(--color-ink)]">
                                     {selectedRace.languages.join(", ")}
                                 </div>
                             </div>
@@ -620,13 +690,14 @@ export function CharacterIdentity({
 
                         {Object.keys(resolvedAbilityIncrease).length > 0 && (
                             <div className="border p-4" style={card}>
-                                <span className="text-sm text-[#5C4A38]">Atributos</span>
-                                <div className="mt-1 text-sm text-[#2A1D14]">
+                                <span className="text-sm text-[var(--color-ink-muted)]">Atributos</span>
+                                <div className="mt-1 text-sm text-[var(--color-ink)]">
                                     {Object.entries(resolvedAbilityIncrease)
-                                        .map(
-                                            ([ability, value]) =>
-                                                `${ABILITY_NAMES[ability] ?? ability} +${value}`
-                                        )
+                                        .map(([ability, value]) => {
+                                            const signed =
+                                                value >= 0 ? `+${value}` : `${value}`;
+                                            return `${ABILITY_NAMES[ability] ?? ability} ${signed}`;
+                                        })
                                         .join(", ")}
                                 </div>
                             </div>
@@ -637,11 +708,11 @@ export function CharacterIdentity({
                         <div className="mt-5 space-y-3">
                             {resolvedRaceTraits.map((trait) => (
                                 <div key={trait.id} className="border p-4" style={card}>
-                                    <h3 className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                    <h3 className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                         {trait.name}
                                     </h3>
 
-                                    <p className="mt-1 text-sm leading-6 text-[#5C4A38]">
+                                    <p className="mt-1 text-sm leading-6 text-[var(--color-ink-muted)]">
                                         {trait.description}
                                     </p>
                                 </div>
@@ -654,11 +725,11 @@ export function CharacterIdentity({
             {resolvedAbilityChoices && (
                 <section>
                     <div className="mb-5">
-                        <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h2 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Escolhas raciais
                         </h2>
 
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Escolha os atributos que receberão os bônus da sua raça.
                         </p>
                     </div>
@@ -698,11 +769,11 @@ export function CharacterIdentity({
             <section>
                 <div className="mb-5 flex items-center justify-between gap-4">
                     <div>
-                        <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h2 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Classes
                         </h2>
 
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Escolha uma ou mais classes para o personagem.
                         </p>
                     </div>
@@ -715,9 +786,9 @@ export function CharacterIdentity({
                 {data.classes.length === 0 ? (
                     <div
                         className="border border-dashed p-8 text-center"
-                        style={{ borderColor: "#A67C3D", backgroundColor: "#DCCBA0" }}
+                        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
                     >
-                        <p className="text-[#5C4A38]">Nenhuma classe adicionada.</p>
+                        <p className="text-[var(--color-ink-muted)]">Nenhuma classe adicionada.</p>
                     </div>
                 ) : (
                     <div className="space-y-5">
@@ -736,7 +807,7 @@ export function CharacterIdentity({
                                     style={card}
                                 >
                                     <div className="mb-5 flex items-center justify-between">
-                                        <h3 className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                        <h3 className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                             Classe {index + 1}
                                         </h3>
 
@@ -744,7 +815,7 @@ export function CharacterIdentity({
                                             <button
                                                 type="button"
                                                 onClick={() => removeClass(index)}
-                                                className="text-sm text-[#8B3A2E] hover:text-[#7A2530] transition-colors"
+                                                className="text-sm text-[var(--color-danger)] hover:text-[var(--color-crimson)] transition-colors"
                                             >
                                                 Remover
                                             </button>
@@ -830,11 +901,11 @@ export function CharacterIdentity({
 
             <section>
                 <div className="mb-5">
-                    <h2 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h2 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Talento Inicial
                     </h2>
 
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         Todo personagem recebe um talento adicional no nível 1.
                     </p>
                 </div>
@@ -859,33 +930,33 @@ export function CharacterIdentity({
                     <div className="mt-5 border p-5" style={card}>
                         <div className="flex items-start justify-between gap-4">
                             <div>
-                                <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                     {selectedTalent.name}
                                 </h3>
 
-                                <p className="mt-1 text-xs text-[#8A7860]">
+                                <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
                                     {selectedTalent.source}
                                 </p>
                             </div>
 
                             <span
                                 className="px-3 py-1 text-xs"
-                                style={{ ...cinzel, backgroundColor: "#9C7A3C", color: "#EBDFC4" }}
+                                style={{ ...cinzel, backgroundColor: "#9C7A3C", color: "var(--color-ink-inverse)" }}
                             >
                                 Talento Inicial
                             </span>
                         </div>
 
-                        <p className="mt-4 text-sm leading-6 text-[#2A1D14]">
+                        <p className="mt-4 text-sm leading-6 text-[var(--color-ink)]">
                             {selectedTalent.description}
                         </p>
 
                         <div className="mt-5 border p-4" style={nested}>
-                            <span className="text-xs uppercase text-[#8A7860]" style={cinzel}>
+                            <span className="text-xs uppercase text-[var(--color-ink-soft)]" style={cinzel}>
                                 Pré-requisitos
                             </span>
 
-                            <p className="mt-1 text-sm text-[#2A1D14]">
+                            <p className="mt-1 text-sm text-[var(--color-ink)]">
                                 {formatPrerequisites(selectedTalent)}
                             </p>
                         </div>

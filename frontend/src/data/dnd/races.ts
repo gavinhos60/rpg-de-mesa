@@ -40,6 +40,38 @@ export const DND_RACES: CharacterRace[] = [
                     "Você possui resistência natural contra venenos.",
             },
         ],
+        subraces: [
+            {
+                id: "hill",
+                name: "Anão da Colina",
+                description:
+                    "Anões das colinas são mais sábios e resistentes, conhecidos por sua vitalidade excepcional.",
+                abilityScoreIncrease: { wisdom: 1 },
+                traits: [
+                    {
+                        id: "dwarven-toughness",
+                        name: "Anão Robusto",
+                        description:
+                            "Seu máximo de pontos de vida aumenta em 1, e você ganha 1 ponto de vida adicional sempre que sobe de nível.",
+                    },
+                ],
+            },
+            {
+                id: "mountain",
+                name: "Anão da Montanha",
+                description:
+                    "Anões das montanhas são fortes e treinados para a guerra desde cedo.",
+                abilityScoreIncrease: { strength: 2 },
+                traits: [
+                    {
+                        id: "dwarven-armor-training",
+                        name: "Treinamento com Armaduras Anãs",
+                        description:
+                            "Você tem proficiência com armaduras leves e médias.",
+                    },
+                ],
+            },
+        ],
     },
     {
         id: "vampir",
@@ -125,6 +157,66 @@ export const DND_RACES: CharacterRace[] = [
                     "Você possui vantagens contra determinados efeitos mágicos.",
             },
         ],
+        subraces: [
+            {
+                id: "high-elf",
+                name: "Alto Elfo",
+                description:
+                    "Altos elfes são mestres da magia e da cultura élfica clássica.",
+                abilityScoreIncrease: { intelligence: 1 },
+                traits: [
+                    {
+                        id: "cantrip",
+                        name: "Truque",
+                        description:
+                            "Você conhece um truque à sua escolha da lista de magias de mago. Inteligência é sua habilidade de conjuração para ele.",
+                    },
+                ],
+            },
+            {
+                id: "wood-elf",
+                name: "Elfo da Floresta",
+                description:
+                    "Elfos da floresta são ágeis e sábios, em harmonia com a natureza selvagem.",
+                abilityScoreIncrease: { wisdom: 1 },
+                speed: 35,
+                traits: [
+                    {
+                        id: "mask-of-the-wild",
+                        name: "Máscara da Natureza",
+                        description:
+                            "Você pode tentar se esconder mesmo quando estiver apenas levemente obscurecido por folhagem, chuva forte, neve caindo, névoa ou outros fenômenos naturais.",
+                    },
+                ],
+            },
+            {
+                id: "drow",
+                name: "Elfo Negro (Drow)",
+                description:
+                    "Os drow são elfos do Subterrâneo, conhecidos por sua magia e afinidade com a escuridão.",
+                abilityScoreIncrease: { charisma: 1 },
+                traits: [
+                    {
+                        id: "superior-darkvision",
+                        name: "Visão no Escuro Superior",
+                        description:
+                            "Seu alcance de visão no escuro aumenta para 36 m.",
+                    },
+                    {
+                        id: "sunlight-sensitivity",
+                        name: "Sensibilidade à Luz Solar",
+                        description:
+                            "Você tem desvantagem em jogadas de ataque e em testes de Sabedoria (Percepção) baseados na visão quando você, o alvo do seu ataque ou o que você está tentando perceber estiver sob luz solar direta.",
+                    },
+                    {
+                        id: "drow-magic",
+                        name: "Magia Drow",
+                        description:
+                            "Você conhece o truque Luzes Dançantes. No 3º nível, pode conjurar Luz das Fadas uma vez por descanso longo. No 5º nível, pode conjurar Escuridão uma vez por descanso longo. Carisma é sua habilidade de conjuração para essas magias.",
+                    },
+                ],
+            },
+        ],
     },
 
     {
@@ -178,6 +270,50 @@ export const DND_RACES: CharacterRace[] = [
                 name: "Esperteza Gnômica",
                 description:
                     "Você possui grande resistência mental contra determinados efeitos mágicos.",
+            },
+        ],
+        subraces: [
+            {
+                id: "forest-gnome",
+                name: "Gnomo da Floresta",
+                description:
+                    "Gnomos da floresta são furtivos e têm um dom natural para ilusões e comunicação com animais pequenos.",
+                abilityScoreIncrease: { dexterity: 1 },
+                traits: [
+                    {
+                        id: "natural-illusionist",
+                        name: "Ilusionista Natural",
+                        description:
+                            "Você conhece o truque Ilusão Menor. Inteligência é sua habilidade de conjuração para ele.",
+                    },
+                    {
+                        id: "speak-with-small-beasts",
+                        name: "Falar com Bestas Pequenas",
+                        description:
+                            "Através de sons e gestos, você pode comunicar ideias simples a bestas Pequenas ou menores. Elas podem compreender sua intenção, embora você não tenha habilidade especial de compreendê-las em retorno.",
+                    },
+                ],
+            },
+            {
+                id: "rock-gnome",
+                name: "Gnomo das Rochas",
+                description:
+                    "Gnomos das rochas são inventores e artesãos, com afinidade por mecanismos e história de artefatos.",
+                abilityScoreIncrease: { constitution: 1 },
+                traits: [
+                    {
+                        id: "artificers-lore",
+                        name: "Conhecimento de Artífice",
+                        description:
+                            "Sempre que fizer um teste de Inteligência (História) relacionado a itens mágicos, objetos alquímicos ou dispositivos tecnológicos, você pode adicionar o dobro do seu bônus de proficiência em vez do bônus de proficiência normal.",
+                    },
+                    {
+                        id: "tinker",
+                        name: "Engenhoca",
+                        description:
+                            "Você tem proficiência com ferramentas de artífice. Usando essas ferramentas, pode gastar 1 hora e 10 po em materiais para construir um dispositivo Miúdo (CA 5, 1 PV). Você pode manter até três desses dispositivos ao mesmo tempo.",
+                    },
+                ],
             },
         ],
     },
@@ -463,6 +599,45 @@ export const DND_RACES: CharacterRace[] = [
                 name: "Treinamento Kenku",
                 description:
                     "Você é proficiente em sua escolha de duas das seguintes perícias: Acrobacia, Enganação, Furtividade e Prestidigitação.",
+            },
+        ],
+    },
+
+    {
+        id: "homem-rato",
+        name: "Homem-Rato",
+        abilityScoreIncrease: {
+            dexterity: 2,
+            constitution: 1,
+            charisma: -1,
+        },
+        speed: 30,
+        languages: ["Comum"],
+        skillProficiencies: ["perception", "stealth"],
+        traits: [
+            {
+                id: "homem-rato-metamorfo",
+                name: "Metamorfo",
+                description:
+                    "Você pode usar uma ação para se transformar em um híbrido de rato-humanoide ou em um rato gigante, ou voltar à sua forma verdadeira (humanoide). Suas estatísticas, além do tamanho, permanecem as mesmas em cada forma. Equipamento vestido ou carregado não se transforma. Você volta à forma verdadeira se morrer.",
+            },
+            {
+                id: "homem-rato-olfato",
+                name: "Olfato Aguçado",
+                description:
+                    "Você tem vantagem em testes de Sabedoria (Percepção) que dependam do olfato.",
+            },
+            {
+                id: "homem-rato-imunidade",
+                name: "Imunidade a Armas Mundanas",
+                description:
+                    "Você tem imunidade a dano de concussão, perfurante e cortante de armas não mágicas que não sejam de prata.",
+            },
+            {
+                id: "homem-rato-mordida",
+                name: "Mordida (Forma Híbrida ou de Rato)",
+                description:
+                    "Nas formas híbrida ou de rato, você pode morder. Ataque corpo a corpo com arma: use sua Destreza ou Força (a que for maior) para acertar, alcance 1,5 m, um alvo. Acerto: 1d4 + modificador de Destreza (ou Força) de dano perfurante. Se o alvo for um humanoide, ele deve ser bem-sucedido em um teste de resistência de Constituição (CD 8 + proficiência + modificador de Constituição) ou fica amaldiçoado com a licantropia de homem-rato.",
             },
         ],
     },

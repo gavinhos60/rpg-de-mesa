@@ -12,13 +12,19 @@ enum CampaignRole {
   PLAYER
 }
 
+enum GameSessionStatus {
+  ACTIVE
+  CLOSED
+}
+
 model User {
-  id         Int              @id @default(autoincrement())
-  name       String
-  email      String           @unique
-  password   String?
-  characters Character[]
-  campaigns  CampaignMember[]
+  id              Int              @id @default(autoincrement())
+  name            String
+  email           String           @unique
+  password        String?
+  characters      Character[]
+  campaigns       CampaignMember[]
+  startedSessions GameSession[]    @relation("SessionStarter")
 }
 
 model Campaign {
@@ -26,6 +32,7 @@ model Campaign {
   name       String
   characters Character[]
   members    CampaignMember[]
+  sessions   GameSession[]
 }
 
 model CampaignMember {
@@ -35,8 +42,8 @@ model CampaignMember {
   campaignId Int
   role       CampaignRole
 
-  user       User         @relation(fields: [userId], references: [id])
-  campaign   Campaign     @relation(fields: [campaignId], references: [id])
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaign   Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   @@unique([userId, campaignId])
 }
@@ -54,5 +61,20 @@ model Character {
   player     User      @relation(fields: [playerId], references: [id])
 
   campaignId Int?
-  campaign   Campaign? @relation(fields: [campaignId], references: [id])
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
+
+model GameSession {
+  id          Int               @id @default(autoincrement())
+  campaignId  Int
+  campaign    Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  status      GameSessionStatus @default(ACTIVE)
+  roomCode    String
+  state       Json?
+  startedById Int
+  startedBy   User              @relation("SessionStarter", fields: [startedById], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([campaignId, status])
 }

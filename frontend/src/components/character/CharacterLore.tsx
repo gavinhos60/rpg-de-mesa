@@ -12,7 +12,7 @@ interface CharacterLoreProps {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
 
 export function CharacterLore({ data, onChange }: CharacterLoreProps) {
     const primaryClass = data.classes[0]
@@ -42,10 +42,10 @@ export function CharacterLore({ data, onChange }: CharacterLoreProps) {
     return (
         <div>
             <div className="mb-8">
-                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h2 className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     História do personagem
                 </h2>
-                <p className="mt-2 text-[#5C4A38]">
+                <p className="mt-2 text-[var(--color-ink-muted)]">
                     Defina os pontos de vida e registre a origem, os feitos e os
                     segredos do herói.
                 </p>
@@ -53,7 +53,7 @@ export function CharacterLore({ data, onChange }: CharacterLoreProps) {
 
             <div className="mb-8 grid gap-4 sm:grid-cols-2">
                 <label className="border p-4" style={card}>
-                    <span className="mb-2 block text-sm text-[#5C4A38]">
+                    <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                         Pontos de vida *
                     </span>
                     <input
@@ -68,10 +68,10 @@ export function CharacterLore({ data, onChange }: CharacterLoreProps) {
                                 hitPoints: Number.isNaN(value) ? previous.hitPoints : Math.max(1, value),
                             }));
                         }}
-                        className="w-full border bg-[#EBDFC4] px-4 py-3 text-2xl text-[#2A1D14] outline-none"
-                        style={{ ...cinzel, borderColor: "#6B4423" }}
+                        className="w-full border bg-[var(--color-parchment)] px-4 py-3 text-2xl text-[var(--color-ink)] outline-none"
+                        style={{ ...cinzel, borderColor: "var(--color-border-strong)" }}
                     />
-                    <span className="mt-2 block text-xs text-[#8A7860]">
+                    <span className="mt-2 block text-xs text-[var(--color-ink-soft)]">
                         {primaryClass
                             ? `Sugestão do 1º nível: ${suggestedHitPoints} (1d${primaryClass.hitDie} + CON)`
                             : "Selecione uma classe para ver a sugestão inicial."}
@@ -143,7 +143,7 @@ export function CharacterLore({ data, onChange }: CharacterLoreProps) {
             </div>
 
             <label className="block">
-                <span className="mb-2 block text-sm text-[#5C4A38]">
+                <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                     Lore *
                 </span>
                 <textarea
@@ -157,13 +157,13 @@ export function CharacterLore({ data, onChange }: CharacterLoreProps) {
                     }
                     rows={12}
                     placeholder="Onde nasceu, o que o move, quem perdeu e o que ainda procura..."
-                    className="w-full resize-y border bg-[#EBDFC4] px-4 py-3 leading-7 text-[#2A1D14] outline-none"
-                    style={{ borderColor: "#6B4423" }}
+                    className="w-full resize-y border bg-[var(--color-parchment)] px-4 py-3 leading-7 text-[var(--color-ink)] outline-none"
+                    style={{ borderColor: "var(--color-border-strong)" }}
                 />
             </label>
 
             <label className="mt-8 block">
-                <span className="mb-2 block text-sm text-[#5C4A38]">
+                <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                     Missões *
                 </span>
                 <textarea
@@ -177,10 +177,10 @@ export function CharacterLore({ data, onChange }: CharacterLoreProps) {
                     }
                     rows={8}
                     placeholder="Juramentos em aberto, contratos aceitos, dívidas a cobrar e objetivos da campanha..."
-                    className="w-full resize-y border bg-[#EBDFC4] px-4 py-3 leading-7 text-[#2A1D14] outline-none"
-                    style={{ borderColor: "#6B4423" }}
+                    className="w-full resize-y border bg-[var(--color-parchment)] px-4 py-3 leading-7 text-[var(--color-ink)] outline-none"
+                    style={{ borderColor: "var(--color-border-strong)" }}
                 />
-                <span className="mt-2 block text-xs text-[#8A7860]">
+                <span className="mt-2 block text-xs text-[var(--color-ink-soft)]">
                     Uma missão por linha deixa a ficha final mais organizada.
                 </span>
             </label>
@@ -203,7 +203,7 @@ function LoreField({
 }) {
     return (
         <label className="block">
-            <span className="mb-2 block text-sm text-[#5C4A38]">
+            <span className="mb-2 block text-sm text-[var(--color-ink-muted)]">
                 {label}{required ? " *" : ""}
             </span>
             <textarea
@@ -212,8 +212,8 @@ function LoreField({
                 onChange={(event) => onChange(event.target.value)}
                 rows={4}
                 placeholder={placeholder}
-                className="w-full resize-y border bg-[#EBDFC4] px-4 py-3 leading-6 text-[#2A1D14] outline-none"
-                style={{ borderColor: "#6B4423" }}
+                className="w-full resize-y border bg-[var(--color-parchment)] px-4 py-3 leading-6 text-[var(--color-ink)] outline-none"
+                style={{ borderColor: "var(--color-border-strong)" }}
             />
         </label>
     );

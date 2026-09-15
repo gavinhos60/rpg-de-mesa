@@ -8,8 +8,10 @@ import {
     getRaceDisplayName,
     getResolvedRaceTraits,
     getResolvedSkillProficiencies,
+    getResolvedSpeed,
     getSelectedSubrace,
 } from "../../data/dnd/raceResolution";
+import { formatMeters } from "../../utils/units";
 import {
     getClassResourceSummaries,
     getUnlockedClassAbilities,
@@ -33,12 +35,15 @@ interface AbilityTabsProps {
     onChange?: Dispatch<SetStateAction<CharacterFormData>>;
     /** Visual denser for the final sheet parchment look */
     variant?: "wizard" | "sheet";
+    /** Clique em traço/habilidade (ficha em jogo). */
+    onUseFeature?: (name: string, description: string) => void;
 }
 
 export function CharacterAbilityTabs({
     data,
     onChange,
     variant = "wizard",
+    onUseFeature,
 }: AbilityTabsProps) {
     const race = DND_RACES.find((item) => item.id === data.raceId);
     const subrace = getSelectedSubrace(data);
@@ -81,14 +86,20 @@ export function CharacterAbilityTabs({
 
     const card =
         variant === "sheet"
-            ? { borderColor: "#C09A5A", backgroundColor: "#F3E7C3" }
-            : { borderColor: "#6B4423", backgroundColor: "#DCCBA0" };
+            ? {
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-parchment-soft)",
+              }
+            : {
+                  borderColor: "var(--color-border-strong)",
+                  backgroundColor: "var(--color-surface)",
+              };
 
     return (
         <section>
             <div
                 className="mb-4 flex overflow-x-auto border-y"
-                style={{ borderColor: variant === "sheet" ? "#A67C3D" : "#6B4423" }}
+                style={{ borderColor: variant === "sheet" ? "var(--color-border)" : "var(--color-border-strong)" }}
             >
                 {tabs.map((tab) => {
                     const active = tab.id === resolvedTab;
@@ -102,17 +113,17 @@ export function CharacterAbilityTabs({
                                 ...cinzel,
                                 backgroundColor: active
                                     ? variant === "sheet"
-                                        ? "#7A2530"
-                                        : "#7A2530"
+                                        ? "var(--color-crimson)"
+                                        : "var(--color-crimson)"
                                     : "transparent",
-                                color: active ? "#F3E6C4" : "#5C4A38",
+                                color: active ? "var(--color-ink-inverse)" : "var(--color-ink-muted)",
                             }}
                         >
                             <span className="block text-sm">{tab.label}</span>
                             {tab.subtitle && (
                                 <span
                                     className="mt-0.5 block text-[11px]"
-                                    style={{ color: active ? "#E8C9A0" : "#8A7860" }}
+                                    style={{ color: active ? "var(--color-ink-inverse)" : "var(--color-ink-soft)" }}
                                 >
                                     {tab.subtitle}
                                 </span>
@@ -123,7 +134,13 @@ export function CharacterAbilityTabs({
             </div>
 
             {resolvedTab === "race" ? (
-                <RaceAbilitiesPanel data={data} race={race} subraceName={subrace?.name} card={card} />
+                <RaceAbilitiesPanel
+                    data={data}
+                    race={race}
+                    subraceName={subrace?.name}
+                    card={card}
+                    onUseFeature={onUseFeature}
+                />
             ) : (
                 classTabs
                     .filter((tab) => tab.id === resolvedTab)
@@ -139,6 +156,7 @@ export function CharacterAbilityTabs({
                             subclassName={tab.subclassName}
                             card={card}
                             variant={variant}
+                            onUseFeature={onUseFeature}
                         />
                     ))
             )}
@@ -151,15 +169,17 @@ function RaceAbilitiesPanel({
     race,
     subraceName,
     card,
+    onUseFeature,
 }: {
     data: CharacterFormData;
     race: CharacterRace | undefined;
     subraceName?: string;
     card: { borderColor: string; backgroundColor: string };
+    onUseFeature?: (name: string, description: string) => void;
 }) {
     if (!race) {
         return (
-            <p className="text-sm italic text-[#5C4A38]">
+            <p className="text-sm italic text-[var(--color-ink-muted)]">
                 Selecione uma raça na etapa Identidade para ver os traços raciais.
             </p>
         );
@@ -171,47 +191,72 @@ function RaceAbilitiesPanel({
     return (
         <div>
             <div className="mb-4 border p-4" style={card}>
-                <p className="text-sm text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <p className="text-sm text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     {getRaceDisplayName(data) || race.name}
                 </p>
-                <p className="mt-1 text-xs text-[#8A7860]">
-                    Deslocamento {race.speed ?? 30} ft
+                <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
+                    Deslocamento {formatMeters(getResolvedSpeed(data, race.speed ?? 30))}
                     {race.languages?.length
                         ? ` · Idiomas: ${race.languages.join(", ")}`
                         : ""}
                 </p>
                 {subraceName && (
-                    <p className="mt-2 text-xs text-[#5C4A38]">Subraça: {subraceName}</p>
+                    <p className="mt-2 text-xs text-[var(--color-ink-muted)]">Subraça: {subraceName}</p>
                 )}
                 {skillProficiencies.length > 0 && (
-                    <p className="mt-2 text-xs text-[#5C4A38]">
+                    <p className="mt-2 text-xs text-[var(--color-ink-muted)]">
                         Proficiências fixas: {skillProficiencies.join(", ")}
                     </p>
                 )}
             </div>
 
             {traits.length === 0 ? (
-                <p className="text-sm italic text-[#5C4A38]">
+                <p className="text-sm italic text-[var(--color-ink-muted)]">
                     Esta raça não possui traços adicionais catalogados.
                 </p>
             ) : (
                 <div className="space-y-3">
-                    {traits.map((trait) => (
-                        <article key={trait.id} className="border p-4" style={card}>
-                            <div className="mb-2 flex items-center justify-between gap-2">
-                                <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
-                                    {trait.name}
-                                </p>
-                                <span
-                                    className="px-2 py-1 text-xs"
-                                    style={{ ...cinzel, backgroundColor: "#5C4A1E", color: "#EBDFC4" }}
+                    {traits.map((trait) => {
+                        const body = (
+                            <>
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
+                                        {trait.name}
+                                    </p>
+                                    <span
+                                        className="px-2 py-1 text-xs"
+                                        style={{ ...cinzel, backgroundColor: "#5C4A1E", color: "var(--color-ink-inverse)" }}
+                                    >
+                                        Raça
+                                    </span>
+                                </div>
+                                <p className="text-sm leading-6 text-[var(--color-ink-muted)]">{trait.description}</p>
+                                {onUseFeature && (
+                                    <p className="mt-2 text-[10px] uppercase tracking-wide text-[var(--color-crimson)]">
+                                        Clique para enviar ao chat
+                                    </p>
+                                )}
+                            </>
+                        );
+                        if (onUseFeature) {
+                            return (
+                                <button
+                                    key={trait.id}
+                                    type="button"
+                                    onClick={() => onUseFeature(trait.name, trait.description)}
+                                    className="block w-full border p-4 text-left transition hover:border-[var(--color-crimson)]"
+                                    style={card}
                                 >
-                                    Raça
-                                </span>
-                            </div>
-                            <p className="text-sm leading-6 text-[#5C4A38]">{trait.description}</p>
-                        </article>
-                    ))}
+                                    {body}
+                                </button>
+                            );
+                        }
+                        return (
+                            <article key={trait.id} className="border p-4" style={card}>
+                                {body}
+                            </article>
+                        );
+                    })}
                 </div>
             )}
         </div>
@@ -228,6 +273,7 @@ function ClassAbilitiesPanel({
     subclassName,
     card,
     variant,
+    onUseFeature,
 }: {
     data: CharacterFormData;
     onChange?: Dispatch<SetStateAction<CharacterFormData>>;
@@ -238,6 +284,7 @@ function ClassAbilitiesPanel({
     subclassName?: string;
     card: { borderColor: string; backgroundColor: string };
     variant: "wizard" | "sheet";
+    onUseFeature?: (name: string, description: string) => void;
 }) {
     const abilities = getUnlockedClassAbilities(classId, subclassId, level)
         .filter((ability) => !ability.id.includes("-asi-"))
@@ -258,18 +305,18 @@ function ClassAbilitiesPanel({
                 <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {resources.map((resource) => (
                         <div key={resource.name} className="border p-4" style={card}>
-                            <p className="text-xs text-[#8A7860]">{className}</p>
-                            <p className="mt-1 text-[#2A1D14]" style={cinzel}>
+                            <p className="text-xs text-[var(--color-ink-soft)]">{className}</p>
+                            <p className="mt-1 text-[var(--color-ink)]" style={cinzel}>
                                 {resource.name}
                             </p>
                             <p
-                                className="mt-2 text-2xl text-[#7A2530]"
+                                className="mt-2 text-2xl text-[var(--color-crimson)]"
                                 style={{ ...cinzel, fontWeight: 600 }}
                             >
                                 {resource.value}
                             </p>
                             {resource.detail && (
-                                <p className="mt-1 text-xs text-[#8A7860]">{resource.detail}</p>
+                                <p className="mt-1 text-xs text-[var(--color-ink-soft)]">{resource.detail}</p>
                             )}
                         </div>
                     ))}
@@ -287,7 +334,7 @@ function ClassAbilitiesPanel({
             )}
 
             {abilities.length === 0 ? (
-                <p className="text-sm italic text-[#5C4A38]">
+                <p className="text-sm italic text-[var(--color-ink-muted)]">
                     Nenhuma habilidade desbloqueada para {className} neste nível.
                 </p>
             ) : (
@@ -299,6 +346,7 @@ function ClassAbilitiesPanel({
                             className={className}
                             subclassName={subclassName}
                             card={card}
+                            onUseFeature={onUseFeature}
                         />
                     ))}
                 </div>
@@ -350,10 +398,10 @@ function FourElementsPicker({
         <div className="mb-6 border p-4" style={card}>
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h4 className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h4 className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Discípulo dos Elementos
                     </h4>
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         Sintonização Elemental é permanente. Escolha mais {limit} disciplina
                         {limit === 1 ? "" : "s"} disponíveis para o seu nível.
                     </p>
@@ -362,8 +410,8 @@ function FourElementsPicker({
                     className="px-3 py-1 text-sm"
                     style={{
                         ...cinzel,
-                        backgroundColor: selected.length >= limit ? "#3F5B34" : "#7A2530",
-                        color: "#EBDFC4",
+                        backgroundColor: selected.length >= limit ? "var(--color-green)" : "var(--color-crimson)",
+                        color: "var(--color-ink-inverse)",
                     }}
                 >
                     {selected.length} / {limit}
@@ -375,15 +423,15 @@ function FourElementsPicker({
                     <div
                         key={discipline.id}
                         className="border px-3 py-2"
-                        style={{ borderColor: "#A67C3D", backgroundColor: "#EBDFC4" }}
+                        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment)" }}
                     >
                         <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm text-[#2A1D14]" style={cinzel}>
+                            <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
                                 {discipline.name}
                             </p>
-                            <span className="text-xs text-[#8A7860]">Fixa · Ki {discipline.kiCost}</span>
+                            <span className="text-xs text-[var(--color-ink-soft)]">Fixa · Ki {discipline.kiCost}</span>
                         </div>
-                        <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                        <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
                             {discipline.description}
                         </p>
                     </div>
@@ -393,7 +441,7 @@ function FourElementsPicker({
             {readOnly ? (
                 <ul className="space-y-2">
                     {selected.length === 0 ? (
-                        <li className="text-sm italic text-[#5C4A38]">
+                        <li className="text-sm italic text-[var(--color-ink-muted)]">
                             Nenhuma disciplina adicional selecionada.
                         </li>
                     ) : (
@@ -404,17 +452,17 @@ function FourElementsPicker({
                                 <li
                                     key={id}
                                     className="border px-3 py-2"
-                                    style={{ borderColor: "#A67C3D", backgroundColor: "#EBDFC4" }}
+                                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment)" }}
                                 >
                                     <div className="flex items-center justify-between gap-2">
-                                        <p className="text-sm text-[#2A1D14]" style={cinzel}>
+                                        <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
                                             {discipline.name}
                                         </p>
-                                        <span className="text-xs text-[#8A7860]">
+                                        <span className="text-xs text-[var(--color-ink-soft)]">
                                             Nv. {discipline.minLevel}+ · Ki {discipline.kiCost}
                                         </span>
                                     </div>
-                                    <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                    <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
                                         {discipline.description}
                                     </p>
                                 </li>
@@ -436,22 +484,22 @@ function FourElementsPicker({
                                 onClick={() => toggle(discipline.id)}
                                 className="border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40"
                                 style={{
-                                    borderColor: isSelected ? "#7A2530" : "#A67C3D",
-                                    backgroundColor: isSelected ? "#DCCBA0" : "#EBDFC4",
+                                    borderColor: isSelected ? "var(--color-crimson)" : "var(--color-border)",
+                                    backgroundColor: isSelected ? "var(--color-surface)" : "var(--color-parchment)",
                                 }}
                             >
                                 <div className="flex items-start justify-between gap-2">
-                                    <span className="text-sm text-[#2A1D14]" style={cinzel}>
+                                    <span className="text-sm text-[var(--color-ink)]" style={cinzel}>
                                         {discipline.name}
                                     </span>
-                                    <span className="text-xs text-[#7A2530]">
+                                    <span className="text-xs text-[var(--color-crimson)]">
                                         {isSelected ? "✓" : "+"}
                                     </span>
                                 </div>
-                                <p className="mt-1 text-xs text-[#8A7860]">
+                                <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
                                     Nv. {discipline.minLevel}+ · Ki {discipline.kiCost}
                                 </p>
-                                <p className="mt-1 text-xs leading-5 text-[#5C4A38]">
+                                <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
                                     {discipline.description}
                                 </p>
                             </button>
@@ -468,20 +516,22 @@ function AbilityCard({
     className,
     subclassName,
     card,
+    onUseFeature,
 }: {
     ability: ClassAbility;
     className: string;
     subclassName?: string;
     card: { borderColor: string; backgroundColor: string };
+    onUseFeature?: (name: string, description: string) => void;
 }) {
-    return (
-        <article className="border p-4" style={card}>
+    const body = (
+        <>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         {ability.name}
                     </p>
-                    <p className="text-xs text-[#8A7860]">
+                    <p className="text-xs text-[var(--color-ink-soft)]">
                         {className}
                         {ability.subclassId && subclassName ? ` · ${subclassName}` : ""}
                         {ability.source ? ` · ${ability.source}` : ""}
@@ -491,14 +541,38 @@ function AbilityCard({
                     className="px-2 py-1 text-xs"
                     style={{
                         ...cinzel,
-                        backgroundColor: ability.subclassId ? "#3F5B34" : "#7A2530",
-                        color: "#EBDFC4",
+                        backgroundColor: ability.subclassId ? "var(--color-green)" : "var(--color-crimson)",
+                        color: "var(--color-ink-inverse)",
                     }}
                 >
                     Nível {ability.level}
                 </span>
             </div>
-            <p className="text-sm leading-6 text-[#5C4A38]">{ability.description}</p>
+            <p className="text-sm leading-6 text-[var(--color-ink-muted)]">{ability.description}</p>
+            {onUseFeature && (
+                <p className="mt-2 text-[10px] uppercase tracking-wide text-[var(--color-crimson)]">
+                    Clique para enviar ao chat
+                </p>
+            )}
+        </>
+    );
+
+    if (onUseFeature) {
+        return (
+            <button
+                type="button"
+                onClick={() => onUseFeature(ability.name, ability.description)}
+                className="block w-full border p-4 text-left transition hover:border-[var(--color-crimson)]"
+                style={card}
+            >
+                {body}
+            </button>
+        );
+    }
+
+    return (
+        <article className="border p-4" style={card}>
+            {body}
         </article>
     );
 }

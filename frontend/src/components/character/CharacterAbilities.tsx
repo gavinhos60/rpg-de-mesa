@@ -36,8 +36,8 @@ function formatModifier(value: number): string {
 }
 
 const cinzel = { fontFamily: "'Cinzel', serif" } as const;
-const card = { backgroundColor: "#DCCBA0", borderColor: "#6B4423" };
-const nested = { backgroundColor: "#EBDFC4", borderColor: "#A67C3D" };
+const card = { backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-strong)" };
+const nested = { backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border)" };
 
 export function CharacterAbilities({
     data,
@@ -209,11 +209,11 @@ export function CharacterAbilities({
     return (
         <div className="space-y-8">
             <div>
-                <h2 className="text-2xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h2 className="text-2xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Atributos
                 </h2>
 
-                <p className="mt-2 text-[#5C4A38]">
+                <p className="mt-2 text-[var(--color-ink-muted)]">
                     Defina os valores dos seis atributos do personagem. Os
                     bônus raciais e do talento serão aplicados automaticamente.
                 </p>
@@ -222,11 +222,11 @@ export function CharacterAbilities({
             {selectedRace && (
                 <div className="border p-5" style={card}>
                     <div className="mb-4">
-                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Raça: {getRaceDisplayName(data) || selectedRace.name}
                         </h3>
 
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Bônus concedidos pela sua raça
                             {data.subraceId ? " e subraça" : ""}.
                         </p>
@@ -246,7 +246,7 @@ export function CharacterAbilities({
                                 <span
                                     key={ability}
                                     className="border px-3 py-1.5 text-sm"
-                                    style={{ borderColor: "#3F5B34", color: "#3F5B34" }}
+                                    style={{ borderColor: "var(--color-green)", color: "var(--color-green)" }}
                                 >
                                     {abilityData.name} +{bonus}
                                 </span>
@@ -257,15 +257,15 @@ export function CharacterAbilities({
             )}
 
             {hasRaceAbilityChoices && (
-                <div className="border p-5" style={{ backgroundColor: "#DCCBA0", borderColor: "#7A2530" }}>
+                <div className="border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-crimson)" }}>
                     <div className="mb-5">
-                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Escolhas de atributo da raça
                         </h3>
 
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Escolha{" "}
-                            <span className="text-[#7A2530]" style={cinzel}>
+                            <span className="text-[var(--color-crimson)]" style={cinzel}>
                                 {raceChoiceCount}
                             </span>{" "}
                             atributos diferentes para receber o bônus racial.
@@ -278,7 +278,7 @@ export function CharacterAbilities({
 
                             return (
                                 <div key={index}>
-                                    <label className="mb-2 block text-sm text-[#5C4A38]" style={cinzel}>
+                                    <label className="mb-2 block text-sm text-[var(--color-ink-muted)]" style={cinzel}>
                                         Escolha {index + 1}
                                     </label>
 
@@ -290,7 +290,7 @@ export function CharacterAbilities({
                                                 event.target.value as Ability
                                             )
                                         }
-                                        className="w-full border px-4 py-3 text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]"
+                                        className="w-full border px-4 py-3 text-[var(--color-ink)] outline-none transition-colors focus:border-[var(--color-crimson)]"
                                         style={nested}
                                     >
                                         <option value="">Selecione um atributo</option>
@@ -330,8 +330,8 @@ export function CharacterAbilities({
                         })}
                     </div>
 
-                    <div className="mt-4 border p-3 text-sm text-[#5C4A38]" style={nested}>
-                        <span className="text-[#2A1D14]" style={cinzel}>Exemplo:</span>{" "}
+                    <div className="mt-4 border p-3 text-sm text-[var(--color-ink-muted)]" style={nested}>
+                        <span className="text-[var(--color-ink)]" style={cinzel}>Exemplo:</span>{" "}
                         um Meio-Elfo recebe +2 em Carisma e pode escolher dois
                         atributos diferentes para receber +1 em cada.
                     </div>
@@ -339,13 +339,13 @@ export function CharacterAbilities({
             )}
 
             {selectedTalent && (
-                <div className="border p-5" style={{ backgroundColor: "#DCCBA0", borderColor: "#9C7A3C" }}>
+                <div className="border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "#9C7A3C" }}>
                     <div className="mb-4">
-                        <h3 className="text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                        <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                             Talento Inicial: {selectedTalent.name}
                         </h3>
 
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Bônus de atributo concedidos pelo talento serão
                             aplicados abaixo.
                         </p>
@@ -353,7 +353,7 @@ export function CharacterAbilities({
 
                     {talentAbilityChoices.length > 0 && (
                         <div>
-                            <label className="mb-2 block text-sm text-[#5C4A38]" style={cinzel}>
+                            <label className="mb-2 block text-sm text-[var(--color-ink-muted)]" style={cinzel}>
                                 Atributo beneficiado pelo talento
                             </label>
 
@@ -362,7 +362,7 @@ export function CharacterAbilities({
                                 onChange={(event) =>
                                     updateTalentAbility(event.target.value as Ability)
                                 }
-                                className="w-full border px-4 py-3 text-[#2A1D14] outline-none transition-colors focus:border-[#9C7A3C]"
+                                className="w-full border px-4 py-3 text-[var(--color-ink)] outline-none transition-colors focus:border-[#9C7A3C]"
                                 style={nested}
                             >
                                 <option value="">Selecione um atributo</option>
@@ -389,7 +389,7 @@ export function CharacterAbilities({
 
                     {selectedTalent.abilityScoreIncrease &&
                         talentAbilityChoices.length === 0 && (
-                            <div className="border p-3 text-sm text-[#5C4A38]" style={nested}>
+                            <div className="border p-3 text-sm text-[var(--color-ink-muted)]" style={nested}>
                                 Este talento possui um bônus específico de
                                 atributo que será aplicado automaticamente.
                             </div>
@@ -401,11 +401,11 @@ export function CharacterAbilities({
 
             <div>
                 <div className="mb-5">
-                    <h3 className="text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                    <h3 className="text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                         Valores dos atributos
                     </h3>
 
-                    <p className="mt-1 text-sm text-[#5C4A38]">
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                         O valor informado abaixo representa o valor base antes
                         dos bônus raciais e do talento.
                     </p>
@@ -430,25 +430,25 @@ export function CharacterAbilities({
                             <div key={ability.id} className="border p-5" style={card}>
                                 <div className="mb-4 flex items-center justify-between">
                                     <div>
-                                        <p className="text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                        <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                             {ability.name}
                                         </p>
 
-                                        <p className="text-xs text-[#8A7860]">
+                                        <p className="text-xs text-[var(--color-ink-soft)]">
                                             {ability.shortName}
                                         </p>
                                     </div>
 
                                     <div
                                         className="px-3 py-1.5 text-lg"
-                                        style={{ ...cinzel, backgroundColor: "#7A2530", color: "#EBDFC4" }}
+                                        style={{ ...cinzel, backgroundColor: "var(--color-crimson)", color: "var(--color-ink-inverse)" }}
                                     >
                                         {formatModifier(modifier)}
                                     </div>
                                 </div>
 
                                 <div className="mb-4">
-                                    <label className="mb-2 block text-xs text-[#8A7860]" style={cinzel}>
+                                    <label className="mb-2 block text-xs text-[var(--color-ink-soft)]" style={cinzel}>
                                         Valor base
                                     </label>
 
@@ -460,11 +460,11 @@ export function CharacterAbilities({
                                         onChange={(event) =>
                                             updateAbility(ability.id, Number(event.target.value))
                                         }
-                                        className="w-full border px-4 py-3 text-center text-xl text-[#2A1D14] outline-none transition-colors focus:border-[#7A2530]"
+                                        className="w-full border px-4 py-3 text-center text-xl text-[var(--color-ink)] outline-none transition-colors focus:border-[var(--color-crimson)]"
                                         style={{ ...nested, fontFamily: "'Cinzel', serif" }}
                                     />
 
-                                    <p className="mt-2 text-xs text-[#8A7860]">
+                                    <p className="mt-2 text-xs text-[var(--color-ink-soft)]">
                                         {abilityBonuses[ability.id] > 0
                                             ? `Máximo ${maxBase} de base — com +${abilityBonuses[ability.id]} de bônus chega ao teto de ${MAX_ABILITY_SCORE}.`
                                             : `Máximo ${MAX_ABILITY_SCORE}.`}
@@ -473,50 +473,50 @@ export function CharacterAbilities({
 
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
-                                        <span className="text-[#5C4A38]">Base</span>
-                                        <span className="text-[#2A1D14]">{baseValue}</span>
+                                        <span className="text-[var(--color-ink-muted)]">Base</span>
+                                        <span className="text-[var(--color-ink)]">{baseValue}</span>
                                     </div>
 
                                     {raceBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-[#5C4A38]">Raça</span>
-                                            <span style={{ color: "#3F5B34" }}>+{raceBonus}</span>
+                                            <span className="text-[var(--color-ink-muted)]">Raça</span>
+                                            <span style={{ color: "var(--color-green)" }}>+{raceBonus}</span>
                                         </div>
                                     )}
 
                                     {raceChoiceBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-[#5C4A38]">Escolha racial</span>
-                                            <span style={{ color: "#3F5B34" }}>+{raceChoiceBonus}</span>
+                                            <span className="text-[var(--color-ink-muted)]">Escolha racial</span>
+                                            <span style={{ color: "var(--color-green)" }}>+{raceChoiceBonus}</span>
                                         </div>
                                     )}
 
                                     {talentBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-[#5C4A38]">Talento</span>
+                                            <span className="text-[var(--color-ink-muted)]">Talento</span>
                                             <span style={{ color: "#9C7A3C" }}>+{talentBonus}</span>
                                         </div>
                                     )}
 
                                     {progressionBonus !== 0 && (
                                         <div className="flex justify-between">
-                                            <span className="text-[#5C4A38]">Melhorias por nível</span>
-                                            <span style={{ color: "#7A2530" }}>
+                                            <span className="text-[var(--color-ink-muted)]">Melhorias por nível</span>
+                                            <span style={{ color: "var(--color-crimson)" }}>
                                                 +{progressionBonus}
                                             </span>
                                         </div>
                                     )}
 
-                                    <div className="my-2 border-t border-[#A67C3D]/50" />
+                                    <div className="my-2 border-t border-[var(--color-border)]/50" />
 
                                     <div className="flex justify-between">
-                                        <span className="text-[#5C4A38]" style={cinzel}>Total</span>
-                                        <span className="text-[#2A1D14]" style={cinzel}>{totalValue}</span>
+                                        <span className="text-[var(--color-ink-muted)]" style={cinzel}>Total</span>
+                                        <span className="text-[var(--color-ink)]" style={cinzel}>{totalValue}</span>
                                     </div>
 
                                     <div className="flex justify-between">
-                                        <span className="text-[#5C4A38]">Modificador</span>
-                                        <span className="text-[#7A2530]" style={cinzel}>
+                                        <span className="text-[var(--color-ink-muted)]">Modificador</span>
+                                        <span className="text-[var(--color-crimson)]" style={cinzel}>
                                             {formatModifier(modifier)}
                                         </span>
                                     </div>
@@ -528,7 +528,7 @@ export function CharacterAbilities({
             </div>
 
             <div className="border p-5" style={card}>
-                <h3 className="mb-4 text-lg text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                     Resumo dos atributos
                 </h3>
 
@@ -539,15 +539,15 @@ export function CharacterAbilities({
 
                         return (
                             <div key={ability.id} className="border p-3 text-center" style={nested}>
-                                <p className="text-xs uppercase text-[#8A7860]" style={cinzel}>
+                                <p className="text-xs uppercase text-[var(--color-ink-soft)]" style={cinzel}>
                                     {ability.shortName}
                                 </p>
 
-                                <p className="mt-1 text-xl text-[#2A1D14]" style={{ ...cinzel, fontWeight: 600 }}>
+                                <p className="mt-1 text-xl text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
                                     {total}
                                 </p>
 
-                                <p className="text-sm text-[#7A2530]">
+                                <p className="text-sm text-[var(--color-crimson)]">
                                     {formatModifier(modifier)}
                                 </p>
                             </div>

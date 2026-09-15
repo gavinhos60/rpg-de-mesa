@@ -95,20 +95,20 @@ export function AddCharacterToCampaignModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] px-4">
             <div
                 className="w-full max-w-lg border-2 p-6"
-                style={{ backgroundColor: "#DCCBA0", borderColor: "#4A2F18" }}
+                style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-wood)" }}
             >
                 <div className="mb-6 flex items-start justify-between">
                     <div>
                         <h2
-                            className="text-xl text-[#2A1D14]"
+                            className="text-xl text-[var(--color-ink)]"
                             style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                         >
                             Adicionar ficha
                         </h2>
-                        <p className="mt-1 text-sm text-[#5C4A38]">
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Escolha um personagem que você já criou para entrar nesta
                             campanha.
                         </p>
@@ -117,7 +117,7 @@ export function AddCharacterToCampaignModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="text-xl leading-none text-[#6B4423] hover:text-[#7A2530]"
+                        className="text-xl leading-none text-[var(--color-border-strong)] hover:text-[var(--color-crimson)]"
                     >
                         ×
                     </button>
@@ -125,13 +125,13 @@ export function AddCharacterToCampaignModal({
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                     {loading && (
-                        <p className="text-sm italic text-[#5C4A38]">
+                        <p className="text-sm italic text-[var(--color-ink-muted)]">
                             Carregando suas fichas...
                         </p>
                     )}
 
                     {!loading && characters.length === 0 && (
-                        <p className="text-sm text-[#5C4A38]">
+                        <p className="text-sm text-[var(--color-ink-muted)]">
                             Você não tem fichas disponíveis. Crie um personagem em
                             “Meus personagens” e volte aqui.
                         </p>
@@ -148,12 +148,12 @@ export function AddCharacterToCampaignModal({
                                         onClick={() => setSelectedId(character.id)}
                                         className="w-full border p-4 text-left transition-colors"
                                         style={{
-                                            borderColor: selected ? "#7A2530" : "#A67C3D",
-                                            backgroundColor: selected ? "#EBDFC4" : "#E8D7AD",
+                                            borderColor: selected ? "var(--color-crimson)" : "var(--color-border)",
+                                            backgroundColor: selected ? "var(--color-parchment)" : "#E8D7AD",
                                         }}
                                     >
                                         <p
-                                            className="text-[#2A1D14]"
+                                            className="text-[var(--color-ink)]"
                                             style={{
                                                 fontFamily: "'Cinzel', serif",
                                                 fontWeight: 600,
@@ -161,12 +161,12 @@ export function AddCharacterToCampaignModal({
                                         >
                                             {character.name}
                                         </p>
-                                        <p className="mt-1 text-sm text-[#5C4A38]">
+                                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                                             {character.race} · {character.className} · Nv.{" "}
                                             {character.level}
                                         </p>
                                         {character.campaign?.name && (
-                                            <p className="mt-1 text-xs text-[#8A7860]">
+                                            <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
                                                 Atualmente em: {character.campaign.name}
                                             </p>
                                         )}
@@ -180,12 +180,12 @@ export function AddCharacterToCampaignModal({
                         <div
                             className="flex items-center gap-3 border px-4 py-3 text-sm"
                             style={{
-                                backgroundColor: "#E8D4C4",
-                                borderColor: "#7A2530",
-                                color: "#5C1D26",
+                                backgroundColor: "var(--color-parchment-soft)",
+                                borderColor: "var(--color-crimson)",
+                                color: "var(--color-crimson-deep)",
                             }}
                         >
-                            <BrokenSealIcon className="h-7 w-7 shrink-0" color="#7A2530" />
+                            <BrokenSealIcon className="h-7 w-7 shrink-0" color="var(--color-crimson)" />
                             {error}
                         </div>
                     )}
@@ -194,7 +194,7 @@ export function AddCharacterToCampaignModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="text-[#5C4A38] transition-colors hover:text-[#2A1D14]"
+                            className="text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)]"
                         >
                             Cancelar
                         </button>

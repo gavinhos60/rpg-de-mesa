@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { CharacterSheetReview } from "../components/character/CharacterSheetReview";
+import { RibbonButton } from "../components/icons/MedievalIcons";
 import { DND_BACKGROUNDS } from "../data/dnd/backgrounds";
 import {
     getCharacterById,
@@ -11,6 +12,7 @@ import type { CharacterFormData } from "../types/character";
 
 export function CharacterSheet() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const [character, setCharacter] = useState<SavedCharacter | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
@@ -49,67 +51,99 @@ export function CharacterSheet() {
     }, [id]);
 
     const sheet = character?.sheet as CharacterFormData | null | undefined;
+    const reviewData: CharacterFormData | null = sheet
+        ? { ...sheet, avatar: sheet.avatar ?? character?.avatar ?? null }
+        : null;
 
     return (
         <div
-            className="min-h-[calc(100vh-4rem)] text-[#2A1D14]"
+            className="min-h-[calc(100vh-4rem)] text-[var(--color-ink)]"
             style={{
                 fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "#EBDFC4",
+                backgroundColor: "var(--color-parchment)",
                 backgroundImage:
                     "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
             }}
         >
-            <div className="max-w-6xl mx-auto px-6 py-10">
-                <Link
-                    to="/characters"
-                    className="mb-5 inline-block text-sm text-[#5C4A38] hover:text-[#2A1D14] transition-colors"
-                >
-                    ← Voltar para personagens
-                </Link>
+            <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6 sm:py-10">
+                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                    <Link
+                        to="/characters"
+                        className="text-sm text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
+                    >
+                        ← Voltar para personagens
+                    </Link>
+                    {character && (
+                        <RibbonButton
+                            type="button"
+                            onClick={() =>
+                                navigate(`/characters/${character.id}/edit`, {
+                                    state: { character },
+                                })
+                            }
+                        >
+                            Editar ficha
+                        </RibbonButton>
+                    )}
+                </div>
 
                 {loading && (
-                    <p className="mt-6 text-[#5C4A38]">Abrindo o manuscrito...</p>
+                    <p className="mt-6 text-[var(--color-ink-muted)]">Abrindo o manuscrito...</p>
                 )}
 
                 {!loading && error && (
                     <div
-                        className="mt-6 border border-[#7A2530] p-6 text-[#7A2530]"
-                        style={{ backgroundColor: "#DCCBA0" }}
+                        className="mt-6 border border-[var(--color-crimson)] p-6 text-[var(--color-crimson)]"
+                        style={{ backgroundColor: "var(--color-surface)" }}
                     >
                         {error}
                     </div>
                 )}
 
-                {!loading && character && !sheet && (
+                {!loading && character && !reviewData && (
                     <div
-                        className="mt-6 border border-[#6B4423] p-6"
-                        style={{ backgroundColor: "#DCCBA0" }}
+                        className="mt-6 border border-[var(--color-border-strong)] p-6"
+                        style={{ backgroundColor: "var(--color-surface)" }}
                     >
-                        <h1
-                            className="text-3xl text-[#2A1D14]"
-                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-                        >
-                            {character.name}
-                        </h1>
-                        <p className="mt-2 text-[#5C4A38]">
-                            {character.race} · {character.className} · Nível{" "}
-                            {character.level}
-                        </p>
-                        <p className="mt-4 text-sm italic text-[#8A7860]">
-                            Este personagem foi criado pelo formulário rápido da
-                            campanha e ainda não possui ficha completa.
+                        <div className="flex items-center gap-4">
+                            {character.avatar ? (
+                                <img
+                                    src={character.avatar}
+                                    alt={character.name}
+                                    className="h-16 w-16 rounded-full object-cover"
+                                    style={{ boxShadow: "0 0 0 2px var(--color-border)" }}
+                                />
+                            ) : null}
+                            <div>
+                                <h1
+                                    className="text-3xl text-[var(--color-ink)]"
+                                    style={{
+                                        fontFamily: "'Cinzel', serif",
+                                        fontWeight: 600,
+                                    }}
+                                >
+                                    {character.name}
+                                </h1>
+                                <p className="mt-2 text-[var(--color-ink-muted)]">
+                                    {character.race} · {character.className} · Nível{" "}
+                                    {character.level}
+                                </p>
+                            </div>
+                        </div>
+                        <p className="mt-4 text-sm italic text-[var(--color-ink-soft)]">
+                            Este personagem ainda não possui ficha completa. Use{" "}
+                            <strong>Editar ficha</strong> para completar.
                         </p>
                     </div>
                 )}
 
-                {!loading && character && sheet && (
+                {!loading && character && reviewData && (
                     <div
-                        className="mt-6 border border-[#6B4423] p-6 md:p-8"
-                        style={{ backgroundColor: "#DCCBA0" }}
+                        className="mt-6 border border-[var(--color-border-strong)] p-6 md:p-8"
+                        style={{ backgroundColor: "var(--color-surface)" }}
                     >
                         <CharacterSheetReview
-                            data={sheet}
+                            data={reviewData}
                             backgrounds={DND_BACKGROUNDS}
                         />
                     </div>

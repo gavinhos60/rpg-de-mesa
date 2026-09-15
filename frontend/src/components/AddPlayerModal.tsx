@@ -55,21 +55,21 @@ export function AddPlayerModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] px-4">
             <div
                 className="w-full max-w-md border-2 p-6"
-                style={{ backgroundColor: "#DCCBA0", borderColor: "#4A2F18" }}
+                style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-wood)" }}
             >
                 <div className="flex items-start justify-between mb-6">
                     <div>
                         <h2
-                            className="text-xl text-[#2A1D14]"
+                            className="text-xl text-[var(--color-ink)]"
                             style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                         >
                             Adicionar jogador
                         </h2>
 
-                        <p className="text-sm text-[#5C4A38] mt-1">
+                        <p className="text-sm text-[var(--color-ink-muted)] mt-1">
                             Informe o email de um usuário cadastrado.
                         </p>
                     </div>
@@ -77,7 +77,7 @@ export function AddPlayerModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="text-[#6B4423] hover:text-[#7A2530] text-xl leading-none"
+                        className="text-[var(--color-border-strong)] hover:text-[var(--color-crimson)] text-xl leading-none"
                     >
                         ×
                     </button>
@@ -87,7 +87,7 @@ export function AddPlayerModal({
                     <div>
                         <label
                             htmlFor="player-email"
-                            className="block text-sm text-[#5C4A38] mb-2"
+                            className="block text-sm text-[var(--color-ink-muted)] mb-2"
                             style={{ fontFamily: "'Cinzel', serif" }}
                         >
                             Email do jogador
@@ -101,17 +101,17 @@ export function AddPlayerModal({
                             placeholder="jogador@email.com"
                             autoFocus
                             required
-                            className="w-full border px-4 py-3 text-[#2A1D14] outline-none focus:border-[#7A2530] transition-colors"
-                            style={{ backgroundColor: "#EBDFC4", borderColor: "#A67C3D" }}
+                            className="w-full border px-4 py-3 text-[var(--color-ink)] outline-none focus:border-[var(--color-crimson)] transition-colors"
+                            style={{ backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border)" }}
                         />
                     </div>
 
                     {error && (
                         <div
                             className="flex items-center gap-3 border px-4 py-3 text-sm"
-                            style={{ backgroundColor: "#E8D4C4", borderColor: "#7A2530", color: "#5C1D26" }}
+                            style={{ backgroundColor: "var(--color-parchment-soft)", borderColor: "var(--color-crimson)", color: "var(--color-crimson-deep)" }}
                         >
-                            <BrokenSealIcon className="w-7 h-7 shrink-0" color="#7A2530" />
+                            <BrokenSealIcon className="w-7 h-7 shrink-0" color="var(--color-crimson)" />
                             {error}
                         </div>
                     )}
@@ -120,7 +120,7 @@ export function AddPlayerModal({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="text-[#5C4A38] hover:text-[#2A1D14] transition-colors"
+                            className="text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors"
                         >
                             Cancelar
                         </button>

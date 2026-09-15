@@ -14,7 +14,7 @@ export function EmblemIcon({ className }: { className?: string }) {
 export function WaxSealIcon({
     className,
     label,
-    color = "#7A2530",
+    color = "var(--color-crimson)",
 }: {
     className?: string;
     label: string | number;
@@ -23,7 +23,7 @@ export function WaxSealIcon({
     return (
         <div className={className}>
             <svg viewBox="0 0 44 44" className="w-full h-full">
-                <circle cx="22" cy="22" r="20" fill={color} stroke="#5C1D26" strokeWidth="1.5" />
+                <circle cx="22" cy="22" r="20" fill={color} stroke="var(--color-crimson-deep)" strokeWidth="1.5" />
                 <circle cx="22" cy="22" r="15" fill="none" stroke="#C9A461" strokeWidth="1" opacity="0.6" />
                 <text
                     x="22"
@@ -31,7 +31,7 @@ export function WaxSealIcon({
                     textAnchor="middle"
                     fontFamily="Cinzel, serif"
                     fontSize="14"
-                    fill="#EBDFC4"
+                    fill="var(--color-parchment)"
                 >
                     {label}
                 </text>
@@ -40,7 +40,7 @@ export function WaxSealIcon({
     );
 }
 
-export function BrokenSealIcon({ className, color = "#6B4423" }: { className?: string; color?: string }) {
+export function BrokenSealIcon({ className, color = "var(--color-border-strong)" }: { className?: string; color?: string }) {
     return (
         <svg viewBox="0 0 64 64" className={className} fill="none">
             <path d="M32 6 L32 58" stroke={color} strokeWidth="1" strokeDasharray="3 3" />
@@ -94,9 +94,9 @@ export function RibbonButton({
     return (
         <button
             {...props}
-            className={`relative text-[#EBDFC4] px-6 py-2.5 cursor-pointer  hover:bg-[#5C1D26] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#7A2530] ${className}`}
+            className={`relative text-[var(--color-ink-inverse)] px-6 py-2.5 cursor-pointer  hover:bg-[var(--color-crimson-deep)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[var(--color-crimson)] ${className}`}
             style={{
-                backgroundColor: "#7A2530",
+                backgroundColor: "var(--color-crimson)",
                 fontFamily: "'Cinzel', serif",
                 clipPath:
                     "polygon(0% 0%, 100% 0%, 100% 70%, 92% 100%, 85% 70%, 15% 70%, 8% 100%, 0% 70%)",

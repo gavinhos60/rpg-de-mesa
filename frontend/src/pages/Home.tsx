@@ -40,10 +40,10 @@ export function Home() {
             className="min-h-screen flex items-center justify-center px-4"
             style={{
                 fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "#150E09",
+                backgroundColor: "var(--color-shell-deep)",
                 backgroundImage:
                     "repeating-linear-gradient(115deg, rgba(184,147,78,0.035) 0px, rgba(184,147,78,0.035) 1px, transparent 1px, transparent 5px)",
-                color: "#EBDFC4",
+                color: "var(--color-ink-inverse)",
             }}
         >
             <div className="text-center max-w-lg">
@@ -51,7 +51,7 @@ export function Home() {
 
                 <h1
                     className="text-5xl"
-                    style={{ fontFamily: "'Cinzel', serif", fontWeight: 600, color: "#EBDFC4" }}
+                    style={{ fontFamily: "'Cinzel', serif", fontWeight: 600, color: "var(--color-ink-inverse)" }}
                 >
                     RPG Hub
                 </h1>
@@ -60,7 +60,7 @@ export function Home() {
                     Plataforma de RPG de mesa
                 </p>
 
-                <div className="mt-10 border-t border-[#4A2F18] pt-8">
+                <div className="mt-10 border-t border-[var(--color-border-wood)] pt-8">
                     {loading && (
                         <div className="flex items-center justify-center gap-3 text-[#B8934E]">
                             <QuillIcon className="w-5 h-5 animate-pulse" />
@@ -70,8 +70,8 @@ export function Home() {
 
                     {!loading && apiStatus && (
                         <div
-                            className="inline-flex flex-col items-center border border-[#6B4423] px-8 py-6"
-                            style={{ backgroundColor: "#DCCBA0", color: "#2A1D14" }}
+                            className="inline-flex flex-col items-center border border-[var(--color-border-strong)] px-8 py-6"
+                            style={{ backgroundColor: "var(--color-surface)", color: "var(--color-ink)" }}
                         >
                             <WaxSealIcon className="w-10 h-10" label="✓" />
 
@@ -82,7 +82,7 @@ export function Home() {
                                 Arquivos conectados
                             </p>
 
-                            <p className="text-[#5C4A38] mt-1 text-sm">
+                            <p className="text-[var(--color-ink-muted)] mt-1 text-sm">
                                 {apiStatus.message}
                             </p>
                         </div>
@@ -90,10 +90,10 @@ export function Home() {
 
                     {!loading && error && (
                         <div
-                            className="inline-flex flex-col items-center border border-[#6B4423] px-8 py-6"
-                            style={{ backgroundColor: "#DCCBA0", color: "#2A1D14" }}
+                            className="inline-flex flex-col items-center border border-[var(--color-border-strong)] px-8 py-6"
+                            style={{ backgroundColor: "var(--color-surface)", color: "var(--color-ink)" }}
                         >
-                            <BrokenSealIcon className="w-10 h-10" color="#7A2530" />
+                            <BrokenSealIcon className="w-10 h-10" color="var(--color-crimson)" />
 
                             <p
                                 className="mt-3 text-lg"
@@ -102,7 +102,7 @@ export function Home() {
                                 O selo foi rompido
                             </p>
 
-                            <p className="text-[#5C4A38] mt-1 text-sm">
+                            <p className="text-[var(--color-ink-muted)] mt-1 text-sm">
                                 Não foi possível conectar ao backend.
                             </p>
                         </div>

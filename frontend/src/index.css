@@ -1,7 +1,56 @@
 @import "tailwindcss";
 
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --color-shell: #1a120b;
+  --color-shell-deep: #150e09;
+  --color-panel: #2a1d14;
+  --color-surface: #dccba0;
+  --color-parchment: #ebdfc4;
+  --color-parchment-soft: #e8d4c4;
+  --color-ink: #2a1d14;
+  --color-ink-muted: #5c4a38;
+  --color-ink-soft: #8a7860;
+  --color-ink-inverse: #ebdfc4;
+  --color-border: #a67c3d;
+  --color-border-strong: #6b4423;
+  --color-border-wood: #4a2f18;
+  --color-border-subtle: #3a2a1e;
+  --color-crimson: #7a2530;
+  --color-crimson-deep: #5c1d26;
+  --color-danger: #b33a47;
+  --color-green: #3f5b34;
+  --color-overlay: rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-shell: #0b0806;
+  --color-shell-deep: #070504;
+  --color-panel: #1a1410;
+  --color-surface: #1e1812;
+  --color-parchment: #252018;
+  --color-parchment-soft: #2a221a;
+  --color-ink: #ede3cf;
+  --color-ink-muted: #c9bba3;
+  --color-ink-soft: #a89880;
+  --color-ink-inverse: #ede3cf;
+  --color-border: #9a7340;
+  --color-border-strong: #7a5a30;
+  --color-border-wood: #5a4030;
+  --color-border-subtle: #2a2218;
+  --color-crimson: #8f2e3a;
+  --color-crimson-deep: #6b2230;
+  --color-danger: #c44a55;
+  --color-green: #5a7a4a;
+  --color-overlay: rgba(0, 0, 0, 0.82);
+}
+
 :root {
-  font-family: Inter, system-ui, sans-serif;
+  font-family: "EB Garamond", Georgia, serif;
 }
 
 * {
@@ -12,4 +61,43 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background-color: var(--color-shell);
+  color: var(--color-ink);
+  transition: background-color 0.2s ease, color 0.2s ease;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Native selects: keep option list readable in dark mode (Win/Chrome inherit ink on white). */
+select {
+  background-color: var(--color-parchment);
+  color: var(--color-ink);
+  color-scheme: light dark;
+}
+
+select option,
+select optgroup {
+  background-color: var(--color-parchment);
+  color: var(--color-ink);
+}
+
+[data-theme="dark"] select,
+[data-theme="dark"] select option,
+[data-theme="dark"] select optgroup {
+  background-color: #252018;
+  color: #ede3cf;
+}
+
+input,
+textarea {
+  background-color: var(--color-parchment);
+  color: var(--color-ink);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-ink-soft);
 }

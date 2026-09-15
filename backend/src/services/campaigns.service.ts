@@ -113,9 +113,18 @@ export async function deleteCampaign(
   }
 
   await prisma.$transaction([
-    prisma.character.deleteMany({
+    prisma.gameSession.deleteMany({
       where: {
         campaignId,
+      },
+    }),
+
+    prisma.character.updateMany({
+      where: {
+        campaignId,
+      },
+      data: {
+        campaignId: null,
       },
     }),
 

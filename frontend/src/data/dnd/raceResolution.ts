@@ -99,3 +99,13 @@ export function getRaceDisplayName(
     const subrace = getSubrace(race, data.subraceId);
     return subrace ? `${race.name} (${subrace.name})` : race.name;
 }
+
+/** Deslocamento em pés: subraça sobrescreve a raça base. */
+export function getResolvedSpeed(
+    data: Pick<CharacterFormData, "raceId" | "subraceId">,
+    fallback = 30
+): number {
+    const race = getRaceById(data.raceId);
+    const subrace = getSubrace(race, data.subraceId);
+    return subrace?.speed ?? race?.speed ?? fallback;
+}
