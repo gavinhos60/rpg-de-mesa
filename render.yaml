@@ -3,7 +3,7 @@ services:
     name: rpg-hub-backend
     runtime: node
     plan: free
-    region: oregon
+    region: virginia
     rootDir: backend
     buildCommand: npm install && npx prisma migrate deploy && npm run build
     startCommand: npm start
