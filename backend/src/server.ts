@@ -54,6 +54,31 @@ app.use(
   notesRoutes
 );
 
+app.get("/api/debug/db-latency", async (_req, res) => {
+  const start = performance.now();
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+
+    const end = performance.now();
+
+    res.json({
+      success: true,
+      database: "Neon PostgreSQL",
+      latencyMs: Number((end - start).toFixed(2)),
+      server: "Render Virginia",
+    });
+  } catch (error) {
+    const end = performance.now();
+
+    res.status(500).json({
+      success: false,
+      latencyMs: Number((end - start).toFixed(2)),
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
 attachGameSocket(server);
 
 server.listen(3000, () => {
