@@ -236,12 +236,26 @@ export interface StartingEquipment {
     choices: EquipmentChoice[];
 }
 
+export interface CharacterWallet {
+    /** Peças de platina (1 PL = 10 PO) */
+    pl: number;
+    /** Peças de ouro */
+    po: number;
+    /** Peças de prata (10 PP = 1 PO) */
+    pp: number;
+}
+
 export interface CharacterEquipmentData {
     classId: string;
     choiceSelections: Record<string, string>;
     manualItems: EquipmentStack[];
     /** Itens customizados (ex.: dados pelo mestre). */
     customItems?: CustomInventoryItem[];
+    /**
+     * Quantidades removidas do equipamento inicial (classe/antecedente).
+     * Usado para descarte/transferência na mesa.
+     */
+    removedItems?: EquipmentStack[];
 }
 
 export interface CustomInventoryItem {
@@ -332,6 +346,8 @@ export interface CharacterFormData {
     abilities: Record<Ability, number>;
     skills: Record<Skill, CharacterSkillData>;
     equipment: CharacterEquipmentData;
+    /** Carteira de moedas do personagem. */
+    wallet?: CharacterWallet;
     spells: CharacterSpellData;
     lore: string;
     quests: string;

@@ -76,7 +76,65 @@ export function parseSessionState(raw: unknown): SessionRuntimeState {
 
   return {
     board: mergedBoard,
-    chat: Array.isArray(data.chat) ? data.chat : [],
+    chat: Array.isArray(data.chat)
+      ? data.chat.map((message) => ({
+          ...message,
+          secret: Boolean(
+            message && typeof message === "object" && "secret" in message
+              ? (message as { secret?: boolean }).secret
+              : false
+          )
+            ? true
+            : undefined,
+        }))
+      : [],
+    combat:
+      data.combat &&
+      typeof data.combat === "object" &&
+      Array.isArray(data.combat.order)
+        ? {
+            active: Boolean(data.combat.active),
+            collecting: Boolean(data.combat.collecting),
+            round:
+              typeof data.combat.round === "number" && data.combat.round > 0
+                ? Math.floor(data.combat.round)
+                : 1,
+            currentIndex:
+              typeof data.combat.currentIndex === "number" &&
+              data.combat.currentIndex >= 0
+                ? Math.floor(data.combat.currentIndex)
+                : 0,
+            order: data.combat.order
+              .filter(
+                (entry) =>
+                  entry &&
+                  typeof entry === "object" &&
+                  typeof entry.id === "string" &&
+                  typeof entry.name === "string"
+              )
+              .map((entry) => ({
+                id: entry.id,
+                name: entry.name,
+                initiative:
+                  typeof entry.initiative === "number" ? entry.initiative : 0,
+                natural:
+                  typeof entry.natural === "number" ? entry.natural : undefined,
+                kind:
+                  entry.kind === "monster" || entry.kind === "other"
+                    ? entry.kind
+                    : "character",
+                characterId:
+                  typeof entry.characterId === "number"
+                    ? entry.characterId
+                    : null,
+                tokenId:
+                  typeof entry.tokenId === "string" ? entry.tokenId : null,
+                userId:
+                  typeof entry.userId === "number" ? entry.userId : null,
+                secret: Boolean(entry.secret) || undefined,
+              })),
+          }
+        : null,
   };
 }
 

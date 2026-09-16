@@ -23,7 +23,7 @@ const ThemeContext = createContext<ThemeContextData>({} as ThemeContextData);
 function readStoredTheme(): ThemeMode {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored === "dark" || stored === "light") return stored;
-  return "light";
+  return "dark";
 }
 
 function applyTheme(theme: ThemeMode) {
@@ -33,7 +33,7 @@ function applyTheme(theme: ThemeMode) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") return "light";
+    if (typeof window === "undefined") return "dark";
     const initial = readStoredTheme();
     applyTheme(initial);
     return initial;

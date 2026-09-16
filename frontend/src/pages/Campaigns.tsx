@@ -8,7 +8,7 @@ import {
 
 import { CreateCampaignModal } from "../components/CreateCampaignModal";
 import {
-    EmblemIcon,
+    CrowMark,
     WaxSealIcon,
     BrokenSealIcon,
     QuillIcon,
@@ -130,7 +130,7 @@ export function Campaigns() {
                                 />
 
                                 <div className="flex items-start justify-between">
-                                    <EmblemIcon className="w-8 h-8 text-[var(--color-border-strong)]" />
+                                    <CrowMark className="w-8 h-8 text-[var(--color-border-strong)]" />
                                     <WaxSealIcon className="w-9 h-9" label={campaign.id} />
                                 </div>
 

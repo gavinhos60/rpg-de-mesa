@@ -68,7 +68,12 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
         : 0;
     const hitPoints = data.hitPoints ?? calculatedHitPoints;
 
-    const armorClass = getBaseArmorClass(dexterity, wisdom, selectedClass);
+    const armorClass = getBaseArmorClass(
+        dexterity,
+        wisdom,
+        constitution,
+        selectedClass
+    );
     const initiative = getInitiative(dexterity);
     const movement = getResolvedSpeed(data);
     const carryingCapacity = getCarryingCapacity(strength);
@@ -131,7 +136,9 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                     description={
                         selectedClass?.id === "monk"
                             ? "10 + DEX + SAB"
-                            : "10 + modificador de Destreza"
+                            : selectedClass?.id === "barbarian"
+                              ? "10 + DEX + CON"
+                              : "10 + modificador de Destreza"
                     }
                 />
 

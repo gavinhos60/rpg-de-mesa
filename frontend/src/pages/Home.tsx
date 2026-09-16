@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { api } from "../services/api";
 
 import {
-    EmblemIcon,
+    CrowMark,
     WaxSealIcon,
     BrokenSealIcon,
     QuillIcon,
 } from "../components/icons/MedievalIcons";
+import { KenkuAtmosphere } from "../components/KenkuAtmosphere";
 
 interface HealthResponse {
     status: string;
@@ -36,53 +37,48 @@ export function Home() {
     }, []);
 
     return (
-        <main
-            className="min-h-screen flex items-center justify-center px-4"
-            style={{
-                fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "var(--color-shell-deep)",
-                backgroundImage:
-                    "repeating-linear-gradient(115deg, rgba(184,147,78,0.035) 0px, rgba(184,147,78,0.035) 1px, transparent 1px, transparent 5px)",
-                color: "var(--color-ink-inverse)",
-            }}
-        >
-            <div className="text-center max-w-lg">
-                <EmblemIcon className="w-14 h-14 mx-auto mb-5 text-[#B8934E]" />
+        <main className="kenku-shell relative flex min-h-screen items-end justify-start px-6 pb-16 pt-24 sm:px-12 sm:pb-20">
+            <KenkuAtmosphere density="normal" showArt artFocus="right" />
+            <div className="relative z-10 max-w-xl">
+                <CrowMark className="mb-6 h-12 w-12 text-[var(--color-crow-soft)]" />
 
                 <h1
-                    className="text-5xl"
-                    style={{ fontFamily: "'Cinzel', serif", fontWeight: 600, color: "var(--color-ink-inverse)" }}
+                    className="text-5xl text-[var(--color-ink-inverse)] sm:text-6xl"
+                    style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                 >
-                    RPG Hub
+                    SUA MESA!
                 </h1>
 
-                <p className="text-[#B8A98A] italic mt-4">
-                    Plataforma de RPG de mesa
+                <p className="mt-4 max-w-md text-lg italic text-[var(--color-crow-soft)]">
+                    Ecoando histórias no ninho kenku.
                 </p>
 
-                <div className="mt-10 border-t border-[var(--color-border-wood)] pt-8">
+                <div className="mt-10 border-t border-[var(--color-border-wood)]/60 pt-8">
                     {loading && (
-                        <div className="flex items-center justify-center gap-3 text-[#B8934E]">
-                            <QuillIcon className="w-5 h-5 animate-pulse" />
+                        <div className="flex items-center gap-3 text-[var(--color-crow-soft)]">
+                            <QuillIcon className="h-5 w-5 animate-pulse" />
                             <span className="italic">Consultando os arquivos do reino...</span>
                         </div>
                     )}
 
                     {!loading && apiStatus && (
                         <div
-                            className="inline-flex flex-col items-center border border-[var(--color-border-strong)] px-8 py-6"
-                            style={{ backgroundColor: "var(--color-surface)", color: "var(--color-ink)" }}
+                            className="inline-flex flex-col border px-6 py-5"
+                            style={{
+                                backgroundColor:
+                                    "color-mix(in srgb, var(--color-surface) 92%, transparent)",
+                                borderColor: "var(--color-border-strong)",
+                                color: "var(--color-ink)",
+                            }}
                         >
-                            <WaxSealIcon className="w-10 h-10" label="✓" />
-
+                            <WaxSealIcon className="h-9 w-9" label="✓" />
                             <p
                                 className="mt-3 text-lg"
                                 style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                             >
                                 Arquivos conectados
                             </p>
-
-                            <p className="text-[var(--color-ink-muted)] mt-1 text-sm">
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                                 {apiStatus.message}
                             </p>
                         </div>
@@ -90,19 +86,22 @@ export function Home() {
 
                     {!loading && error && (
                         <div
-                            className="inline-flex flex-col items-center border border-[var(--color-border-strong)] px-8 py-6"
-                            style={{ backgroundColor: "var(--color-surface)", color: "var(--color-ink)" }}
+                            className="inline-flex flex-col border px-6 py-5"
+                            style={{
+                                backgroundColor:
+                                    "color-mix(in srgb, var(--color-surface) 92%, transparent)",
+                                borderColor: "var(--color-border-strong)",
+                                color: "var(--color-ink)",
+                            }}
                         >
-                            <BrokenSealIcon className="w-10 h-10" color="var(--color-crimson)" />
-
+                            <BrokenSealIcon className="h-9 w-9" color="var(--color-crimson)" />
                             <p
                                 className="mt-3 text-lg"
                                 style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                             >
                                 O selo foi rompido
                             </p>
-
-                            <p className="text-[var(--color-ink-muted)] mt-1 text-sm">
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                                 Não foi possível conectar ao backend.
                             </p>
                         </div>

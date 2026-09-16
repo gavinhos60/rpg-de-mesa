@@ -1,52 +1,61 @@
 @import "tailwindcss";
 
+@theme {
+  --font-arial: Arial, Helvetica, sans-serif;
+}
+
 :root,
 [data-theme="light"] {
   color-scheme: light;
 
-  --color-shell: #1a120b;
-  --color-shell-deep: #150e09;
-  --color-panel: #2a1d14;
+  /* Shell quase void — arte kenku / corvo no negro */
+  --color-shell: #050508;
+  --color-shell-deep: #000000;
+  --color-panel: #121018;
   --color-surface: #dccba0;
   --color-parchment: #ebdfc4;
   --color-parchment-soft: #e8d4c4;
   --color-ink: #2a1d14;
   --color-ink-muted: #5c4a38;
   --color-ink-soft: #8a7860;
-  --color-ink-inverse: #ebdfc4;
+  --color-ink-inverse: #e8e4dc;
   --color-border: #a67c3d;
   --color-border-strong: #6b4423;
   --color-border-wood: #4a2f18;
-  --color-border-subtle: #3a2a1e;
+  --color-border-subtle: #2a2430;
   --color-crimson: #7a2530;
   --color-crimson-deep: #5c1d26;
   --color-danger: #b33a47;
   --color-green: #3f5b34;
-  --color-overlay: rgba(0, 0, 0, 0.7);
+  --color-crow: #2a303c;
+  --color-crow-soft: #8a96a8;
+  --color-overlay: rgba(0, 0, 0, 0.78);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --color-shell: #0b0806;
-  --color-shell-deep: #070504;
-  --color-panel: #1a1410;
-  --color-surface: #1e1812;
-  --color-parchment: #252018;
-  --color-parchment-soft: #2a221a;
-  --color-ink: #ede3cf;
-  --color-ink-muted: #c9bba3;
-  --color-ink-soft: #a89880;
-  --color-ink-inverse: #ede3cf;
-  --color-border: #9a7340;
-  --color-border-strong: #7a5a30;
-  --color-border-wood: #5a4030;
-  --color-border-subtle: #2a2218;
+  --color-shell: #000000;
+  --color-shell-deep: #000000;
+  --color-panel: #0e0c12;
+  --color-surface: #141218;
+  --color-parchment: #1a171f;
+  --color-parchment-soft: #221e28;
+  --color-ink: #e8e4dc;
+  --color-ink-muted: #b8b0a0;
+  --color-ink-soft: #8a8478;
+  --color-ink-inverse: #e8e4dc;
+  --color-border: #8a7348;
+  --color-border-strong: #6a5638;
+  --color-border-wood: #4a4030;
+  --color-border-subtle: #1e1a22;
   --color-crimson: #8f2e3a;
   --color-crimson-deep: #6b2230;
   --color-danger: #c44a55;
   --color-green: #5a7a4a;
-  --color-overlay: rgba(0, 0, 0, 0.82);
+  --color-crow: #3a4454;
+  --color-crow-soft: #9aa8b8;
+  --color-overlay: rgba(0, 0, 0, 0.88);
 }
 
 :root {
@@ -71,6 +80,107 @@ body {
   min-height: 100vh;
 }
 
+/* Fundo shell — void negro */
+.kenku-shell {
+  background-color: #000000;
+  background-image: none;
+}
+
+@keyframes kenku-art-breathe {
+  0%,
+  100% {
+    transform: scale(1.02);
+  }
+
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.kenku-art-breathe {
+  animation: kenku-art-breathe 28s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kenku-art-breathe {
+    animation: none;
+  }
+}
+
+.kenku-parchment {
+  background-color: var(--color-parchment);
+  background-image:
+    radial-gradient(
+      ellipse 90% 40% at 50% -20%,
+      color-mix(in srgb, var(--color-crow) 6%, transparent),
+      transparent 55%
+    ),
+    repeating-linear-gradient(
+      115deg,
+      rgba(107, 68, 35, 0.03) 0px,
+      rgba(107, 68, 35, 0.03) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+}
+
+/* Brasas / poeira — eco da arte void */
+.kenku-embers {
+  background-image:
+    radial-gradient(
+      1px 1px at 12% 78%,
+      rgba(180, 90, 40, 0.55),
+      transparent
+    ),
+    radial-gradient(
+      1.5px 1.5px at 28% 88%,
+      rgba(200, 120, 50, 0.4),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 48% 82%,
+      rgba(220, 160, 80, 0.35),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 67% 91%,
+      rgba(180, 90, 40, 0.45),
+      transparent
+    ),
+    radial-gradient(
+      1.5px 1.5px at 81% 85%,
+      rgba(200, 110, 45, 0.3),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 93% 74%,
+      rgba(160, 160, 170, 0.25),
+      transparent
+    );
+
+  animation: kenku-ember-rise 14s ease-in-out infinite;
+  opacity: 0.7;
+}
+
+@keyframes kenku-ember-rise {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.55;
+  }
+
+  50% {
+    transform: translateY(-10px);
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kenku-embers {
+    animation: none;
+  }
+}
+
 /* Native selects: keep option list readable in dark mode (Win/Chrome inherit ink on white). */
 select {
   background-color: var(--color-parchment);
@@ -87,7 +197,7 @@ select optgroup {
 [data-theme="dark"] select,
 [data-theme="dark"] select option,
 [data-theme="dark"] select optgroup {
-  background-color: #252018;
+  background-color: #221e28;
   color: #ede3cf;
 }
 
@@ -100,4 +210,31 @@ textarea {
 input::placeholder,
 textarea::placeholder {
   color: var(--color-ink-soft);
+}
+
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a[href],
+summary {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+@keyframes token-controls-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(18px) scale(0.85);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.token-controls-rise {
+  animation: token-controls-rise 0.28s ease-out;
 }

@@ -8,7 +8,8 @@ import {
   parseSessionState,
   saveSessionState,
 } from "../services/sessions.service";
-import { rollDice, rollD20WithModifier, rollCompoundDice } from "../lib/dice";
+import { prisma } from "../lib/prisma";
+import { rollDice, rollD20WithModifier, rollCompoundDice, isCriticalHit, applyCriticalDamage } from "../lib/dice";
 import {
   getAbilityLabel,
   getSkillLabel,
@@ -19,11 +20,21 @@ import type {
   BoardState,
   BoardToken,
   ChatMessage,
+  CombatantEntry,
+  CombatState,
   SessionRuntimeState,
 } from "../lib/gameTypes";
 import {
+  characterIsOnSecretLayer,
   distanceMeters,
+  distanceSquares5e,
+  emptyCombatState,
   metersPerSquareOf,
+  monsterIsOnSecretLayer,
+  publicCombatState,
+  sortCombatOrder,
+  syncCombatantSecrets,
+  tokenIsOnSecretLayer,
 } from "../lib/gameTypes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -122,6 +133,9 @@ export function attachGameSocket(httpServer: HttpServer) {
 
         const room = `session:${sessionId}`;
         await socket.join(room);
+        if (membership.role === "MASTER") {
+          await socket.join(`session:${sessionId}:masters`);
+        }
 
         const role = membership.role;
         const characters = session.campaign.characters;
@@ -132,6 +146,15 @@ export function attachGameSocket(httpServer: HttpServer) {
           email: member.user.email,
         }));
 
+        const stateForClient =
+          role === "MASTER"
+            ? state
+            : {
+                ...state,
+                chat: state.chat.filter((message) => !message.secret),
+                combat: publicCombatState(state.combat),
+              };
+
         ack?.({
           ok: true,
           role,
@@ -140,7 +163,7 @@ export function attachGameSocket(httpServer: HttpServer) {
           roomCode: session.roomCode,
           characters,
           members,
-          state,
+          state: stateForClient,
         });
 
         socket.to(room).emit("session:presence", {
@@ -170,6 +193,57 @@ export function attachGameSocket(httpServer: HttpServer) {
         runtime.set(sessionId, state);
       }
       return { session, membership, state, room: `session:${sessionId}` };
+    }
+
+    function mastersRoom(sessionId: number) {
+      return `session:${sessionId}:masters`;
+    }
+
+    function emitChatMessage(
+      sessionId: number,
+      room: string,
+      message: ChatMessage
+    ) {
+      if (message.secret) {
+        io.to(mastersRoom(sessionId)).emit("chat:message", message);
+      } else {
+        io.to(room).emit("chat:message", message);
+      }
+    }
+
+    function emitCombatState(
+      sessionId: number,
+      room: string,
+      combat: CombatState | null
+    ) {
+      io.to(room).emit("combat:state", publicCombatState(combat));
+      io.to(mastersRoom(sessionId)).emit("combat:state", combat);
+    }
+
+    async function resolveRollCharacter(
+      session: Awaited<ReturnType<typeof getSessionForSocket>>,
+      characterId: number,
+      membership: { role: string }
+    ) {
+      if (!session) return null;
+      const fromCampaign = session.campaign.characters.find(
+        (item) => item.id === characterId
+      );
+      if (fromCampaign) return fromCampaign;
+
+      // Ficha fora da campanha (ex.: personagem pessoal do mestre no mapa).
+      const fromDb = await prisma.character.findUnique({
+        where: { id: characterId },
+        include: {
+          player: { select: { id: true, name: true, email: true } },
+        },
+      });
+      if (!fromDb) return null;
+
+      const isMaster = membership.role === "MASTER";
+      const isOwner = fromDb.playerId === socket.data.userId;
+      if (!isMaster && !isOwner) return null;
+      return fromDb;
     }
 
     socket.on(
@@ -213,38 +287,60 @@ export function attachGameSocket(httpServer: HttpServer) {
                 incoming.fogExemptUserIds !== undefined
                   ? incoming.fogExemptUserIds
                   : state.board.fogExemptUserIds,
-              playerMapView:
-                incoming.playerMapView !== undefined
-                  ? incoming.playerMapView
-                  : state.board.playerMapView,
-            };
+          playerMapView:
+            incoming.playerMapView !== undefined
+              ? incoming.playerMapView
+              : state.board.playerMapView,
+          playerViewsByUserId:
+            incoming.playerViewsByUserId !== undefined
+              ? incoming.playerViewsByUserId
+              : state.board.playerViewsByUserId,
+        };
           } else {
-            const userId = socket.data.userId;
+            const userId = Number(socket.data.userId);
             const incomingTokens = incoming.tokens ?? state.board.tokens;
 
-            // Jogador: anotações + editar/criar apenas o próprio token.
-            const mergedTokens = state.board.tokens.map((token) => {
-              if (token.ownerUserId !== userId) return token;
+            // Jogador: anotações + editar/criar o próprio token.
+            // Remoção de token é só via token:remove (evita race com board:update atrasado).
+            const mergedTokens: typeof state.board.tokens = [];
+            for (const token of state.board.tokens) {
+              const owned =
+                token.ownerUserId != null &&
+                Number(token.ownerUserId) === userId;
+              if (!owned) {
+                mergedTokens.push(token);
+                continue;
+              }
               const next = incomingTokens.find((item) => item.id === token.id);
-              if (!next) return token;
-              return {
+              if (!next) {
+                // Mantém: ausência no incoming pode ser snapshot atrasado.
+                mergedTokens.push(token);
+                continue;
+              }
+              mergedTokens.push({
                 ...token,
                 hpMax: next.hpMax,
                 hpCurrent: next.hpCurrent,
                 customValue: next.customValue,
                 conditions: next.conditions ?? token.conditions,
-                x: next.x,
-                y: next.y,
+                // Posição só via token:move — board:update atrasado não “teleporta” de volta.
+                x: token.x,
+                y: token.y,
                 imageUrl: next.imageUrl ?? token.imageUrl,
-              };
-            });
+                borderColor: next.borderColor ?? token.borderColor,
+                onPlayerScene:
+                  next.onPlayerScene !== undefined
+                    ? next.onPlayerScene
+                    : token.onPlayerScene,
+              });
+            }
 
             for (const token of incomingTokens) {
               const exists = mergedTokens.some((item) => item.id === token.id);
               if (exists) continue;
               if (
                 token.kind === "pc" &&
-                token.ownerUserId === userId &&
+                Number(token.ownerUserId) === userId &&
                 token.characterId
               ) {
                 mergedTokens.push(token);
@@ -260,12 +356,62 @@ export function attachGameSocket(httpServer: HttpServer) {
             };
           }
 
+          const synced = syncCombatantSecrets(state.board, state.combat);
+          if (synced.changed) {
+            state.combat = synced.combat;
+          }
+
+          schedulePersist(Number(payload.sessionId), state);
+          io.to(room).emit("board:state", state.board);
+          if (synced.changed) {
+            emitCombatState(Number(payload.sessionId), room, state.combat);
+          }
+          ack?.({ ok: true });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao atualizar o mapa" });
+        }
+      }
+    );
+
+    socket.on(
+      "token:remove",
+      async (
+        payload: { sessionId: number; tokenIds: string[] },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          const userId = Number(socket.data.userId);
+          const isMaster = membership.role === "MASTER";
+          const ids = new Set(
+            (payload.tokenIds ?? []).map((id) => String(id)).filter(Boolean)
+          );
+          if (ids.size === 0) {
+            ack?.({ ok: false, error: "Nenhum token" });
+            return;
+          }
+
+          const nextTokens = state.board.tokens.filter((token) => {
+            if (!ids.has(token.id)) return true;
+            if (isMaster) return false;
+            return Number(token.ownerUserId) !== userId;
+          });
+
+          if (nextTokens.length === state.board.tokens.length) {
+            ack?.({ ok: false, error: "Você não pode remover este token" });
+            return;
+          }
+
+          state.board = { ...state.board, tokens: nextTokens };
           schedulePersist(Number(payload.sessionId), state);
           io.to(room).emit("board:state", state.board);
           ack?.({ ok: true });
         } catch (error) {
           console.error(error);
-          ack?.({ ok: false, error: "Falha ao atualizar o mapa" });
+          ack?.({ ok: false, error: "Falha ao remover token" });
         }
       }
     );
@@ -278,6 +424,7 @@ export function attachGameSocket(httpServer: HttpServer) {
           tokenId: string;
           x: number;
           y: number;
+          commit?: boolean;
         },
         ack?
       ) => {
@@ -295,7 +442,7 @@ export function attachGameSocket(httpServer: HttpServer) {
 
           const canMove =
             membership.role === "MASTER" ||
-            token.ownerUserId === socket.data.userId;
+            Number(token.ownerUserId) === Number(socket.data.userId);
 
           if (!canMove) {
             ack?.({ ok: false, error: "Você não pode mover este token" });
@@ -305,11 +452,17 @@ export function attachGameSocket(httpServer: HttpServer) {
           token.x = payload.x;
           token.y = payload.y;
 
-          schedulePersist(Number(payload.sessionId), state);
-          io.to(room).emit("token:moved", {
+          const commit = payload.commit !== false;
+          // Só persiste no drop final — evita gravar cada frame do arraste.
+          if (commit) {
+            schedulePersist(Number(payload.sessionId), state);
+          }
+          // Não ecoa para o remetente (evita rollback no cliente que arrasta).
+          socket.to(room).emit("token:moved", {
             tokenId: token.id,
             x: token.x,
             y: token.y,
+            commit,
           });
           ack?.({ ok: true });
         } catch (error) {
@@ -397,11 +550,13 @@ export function attachGameSocket(httpServer: HttpServer) {
         ack?
       ) => {
         try {
-          const { session, state, room } = await loadContext(
+          const { session, membership, state, room } = await loadContext(
             Number(payload.sessionId)
           );
-          const character = session.campaign.characters.find(
-            (item) => item.id === Number(payload.characterId)
+          const character = await resolveRollCharacter(
+            session,
+            Number(payload.characterId),
+            membership
           );
 
           if (!character) {
@@ -411,11 +566,7 @@ export function attachGameSocket(httpServer: HttpServer) {
 
           if (
             character.playerId !== socket.data.userId &&
-            !session.campaign.members.some(
-              (member) =>
-                member.userId === socket.data.userId &&
-                member.role === "MASTER"
-            )
+            membership.role !== "MASTER"
           ) {
             ack?.({ ok: false, error: "Sem permissão para rolar por este personagem" });
             return;
@@ -447,6 +598,10 @@ export function attachGameSocket(httpServer: HttpServer) {
             advantage: withAdvantage,
           });
           const userName = payload.userName?.trim() || character.name;
+          const secret = characterIsOnSecretLayer(
+            state.board,
+            character.id
+          );
           const message: ChatMessage = {
             id: randomUUID(),
             at: Date.now(),
@@ -463,11 +618,12 @@ export function attachGameSocket(httpServer: HttpServer) {
               modifier: result.modifier,
               total: result.total,
             },
+            secret: secret || undefined,
           };
 
           state.chat = [...state.chat, message].slice(-200);
           schedulePersist(Number(payload.sessionId), state);
-          io.to(room).emit("chat:message", message);
+          emitChatMessage(Number(payload.sessionId), room, message);
           ack?.({ ok: true, message });
         } catch (error) {
           console.error(error);
@@ -570,6 +726,7 @@ export function attachGameSocket(httpServer: HttpServer) {
           damage?: string | null;
           abilityModifier?: number | null;
           abilityLabel?: string | null;
+          tokenId?: string | null;
           userName?: string;
         },
         ack?
@@ -586,6 +743,10 @@ export function attachGameSocket(httpServer: HttpServer) {
           const monsterName = String(payload.monsterName || "Criatura").trim();
           const actionName = String(payload.actionName || "Ação").trim();
           const userName = payload.userName?.trim() || socket.data.email;
+          const secret = monsterIsOnSecretLayer(state.board, {
+            tokenId: payload.tokenId,
+            monsterName,
+          });
           const lines: string[] = [`${monsterName} — ${actionName}`];
 
           const description = String(payload.description || "").trim();
@@ -625,8 +786,9 @@ export function attachGameSocket(httpServer: HttpServer) {
             Number.isFinite(payload.attackBonus)
           ) {
             const result = rollD20WithModifier(payload.attackBonus);
+            const critical = isCriticalHit(result);
             parts.push({
-              label: "Ataque",
+              label: critical ? "Ataque (crítico!)" : "Ataque",
               formula: result.formula,
               rolls: result.rolls,
               modifier: result.modifier,
@@ -638,12 +800,26 @@ export function attachGameSocket(httpServer: HttpServer) {
           if (damageRaw) {
             const damage = rollCompoundDice(damageRaw);
             if (damage) {
+              const attackPart = parts.find((part) =>
+                /^Ataque/i.test(part.label)
+              );
+              const critical = attackPart
+                ? isCriticalHit(attackPart)
+                : false;
+              const resolved = critical
+                ? applyCriticalDamage(damage)
+                : {
+                    formula: damage.parts.map((p) => p.formula).join("+"),
+                    rolls: damage.parts.flatMap((p) => p.rolls),
+                    modifier: damage.parts.reduce((s, p) => s + p.modifier, 0),
+                    total: damage.total,
+                  };
               parts.push({
-                label: "Dano",
-                formula: damage.parts.map((p) => p.formula).join("+"),
-                rolls: damage.parts.flatMap((p) => p.rolls),
-                modifier: damage.parts.reduce((s, p) => s + p.modifier, 0),
-                total: damage.total,
+                label: critical ? "Dano (crítico ×2)" : "Dano",
+                formula: resolved.formula,
+                rolls: resolved.rolls,
+                modifier: resolved.modifier,
+                total: resolved.total,
               });
             } else {
               lines.push(`Dano: ${damageRaw}`);
@@ -665,11 +841,12 @@ export function attachGameSocket(httpServer: HttpServer) {
                   parts,
                 }
               : undefined,
+            secret: secret || undefined,
           };
 
           state.chat = [...state.chat, message].slice(-200);
           schedulePersist(Number(payload.sessionId), state);
-          io.to(room).emit("chat:message", message);
+          emitChatMessage(Number(payload.sessionId), room, message);
           ack?.({ ok: true, message });
         } catch (error) {
           console.error(error);
@@ -697,11 +874,13 @@ export function attachGameSocket(httpServer: HttpServer) {
         ack?
       ) => {
         try {
-          const { session, state, room } = await loadContext(
+          const { session, membership, state, room } = await loadContext(
             Number(payload.sessionId)
           );
-          const character = session.campaign.characters.find(
-            (item) => item.id === Number(payload.characterId)
+          const character = await resolveRollCharacter(
+            session,
+            Number(payload.characterId),
+            membership
           );
 
           if (!character) {
@@ -711,11 +890,7 @@ export function attachGameSocket(httpServer: HttpServer) {
 
           if (
             character.playerId !== socket.data.userId &&
-            !session.campaign.members.some(
-              (member) =>
-                member.userId === socket.data.userId &&
-                member.role === "MASTER"
-            )
+            membership.role !== "MASTER"
           ) {
             ack?.({
               ok: false,
@@ -756,6 +931,7 @@ export function attachGameSocket(httpServer: HttpServer) {
           }> = [];
 
           const withAdvantage = Boolean(payload.advantage);
+          let attackCritical = false;
           if (
             typeof payload.attackBonus === "number" &&
             Number.isFinite(payload.attackBonus)
@@ -763,8 +939,10 @@ export function attachGameSocket(httpServer: HttpServer) {
             const result = rollD20WithModifier(payload.attackBonus, {
               advantage: withAdvantage,
             });
+            attackCritical = isCriticalHit(result);
+            const baseLabel = withAdvantage ? "Ataque (vantagem)" : "Ataque";
             parts.push({
-              label: withAdvantage ? "Ataque (vantagem)" : "Ataque",
+              label: attackCritical ? `${baseLabel} · crítico!` : baseLabel,
               formula: result.formula,
               rolls: result.rolls,
               modifier: result.modifier,
@@ -776,12 +954,20 @@ export function attachGameSocket(httpServer: HttpServer) {
           if (damageRaw) {
             const damage = rollCompoundDice(damageRaw);
             if (damage) {
+              const resolved = attackCritical
+                ? applyCriticalDamage(damage)
+                : {
+                    formula: damage.parts.map((p) => p.formula).join("+"),
+                    rolls: damage.parts.flatMap((p) => p.rolls),
+                    modifier: damage.parts.reduce((s, p) => s + p.modifier, 0),
+                    total: damage.total,
+                  };
               parts.push({
-                label: "Dano",
-                formula: damage.parts.map((p) => p.formula).join("+"),
-                rolls: damage.parts.flatMap((p) => p.rolls),
-                modifier: damage.parts.reduce((s, p) => s + p.modifier, 0),
-                total: damage.total,
+                label: attackCritical ? "Dano (crítico ×2)" : "Dano",
+                formula: resolved.formula,
+                rolls: resolved.rolls,
+                modifier: resolved.modifier,
+                total: resolved.total,
               });
             } else {
               lines.push(`Dano: ${damageRaw}`);
@@ -790,6 +976,10 @@ export function attachGameSocket(httpServer: HttpServer) {
 
           const primary = parts[0];
           const hasRoll = Boolean(primary);
+          const secret = characterIsOnSecretLayer(
+            state.board,
+            character.id
+          );
           const message: ChatMessage = {
             id: randomUUID(),
             at: Date.now(),
@@ -803,11 +993,12 @@ export function attachGameSocket(httpServer: HttpServer) {
                   parts,
                 }
               : undefined,
+            secret: secret || undefined,
           };
 
           state.chat = [...state.chat, message].slice(-200);
           schedulePersist(Number(payload.sessionId), state);
-          io.to(room).emit("chat:message", message);
+          emitChatMessage(Number(payload.sessionId), room, message);
           ack?.({ ok: true, message });
         } catch (error) {
           console.error(error);
@@ -821,33 +1012,724 @@ export function attachGameSocket(httpServer: HttpServer) {
       async (
         payload: {
           sessionId: number;
-          from: { x: number; y: number };
-          to: { x: number; y: number };
+          from?: { x: number; y: number };
+          to?: { x: number; y: number };
+          clear?: boolean;
+          clearAll?: boolean;
+          sticky?: boolean;
+          live?: boolean;
+          byUserName?: string;
+          shape?: "line" | "square" | "circle" | "cone" | "beam";
+          color?: string;
         },
         ack?
       ) => {
         try {
           const { state, room } = await loadContext(Number(payload.sessionId));
+          const userId = socket.data.userId as number;
+          const rulers = Array.isArray(state.board.rulers)
+            ? [...state.board.rulers]
+            : [];
+
+          if (payload.clearAll) {
+            state.board.rulers = [];
+            schedulePersist(Number(payload.sessionId), state);
+            io.to(room).emit("board:state", state.board);
+            ack?.({ ok: true });
+            return;
+          }
+
+          if (payload.clear) {
+            // Remove só a prévia ao vivo deste usuário (não apaga marcações fixas).
+            state.board.rulers = rulers.filter(
+              (item) => !(item.live && item.byUserId === userId)
+            );
+            io.to(room).emit("board:state", state.board);
+            ack?.({ ok: true });
+            return;
+          }
+
+          if (!payload.from || !payload.to) {
+            ack?.({ ok: false, error: "Pontos da régua inválidos" });
+            return;
+          }
+
+          const gridSize = state.board.gridSize || 50;
+          const mPerSquare = metersPerSquareOf(state.board);
+          const squares = distanceSquares5e(payload.from, payload.to, gridSize);
           const meters = distanceMeters(
             payload.from,
             payload.to,
-            state.board.gridSize || 50,
-            metersPerSquareOf(state.board)
+            gridSize,
+            mPerSquare
           );
-          const ruler = {
+          const shape = payload.shape ?? "line";
+          const color =
+            typeof payload.color === "string" && payload.color.trim()
+              ? payload.color.trim()
+              : undefined;
+          const sticky = Boolean(payload.sticky);
+          const live = Boolean(payload.live) && !sticky;
+
+          const nextRuler = {
             id: randomUUID(),
+            shape,
             from: payload.from,
             to: payload.to,
             meters,
-            byUserId: socket.data.userId,
+            squares,
+            byUserId: userId,
+            byUserName: String(payload.byUserName ?? "").trim() || undefined,
+            color,
+            live: live || undefined,
           };
-          state.board.rulers = [ruler];
+
+          // Tira prévia ao vivo anterior deste usuário.
+          const withoutOwnLive = rulers.filter(
+            (item) => !(item.live && item.byUserId === userId)
+          );
+
+          if (live) {
+            state.board.rulers = [...withoutOwnLive, nextRuler];
+            io.to(room).emit("board:state", state.board);
+            ack?.({ ok: true, ruler: nextRuler });
+            return;
+          }
+
+          // Commit (Permanecer): acumula marcações fixas.
+          state.board.rulers = [...withoutOwnLive, { ...nextRuler, live: undefined }];
           schedulePersist(Number(payload.sessionId), state);
           io.to(room).emit("board:state", state.board);
-          ack?.({ ok: true, ruler });
+          ack?.({ ok: true, ruler: nextRuler });
         } catch (error) {
           console.error(error);
           ack?.({ ok: false, error: "Falha na régua" });
+        }
+      }
+    );
+
+    socket.on(
+      "initiative:request",
+      async (
+        payload: {
+          sessionId: number;
+          targetCharacterId?: number | null;
+          userName?: string;
+        },
+        ack?
+      ) => {
+        try {
+          const { membership, session, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({ ok: false, error: "Apenas o mestre pode pedir iniciativa" });
+            return;
+          }
+
+          const characters = session.campaign?.characters ?? [];
+          let targetCharacterId: number | null =
+            payload.targetCharacterId ?? null;
+          let characterName: string | null = null;
+          let targetUserId: number | null = null;
+
+          if (targetCharacterId != null) {
+            const character = characters.find(
+              (item) => item.id === targetCharacterId
+            );
+            if (!character) {
+              ack?.({
+                ok: false,
+                error: "Personagem não encontrado nesta mesa",
+              });
+              return;
+            }
+            characterName = character.name;
+            targetUserId = character.playerId;
+          }
+
+          const combat: CombatState = {
+            ...(state.combat ?? emptyCombatState()),
+            active: false,
+            collecting: true,
+            round: 1,
+            currentIndex: 0,
+            order: targetCharacterId
+              ? (state.combat?.order ?? []).filter(
+                  (entry) => entry.characterId !== targetCharacterId
+                )
+              : [],
+          };
+          state.combat = combat;
+
+          const request = {
+            id: randomUUID(),
+            at: Date.now(),
+            fromUserId: socket.data.userId,
+            targetCharacterId,
+            characterName,
+            targetUserId,
+          };
+
+          const systemMessage: ChatMessage = {
+            id: randomUUID(),
+            at: Date.now(),
+            userId: socket.data.userId,
+            userName: payload.userName?.trim() || "Mestre",
+            type: "system",
+            text: characterName
+              ? `${characterName} precisa rolar iniciativa.`
+              : "Todos os personagens precisam rolar iniciativa.",
+          };
+          state.chat = [...state.chat, systemMessage].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+
+          io.to(room).emit("initiative:request", request);
+          emitCombatState(Number(payload.sessionId), room, combat);
+          io.to(room).emit("chat:message", systemMessage);
+          ack?.({ ok: true, request, combat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao pedir iniciativa" });
+        }
+      }
+    );
+
+    socket.on(
+      "initiative:roll",
+      async (
+        payload: {
+          sessionId: number;
+          characterId: number;
+          userName?: string;
+          advantage?: boolean;
+        },
+        ack?
+      ) => {
+        try {
+          const { session, membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          const character = await resolveRollCharacter(
+            session,
+            Number(payload.characterId),
+            membership
+          );
+
+          if (!character) {
+            ack?.({ ok: false, error: "Personagem não encontrado" });
+            return;
+          }
+
+          if (
+            character.playerId !== socket.data.userId &&
+            membership.role !== "MASTER"
+          ) {
+            ack?.({
+              ok: false,
+              error: "Sem permissão para rolar por este personagem",
+            });
+            return;
+          }
+
+          const resolved = resolveAbilityModifier(character.sheet, "dexterity");
+          if (!resolved) {
+            ack?.({ ok: false, error: "Ficha sem Destreza" });
+            return;
+          }
+
+          const withAdvantage = Boolean(payload.advantage);
+          const result = rollD20WithModifier(resolved.modifier, {
+            advantage: withAdvantage,
+          });
+
+          const combat: CombatState = {
+            ...(state.combat ?? emptyCombatState()),
+            collecting: state.combat?.active ? false : true,
+            active: Boolean(state.combat?.active),
+          };
+
+          const entry: CombatantEntry = {
+            id: `char-${character.id}`,
+            name: character.name,
+            initiative: result.total,
+            natural: result.natural,
+            kind: "character",
+            characterId: character.id,
+            userId: character.playerId,
+            secret: characterIsOnSecretLayer(state.board, character.id),
+          };
+
+          const without = combat.order.filter(
+            (item) => item.characterId !== character.id && item.id !== entry.id
+          );
+          combat.order = sortCombatOrder([...without, entry]);
+          if (combat.active && combat.currentIndex >= combat.order.length) {
+            combat.currentIndex = Math.max(0, combat.order.length - 1);
+          }
+          state.combat = combat;
+
+          const userName = payload.userName?.trim() || character.name;
+          const message: ChatMessage = {
+            id: randomUUID(),
+            at: Date.now(),
+            userId: socket.data.userId,
+            userName,
+            type: "roll",
+            text: `${character.name} — Iniciativa${
+              withAdvantage ? " (vantagem)" : ""
+            }`,
+            roll: {
+              label: withAdvantage ? "Iniciativa (vantagem)" : "Iniciativa",
+              formula: result.formula,
+              rolls: result.rolls,
+              modifier: result.modifier,
+              total: result.total,
+            },
+            secret: entry.secret || undefined,
+          };
+
+          state.chat = [...state.chat, message].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+          emitChatMessage(Number(payload.sessionId), room, message);
+          emitCombatState(Number(payload.sessionId), room, combat);
+          ack?.({ ok: true, message, combat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha na iniciativa" });
+        }
+      }
+    );
+
+    socket.on(
+      "combat:add",
+      async (
+        payload: {
+          sessionId: number;
+          name: string;
+          initiative: number;
+          kind?: "monster" | "other";
+          tokenId?: string | null;
+          userName?: string;
+        },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({ ok: false, error: "Apenas o mestre pode adicionar ao relógio" });
+            return;
+          }
+
+          const name = payload.name?.trim();
+          if (!name) {
+            ack?.({ ok: false, error: "Informe o nome" });
+            return;
+          }
+
+          const combat: CombatState = {
+            ...(state.combat ?? emptyCombatState()),
+            collecting: state.combat?.active
+              ? false
+              : Boolean(state.combat?.collecting ?? true),
+          };
+
+          const secret = payload.tokenId
+            ? tokenIsOnSecretLayer(state.board, payload.tokenId)
+            : false;
+          const entry: CombatantEntry = {
+            id: randomUUID(),
+            name,
+            initiative: Number(payload.initiative) || 0,
+            kind: payload.kind === "other" ? "other" : "monster",
+            tokenId: payload.tokenId ?? null,
+            secret,
+          };
+
+          combat.order = sortCombatOrder([...combat.order, entry]);
+          state.combat = combat;
+
+          const systemMessage: ChatMessage = {
+            id: randomUUID(),
+            at: Date.now(),
+            userId: socket.data.userId,
+            userName: payload.userName?.trim() || "Mestre",
+            type: "system",
+            text: `${name} entrou no relógio (iniciativa ${entry.initiative}).`,
+            secret: secret || undefined,
+          };
+          state.chat = [...state.chat, systemMessage].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+          emitCombatState(Number(payload.sessionId), room, combat);
+          emitChatMessage(Number(payload.sessionId), room, systemMessage);
+          ack?.({ ok: true, combat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao adicionar combatente" });
+        }
+      }
+    );
+
+    socket.on(
+      "combat:roll-npcs",
+      async (
+        payload: {
+          sessionId: number;
+          entries: Array<{
+            tokenId: string;
+            name: string;
+            /** Valor de Destreza (atributo), não o modificador. */
+            dexterity?: number;
+          }>;
+          userName?: string;
+        },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({
+              ok: false,
+              error: "Apenas o mestre rola iniciativa de NPCs",
+            });
+            return;
+          }
+
+          const entries = Array.isArray(payload.entries)
+            ? payload.entries.filter(
+                (entry) =>
+                  entry &&
+                  typeof entry.tokenId === "string" &&
+                  typeof entry.name === "string" &&
+                  entry.name.trim()
+              )
+            : [];
+          if (entries.length === 0) {
+            ack?.({ ok: false, error: "Nenhum NPC selecionado" });
+            return;
+          }
+
+          const combat: CombatState = {
+            ...(state.combat ?? emptyCombatState()),
+            collecting: state.combat?.active
+              ? false
+              : Boolean(state.combat?.collecting ?? true),
+            active: Boolean(state.combat?.active),
+          };
+
+          const messages: ChatMessage[] = [];
+          let order = [...combat.order];
+
+          for (const entry of entries) {
+            const dexScore =
+              typeof entry.dexterity === "number" &&
+              Number.isFinite(entry.dexterity)
+                ? entry.dexterity
+                : 10;
+            const modifier = Math.floor((dexScore - 10) / 2);
+            const result = rollD20WithModifier(modifier);
+            const secret = tokenIsOnSecretLayer(state.board, entry.tokenId);
+            const combatant: CombatantEntry = {
+              id: `token-${entry.tokenId}`,
+              name: entry.name.trim(),
+              initiative: result.total,
+              natural: result.natural,
+              kind: "monster",
+              tokenId: entry.tokenId,
+              secret,
+            };
+            order = order.filter(
+              (item) =>
+                item.tokenId !== entry.tokenId && item.id !== combatant.id
+            );
+            order.push(combatant);
+            messages.push({
+              id: randomUUID(),
+              at: Date.now(),
+              userId: socket.data.userId,
+              userName: payload.userName?.trim() || "Mestre",
+              type: "roll",
+              text: `${combatant.name} — Iniciativa`,
+              roll: {
+                label: "Iniciativa",
+                formula: result.formula,
+                rolls: result.rolls,
+                modifier: result.modifier,
+                total: result.total,
+              },
+              secret: secret || undefined,
+            });
+          }
+
+          combat.order = sortCombatOrder(order);
+          if (combat.active && combat.currentIndex >= combat.order.length) {
+            combat.currentIndex = Math.max(0, combat.order.length - 1);
+          }
+          state.combat = combat;
+          state.chat = [...state.chat, ...messages].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+
+          for (const message of messages) {
+            emitChatMessage(Number(payload.sessionId), room, message);
+          }
+          emitCombatState(Number(payload.sessionId), room, combat);
+          ack?.({ ok: true, combat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao rolar iniciativa dos NPCs" });
+        }
+      }
+    );
+
+    socket.on(
+      "combat:start",
+      async (
+        payload: { sessionId: number; userName?: string },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({ ok: false, error: "Apenas o mestre controla o relógio" });
+            return;
+          }
+
+          const previous = state.combat ?? emptyCombatState();
+          if (previous.order.length === 0) {
+            ack?.({
+              ok: false,
+              error: "Peça iniciativas ou adicione combatentes antes",
+            });
+            return;
+          }
+
+          const combat: CombatState = {
+            active: true,
+            collecting: false,
+            round: 1,
+            currentIndex: 0,
+            order: previous.order,
+          };
+          state.combat = combat;
+
+          const current = combat.order[0];
+          const publicText = current?.secret
+            ? "Relógio de turnos iniciado. Rodada 1 — vez de uma criatura oculta."
+            : `Relógio de turnos iniciado. Rodada 1 — vez de ${current?.name ?? "?"}.`;
+          const systemMessage: ChatMessage = {
+            id: randomUUID(),
+            at: Date.now(),
+            userId: socket.data.userId,
+            userName: payload.userName?.trim() || "Mestre",
+            type: "system",
+            text: publicText,
+          };
+          const messages: ChatMessage[] = [systemMessage];
+          if (current?.secret) {
+            messages.push({
+              ...systemMessage,
+              id: randomUUID(),
+              text: `Relógio de turnos iniciado. Rodada 1 — vez de ${current.name}.`,
+              secret: true,
+            });
+          }
+          state.chat = [...state.chat, ...messages].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+          emitCombatState(Number(payload.sessionId), room, combat);
+          for (const message of messages) {
+            emitChatMessage(Number(payload.sessionId), room, message);
+          }
+          ack?.({ ok: true, combat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao iniciar o relógio" });
+        }
+      }
+    );
+
+    socket.on(
+      "combat:next",
+      async (
+        payload: { sessionId: number; userName?: string },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({ ok: false, error: "Apenas o mestre pula a vez" });
+            return;
+          }
+
+          const combat = state.combat;
+          if (!combat?.active || combat.order.length === 0) {
+            ack?.({ ok: false, error: "Relógio não está ativo" });
+            return;
+          }
+
+          let nextIndex = combat.currentIndex + 1;
+          let round = combat.round;
+          if (nextIndex >= combat.order.length) {
+            nextIndex = 0;
+            round += 1;
+          }
+
+          const nextCombat: CombatState = {
+            ...combat,
+            currentIndex: nextIndex,
+            round,
+            collecting: false,
+          };
+          state.combat = nextCombat;
+
+          const current = nextCombat.order[nextIndex];
+          const publicText = current?.secret
+            ? `Rodada ${round} — vez de uma criatura oculta.`
+            : `Rodada ${round} — vez de ${current?.name ?? "?"}.`;
+          const systemMessage: ChatMessage = {
+            id: randomUUID(),
+            at: Date.now(),
+            userId: socket.data.userId,
+            userName: payload.userName?.trim() || "Mestre",
+            type: "system",
+            text: publicText,
+          };
+          const messages: ChatMessage[] = [systemMessage];
+          if (current?.secret) {
+            messages.push({
+              ...systemMessage,
+              id: randomUUID(),
+              text: `Rodada ${round} — vez de ${current.name}.`,
+              secret: true,
+            });
+          }
+          state.chat = [...state.chat, ...messages].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+          emitCombatState(Number(payload.sessionId), room, nextCombat);
+          for (const message of messages) {
+            emitChatMessage(Number(payload.sessionId), room, message);
+          }
+          ack?.({ ok: true, combat: nextCombat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao avançar turno" });
+        }
+      }
+    );
+
+    socket.on(
+      "combat:reorder",
+      async (
+        payload: {
+          sessionId: number;
+          orderIds: string[];
+          userName?: string;
+        },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({
+              ok: false,
+              error: "Apenas o mestre reordena o relógio",
+            });
+            return;
+          }
+
+          const combat = state.combat;
+          if (!combat || combat.order.length === 0) {
+            ack?.({ ok: false, error: "Relógio vazio" });
+            return;
+          }
+
+          const ids = Array.isArray(payload.orderIds)
+            ? payload.orderIds.filter((id) => typeof id === "string")
+            : [];
+          if (ids.length === 0) {
+            ack?.({ ok: false, error: "Ordem inválida" });
+            return;
+          }
+
+          const byId = new Map(combat.order.map((entry) => [entry.id, entry]));
+          const nextOrder = [];
+          const seen = new Set<string>();
+          for (const id of ids) {
+            const entry = byId.get(id);
+            if (!entry || seen.has(id)) continue;
+            nextOrder.push(entry);
+            seen.add(id);
+          }
+          for (const entry of combat.order) {
+            if (!seen.has(entry.id)) nextOrder.push(entry);
+          }
+
+          const currentId = combat.order[combat.currentIndex]?.id;
+          const currentIndex = currentId
+            ? Math.max(
+                0,
+                nextOrder.findIndex((entry) => entry.id === currentId)
+              )
+            : 0;
+
+          const nextCombat: CombatState = {
+            ...combat,
+            order: nextOrder,
+            currentIndex,
+          };
+          state.combat = nextCombat;
+          schedulePersist(Number(payload.sessionId), state);
+          emitCombatState(Number(payload.sessionId), room, nextCombat);
+          ack?.({ ok: true, combat: nextCombat });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao reordenar o relógio" });
+        }
+      }
+    );
+
+    socket.on(
+      "combat:end",
+      async (
+        payload: { sessionId: number; userName?: string },
+        ack?
+      ) => {
+        try {
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
+          if (membership.role !== "MASTER") {
+            ack?.({ ok: false, error: "Apenas o mestre encerra o relógio" });
+            return;
+          }
+
+          state.combat = null;
+
+          const systemMessage: ChatMessage = {
+            id: randomUUID(),
+            at: Date.now(),
+            userId: socket.data.userId,
+            userName: payload.userName?.trim() || "Mestre",
+            type: "system",
+            text: "Relógio de turnos encerrado.",
+          };
+          state.chat = [...state.chat, systemMessage].slice(-200);
+          schedulePersist(Number(payload.sessionId), state);
+          emitCombatState(Number(payload.sessionId), room, null);
+          emitChatMessage(Number(payload.sessionId), room, systemMessage);
+          ack?.({ ok: true });
+        } catch (error) {
+          console.error(error);
+          ack?.({ ok: false, error: "Falha ao encerrar o relógio" });
         }
       }
     );

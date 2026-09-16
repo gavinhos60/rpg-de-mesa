@@ -11,6 +11,71 @@ export function EmblemIcon({ className }: { className?: string }) {
     );
 }
 
+/** Cabeça de kenku — SVG Repo 322637 / Game Icons (Delapouite). */
+const KENKU_HEAD_PATH =
+    "M256 16C164.8 16-10.99 191.2 56.01 336c32.8 67.2 64.59 89.6 96.99 144h23c-23.7-72.7-108.09-117.2-98.99-190.1C87.41 207.4 176 128 256 112c80 16 168.6 95.4 179 177.9 9.1 72.9-75.3 117.4-99 190.1h23c32.4-54.4 64.2-76.8 97-144C523 191.2 347.2 16 256 16zm120 188.4l-81.1 60.8 70.9-10.1zm-239.8.1l10.1 50.6 70.8 10.1zM256 266.7c-39.2 26.1-49.5 30.7-98.6 43.1L256 493l98.6-183.2c-49.1-12.4-59.4-17-98.6-43.1zm-23.5 98.5l16 48-17 5.6-16-48zm47 0l17 5.6-16 48-17-5.6z";
+
+/** Silhueta kenku — marca do site. */
+export function CrowIcon({
+    className,
+    filled = true,
+}: {
+    className?: string;
+    filled?: boolean;
+}) {
+    return (
+        <svg
+            viewBox="0 0 512 512"
+            className={className}
+            fill={filled ? "currentColor" : "none"}
+            aria-hidden
+        >
+            <path
+                d={KENKU_HEAD_PATH}
+                stroke={filled ? undefined : "currentColor"}
+                strokeWidth={filled ? undefined : 12}
+                strokeLinejoin="round"
+                opacity={filled ? 0.95 : 1}
+            />
+        </svg>
+    );
+}
+
+/** Marca kenku — ícone principal. */
+export function CrowMark({ className }: { className?: string }) {
+    return (
+        <svg
+            viewBox="0 0 512 512"
+            className={className}
+            fill="currentColor"
+            aria-hidden
+        >
+            <path d={KENKU_HEAD_PATH} />
+        </svg>
+    );
+}
+
+/** Pena solta — detalhe kenku. */
+export function FeatherIcon({ className }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 24 48" className={className} fill="none" aria-hidden>
+            <path
+                d="M12 4 C18 12 18 24 12 44 C6 24 6 12 12 4 Z"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+            />
+            <path
+                d="M12 8 V40 M12 16 L16 14 M12 22 L17 20 M12 28 L16 27 M12 16 L8 14 M12 22 L7 20 M12 28 L8 27"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+                opacity="0.75"
+            />
+        </svg>
+    );
+}
+
 export function WaxSealIcon({
     className,
     label,

@@ -430,3 +430,349 @@ export async function grantCustomItemToCharacter(
     },
   });
 }
+
+type SheetRoot = Record<string, unknown>;
+type EquipmentStack = { itemId: string; quantity: number };
+type CustomItem = {
+  id: string;
+  name: string;
+  description?: string;
+  quantity: number;
+  weight?: number;
+  category?: string;
+  grantedByName?: string;
+};
+
+const characterInclude = {
+  player: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  campaign: true,
+} as const;
+
+function asSheetRoot(sheet: unknown): SheetRoot {
+  if (sheet && typeof sheet === "object" && !Array.isArray(sheet)) {
+    return { ...(sheet as SheetRoot) };
+  }
+  return {};
+}
+
+function asEquipment(sheetRoot: SheetRoot): Record<string, unknown> {
+  const equipmentRaw = sheetRoot.equipment;
+  if (
+    equipmentRaw &&
+    typeof equipmentRaw === "object" &&
+    !Array.isArray(equipmentRaw)
+  ) {
+    return { ...(equipmentRaw as Record<string, unknown>) };
+  }
+  return {
+    classId: "",
+    choiceSelections: {},
+    manualItems: [],
+    customItems: [],
+    removedItems: [],
+  };
+}
+
+function asStacks(value: unknown): EquipmentStack[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const itemId = String(row.itemId ?? "").trim();
+      const quantity = Math.max(0, Math.floor(Number(row.quantity) || 0));
+      if (!itemId || quantity <= 0) return null;
+      return { itemId, quantity };
+    })
+    .filter((item): item is EquipmentStack => Boolean(item));
+}
+
+function asCustomItems(value: unknown): CustomItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const id = String(row.id ?? "").trim();
+      const name = String(row.name ?? "").trim();
+      const quantity = Math.max(0, Math.floor(Number(row.quantity) || 0));
+      if (!id || !name || quantity <= 0) return null;
+      const next: CustomItem = { id, name, quantity };
+      const description = String(row.description ?? "").trim();
+      if (description) next.description = description;
+      const weight = Number(row.weight);
+      if (Number.isFinite(weight) && weight >= 0) next.weight = weight;
+      const category = String(row.category ?? "").trim();
+      if (category) next.category = category;
+      const grantedByName = String(row.grantedByName ?? "").trim();
+      if (grantedByName) next.grantedByName = grantedByName;
+      return next;
+    })
+    .filter((item): item is CustomItem => Boolean(item));
+}
+
+function normalizeWalletInput(raw: unknown): {
+  pl: number;
+  po: number;
+  pp: number;
+} {
+  const source =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  return {
+    pl: Math.max(0, Math.floor(Number(source.pl) || 0)),
+    po: Math.max(0, Math.floor(Number(source.po) || 0)),
+    pp: Math.max(0, Math.floor(Number(source.pp) || 0)),
+  };
+}
+
+function removeCatalogQuantity(
+  equipment: Record<string, unknown>,
+  itemId: string,
+  quantity: number
+) {
+  let remaining = Math.max(1, Math.floor(quantity));
+  const manual = asStacks(equipment.manualItems);
+  const manualIndex = manual.findIndex((item) => item.itemId === itemId);
+  if (manualIndex >= 0) {
+    const take = Math.min(manual[manualIndex].quantity, remaining);
+    manual[manualIndex] = {
+      ...manual[manualIndex],
+      quantity: manual[manualIndex].quantity - take,
+    };
+    remaining -= take;
+    if (manual[manualIndex].quantity <= 0) {
+      manual.splice(manualIndex, 1);
+    }
+  }
+  equipment.manualItems = manual;
+
+  if (remaining > 0) {
+    const removed = asStacks(equipment.removedItems);
+    const removedIndex = removed.findIndex((item) => item.itemId === itemId);
+    if (removedIndex >= 0) {
+      removed[removedIndex] = {
+        ...removed[removedIndex],
+        quantity: removed[removedIndex].quantity + remaining,
+      };
+    } else {
+      removed.push({ itemId, quantity: remaining });
+    }
+    equipment.removedItems = removed;
+  }
+}
+
+function addCatalogQuantity(
+  equipment: Record<string, unknown>,
+  itemId: string,
+  quantity: number
+) {
+  const amount = Math.max(1, Math.floor(quantity));
+  const manual = asStacks(equipment.manualItems);
+  const index = manual.findIndex((item) => item.itemId === itemId);
+  if (index >= 0) {
+    manual[index] = {
+      ...manual[index],
+      quantity: manual[index].quantity + amount,
+    };
+  } else {
+    manual.push({ itemId, quantity: amount });
+  }
+  equipment.manualItems = manual;
+}
+
+function removeCustomQuantity(
+  equipment: Record<string, unknown>,
+  customItemId: string,
+  quantity: number
+): CustomItem {
+  const amount = Math.max(1, Math.floor(quantity));
+  const customItems = asCustomItems(equipment.customItems);
+  const index = customItems.findIndex((item) => item.id === customItemId);
+  if (index < 0) {
+    throw new Error("ITEM_NOT_FOUND");
+  }
+  const current = customItems[index];
+  if (current.quantity < amount) {
+    throw new Error("ITEM_QUANTITY_INVALID");
+  }
+  const moved: CustomItem = { ...current, quantity: amount };
+  if (current.quantity === amount) {
+    customItems.splice(index, 1);
+  } else {
+    customItems[index] = {
+      ...current,
+      quantity: current.quantity - amount,
+    };
+  }
+  equipment.customItems = customItems;
+  return moved;
+}
+
+function addCustomItem(equipment: Record<string, unknown>, item: CustomItem) {
+  const customItems = asCustomItems(equipment.customItems);
+  const same = customItems.find(
+    (entry) =>
+      entry.name === item.name &&
+      (entry.description ?? "") === (item.description ?? "") &&
+      (entry.weight ?? null) === (item.weight ?? null)
+  );
+  if (same) {
+    same.quantity += item.quantity;
+  } else {
+    customItems.push({
+      ...item,
+      id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    });
+  }
+  equipment.customItems = customItems;
+}
+
+async function requireOwnedCharacter(characterId: number, userId: number) {
+  const character = await prisma.character.findUnique({
+    where: { id: characterId },
+  });
+  if (!character) throw new Error("CHARACTER_NOT_FOUND");
+  if (character.playerId !== userId) throw new Error("CHARACTER_FORBIDDEN");
+  return character;
+}
+
+export async function updateCharacterWallet(
+  characterId: number,
+  authenticatedUserId: number,
+  walletInput: {
+    pl?: number;
+    po?: number;
+    pp?: number;
+  }
+) {
+  const character = await requireOwnedCharacter(
+    characterId,
+    authenticatedUserId
+  );
+  const sheetRoot = asSheetRoot(character.sheet);
+  sheetRoot.wallet = normalizeWalletInput(walletInput);
+
+  return prisma.character.update({
+    where: { id: characterId },
+    data: { sheet: sheetRoot as Prisma.InputJsonValue },
+    include: characterInclude,
+  });
+}
+
+export async function discardCharacterItem(
+  characterId: number,
+  authenticatedUserId: number,
+  payload: {
+    kind: "catalog" | "custom";
+    itemId?: string;
+    customItemId?: string;
+    quantity?: number;
+  }
+) {
+  const character = await requireOwnedCharacter(
+    characterId,
+    authenticatedUserId
+  );
+  const quantity = Math.max(1, Math.floor(Number(payload.quantity) || 1));
+  const sheetRoot = asSheetRoot(character.sheet);
+  const equipment = asEquipment(sheetRoot);
+
+  if (payload.kind !== "catalog" && payload.kind !== "custom") {
+    throw new Error("ITEM_NOT_FOUND");
+  }
+
+  if (payload.kind === "catalog") {
+    const itemId = String(payload.itemId ?? "").trim();
+    if (!itemId) throw new Error("ITEM_NOT_FOUND");
+    removeCatalogQuantity(equipment, itemId, quantity);
+  } else {
+    const customItemId = String(payload.customItemId ?? "").trim();
+    if (!customItemId) throw new Error("ITEM_NOT_FOUND");
+    removeCustomQuantity(equipment, customItemId, quantity);
+  }
+
+  sheetRoot.equipment = equipment;
+  return prisma.character.update({
+    where: { id: characterId },
+    data: { sheet: sheetRoot as Prisma.InputJsonValue },
+    include: characterInclude,
+  });
+}
+
+export async function transferCharacterItem(
+  characterId: number,
+  authenticatedUserId: number,
+  payload: {
+    kind: "catalog" | "custom";
+    itemId?: string;
+    customItemId?: string;
+    quantity?: number;
+    targetCharacterId: number;
+  }
+) {
+  const source = await requireOwnedCharacter(characterId, authenticatedUserId);
+  if (source.campaignId == null) {
+    throw new Error("CHARACTER_NOT_IN_CAMPAIGN");
+  }
+
+  const targetId = Number(payload.targetCharacterId);
+  if (!Number.isFinite(targetId) || targetId === characterId) {
+    throw new Error("TRANSFER_TARGET_INVALID");
+  }
+
+  const target = await prisma.character.findUnique({
+    where: { id: targetId },
+  });
+  if (!target) throw new Error("CHARACTER_NOT_FOUND");
+  if (target.campaignId !== source.campaignId) {
+    throw new Error("TRANSFER_TARGET_INVALID");
+  }
+
+  const quantity = Math.max(1, Math.floor(Number(payload.quantity) || 1));
+  const sourceSheet = asSheetRoot(source.sheet);
+  const targetSheet = asSheetRoot(target.sheet);
+  const sourceEquipment = asEquipment(sourceSheet);
+  const targetEquipment = asEquipment(targetSheet);
+
+  if (payload.kind === "catalog") {
+    const itemId = String(payload.itemId ?? "").trim();
+    if (!itemId) throw new Error("ITEM_NOT_FOUND");
+    removeCatalogQuantity(sourceEquipment, itemId, quantity);
+    addCatalogQuantity(targetEquipment, itemId, quantity);
+  } else {
+    const customItemId = String(payload.customItemId ?? "").trim();
+    if (!customItemId) throw new Error("ITEM_NOT_FOUND");
+    const moved = removeCustomQuantity(
+      sourceEquipment,
+      customItemId,
+      quantity
+    );
+    addCustomItem(targetEquipment, moved);
+  }
+
+  sourceSheet.equipment = sourceEquipment;
+  targetSheet.equipment = targetEquipment;
+
+  const [from, to] = await prisma.$transaction([
+    prisma.character.update({
+      where: { id: source.id },
+      data: { sheet: sourceSheet as Prisma.InputJsonValue },
+      include: characterInclude,
+    }),
+    prisma.character.update({
+      where: { id: target.id },
+      data: { sheet: targetSheet as Prisma.InputJsonValue },
+      include: characterInclude,
+    }),
+  ]);
+
+  return { from, to };
+}

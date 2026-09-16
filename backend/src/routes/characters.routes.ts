@@ -10,6 +10,9 @@ import {
   removeCharacterFromCampaignController,
   deleteCharacterController,
   grantCustomItemController,
+  updateWalletController,
+  discardItemController,
+  transferItemController,
 } from "../controllers/characters.controller";
 
 const router = Router();
@@ -22,6 +25,9 @@ router.post("/", createCharacterController);
 router.post("/:id/assign-campaign", assignCharacterController);
 router.post("/:id/remove-campaign", removeCharacterFromCampaignController);
 router.post("/:id/grant-item", grantCustomItemController);
+router.patch("/:id/wallet", updateWalletController);
+router.post("/:id/discard-item", discardItemController);
+router.post("/:id/transfer-item", transferItemController);
 router.patch("/:id", updateCharacterController);
 router.delete("/:id", deleteCharacterController);
 

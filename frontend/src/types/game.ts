@@ -47,13 +47,25 @@ export type BoardDrawing = {
   secret?: boolean;
 };
 
+export type MeasureShape = "line" | "square" | "circle" | "cone" | "beam";
+
 export type BoardRuler = {
   id: string;
+  /** Forma da medição (padrão: linha). */
+  shape?: MeasureShape;
   from: { x: number; y: number };
   to: { x: number; y: number };
   /** Distância em metros. */
   meters: number;
+  /** Distância em quadrados (D&D 5e / Roll20). */
+  squares?: number;
   byUserId: number;
+  /** Nome de quem está medindo (exibição estilo Roll20). */
+  byUserName?: string;
+  /** Cor da marcação (hex). */
+  color?: string;
+  /** Pré-visualização ao vivo — não persiste. */
+  live?: boolean;
 };
 
 export type BoardEffect = {
@@ -133,8 +145,14 @@ export type BoardState = {
   /**
    * Se definido, jogadores renderizam este mapa em vez do mapa atual do mestre.
    * `null` limpa a trava (todos acompanham o cenário atual).
+   * @deprecated preferir `playerViewsByUserId` (por jogador).
    */
   playerMapView?: PlayerMapView | null;
+  /**
+   * Mapa congelado por jogador (userId → view).
+   * Ausente = jogador acompanha o mapa ativo do mestre (câmera + tokens).
+   */
+  playerViewsByUserId?: Record<string, PlayerMapView>;
 };
 
 export type ChatRollPart = {
@@ -155,12 +173,58 @@ export type ChatMessage = {
   roll?: ChatRollPart & {
     parts?: ChatRollPart[];
   };
+  /** Só o mestre vê (ex.: rolagem de token na camada secreta). */
+  secret?: boolean;
 };
 
 export type SessionRuntimeState = {
   board: BoardState;
   chat: ChatMessage[];
+  /** Ordem de iniciativa / relógio de turnos (mestre controla). */
+  combat?: CombatState | null;
 };
+
+export type CombatantEntry = {
+  id: string;
+  name: string;
+  initiative: number;
+  /** Face natural do d20 (20 = primeiro, 1 = último, independente do modificador). */
+  natural?: number;
+  kind: "character" | "monster" | "other";
+  characterId?: number | null;
+  tokenId?: string | null;
+  userId?: number | null;
+  /** Combatente de token na camada secreta — oculto aos jogadores. */
+  secret?: boolean;
+};
+
+export type CombatState = {
+  active: boolean;
+  collecting: boolean;
+  round: number;
+  currentIndex: number;
+  order: CombatantEntry[];
+};
+
+export type InitiativeRequest = {
+  id: string;
+  at: number;
+  fromUserId: number;
+  targetCharacterId: number | null;
+  characterName: string | null;
+  targetUserId: number | null;
+};
+
+export function emptyCombatState(): CombatState {
+  return {
+    active: false,
+    collecting: false,
+    round: 1,
+    currentIndex: 0,
+    order: [],
+  };
+}
+
 
 export type GameSessionSummary = {
   id: number;
@@ -260,15 +324,28 @@ export function snapshotPlayerMapView(board: BoardState): PlayerMapView {
 }
 
 /**
- * Mapa que o cliente deve renderizar: mestre sempre vê o cenário ativo;
- * jogadores usam `playerMapView` se o mestre não os trouxe junto.
+ * Jogador está em mapa congelado (câmera própria, diferente do ativo).
  */
-export function boardMapForViewer(
+export function playerIsOnFrozenScene(
   board: BoardState,
-  isMaster: boolean
+  userId: number
+): boolean {
+  if (board.playerViewsByUserId?.[String(userId)]) return true;
+  // Legado: um único playerMapView para todos os não-mestres.
+  if (
+    board.playerMapView &&
+    (!board.playerViewsByUserId ||
+      Object.keys(board.playerViewsByUserId).length === 0)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function applyPlayerMapView(
+  board: BoardState,
+  view: PlayerMapView
 ): BoardState {
-  const view = board.playerMapView;
-  if (isMaster || !view) return board;
   return {
     ...board,
     mapUrl: view.mapUrl,
@@ -282,17 +359,76 @@ export function boardMapForViewer(
   };
 }
 
+/**
+ * Mapa que o cliente deve renderizar.
+ * Mestre: mapa ativo (ou inspeção do congelado).
+ * Jogador: view própria se foi deixado para trás; senão acompanha o mestre.
+ */
+export function boardMapForViewer(
+  board: BoardState,
+  isMaster: boolean,
+  options?: { watchPlayerScene?: boolean; currentUserId?: number }
+): BoardState {
+  const views = board.playerViewsByUserId ?? {};
+  const viewList = Object.values(views);
+
+  if (isMaster && options?.watchPlayerScene) {
+    const view = viewList[0] ?? board.playerMapView ?? null;
+    if (view) return applyPlayerMapView(board, view);
+  }
+  if (isMaster) return board;
+
+  const uid = options?.currentUserId;
+  if (uid != null && views[String(uid)]) {
+    return applyPlayerMapView(board, views[String(uid)]);
+  }
+  // Legado: playerMapView global.
+  if (
+    board.playerMapView &&
+    viewList.length === 0 &&
+    playerIsOnFrozenScene(board, uid ?? -1)
+  ) {
+    return applyPlayerMapView(board, board.playerMapView);
+  }
+  return board;
+}
+
 /** Tokens visíveis no cenário atual do espectador. */
 export function tokensForViewer(
   board: BoardState,
-  isMaster: boolean
+  isMaster: boolean,
+  options?: { watchPlayerScene?: boolean; currentUserId?: number }
 ): BoardToken[] {
+  const views = board.playerViewsByUserId ?? {};
+  const hasPerUser = Object.keys(views).length > 0;
+  const hasLegacy = Boolean(board.playerMapView) && !hasPerUser;
+
+  if (!hasPerUser && !hasLegacy) {
+    return board.tokens;
+  }
+
   if (isMaster) {
+    if (options?.watchPlayerScene) {
+      return board.tokens.filter((token) => token.onPlayerScene);
+    }
     return board.tokens.filter((token) => !token.onPlayerScene);
   }
-  if (board.playerMapView) {
-    return board.tokens.filter((token) => token.onPlayerScene);
+
+  const uid = options?.currentUserId;
+  const myView = uid != null ? views[String(uid)] : undefined;
+
+  if (myView || (hasLegacy && uid != null && playerIsOnFrozenScene(board, uid))) {
+    const myUrl = myView?.mapUrl ?? board.playerMapView?.mapUrl;
+    return board.tokens.filter((token) => {
+      if (!token.onPlayerScene) return false;
+      if (!hasPerUser) return true;
+      if (token.ownerUserId == null) return true;
+      const ownerView = views[String(token.ownerUserId)];
+      if (!ownerView) return true;
+      return ownerView.mapUrl === myUrl;
+    });
   }
+
   return board.tokens.filter((token) => !token.onPlayerScene);
 }
 
@@ -344,6 +480,66 @@ export function metersPerSquareOf(board: BoardState): number {
 export function formatMeters(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? `${rounded} m` : `${rounded.toFixed(1)} m`;
+}
+
+/** Âncora no centro do quadrado (snap padrão do Roll20 em mapas com grade). */
+export function snapToCellCenter(
+  x: number,
+  y: number,
+  gridSize: number
+): { x: number; y: number } {
+  const g = gridSize || DEFAULT_GRID_SIZE;
+  return {
+    x: Math.floor(x / g) * g + g / 2,
+    y: Math.floor(y / g) * g + g / 2,
+  };
+}
+
+/** Âncora no canto mais próximo da grade. */
+export function snapToCellCorner(
+  x: number,
+  y: number,
+  gridSize: number
+): { x: number; y: number } {
+  const g = gridSize || DEFAULT_GRID_SIZE;
+  return {
+    x: Math.round(x / g) * g,
+    y: Math.round(y / g) * g,
+  };
+}
+
+export function cellCoords(
+  x: number,
+  y: number,
+  gridSize: number
+): { cx: number; cy: number } {
+  const g = gridSize || DEFAULT_GRID_SIZE;
+  return {
+    cx: Math.floor(x / g),
+    cy: Math.floor(y / g),
+  };
+}
+
+/**
+ * Distância em quadrados no estilo D&D 5e / Roll20:
+ * cada diagonal conta como 1 quadrado (Chebyshev).
+ */
+export function distanceSquares5e(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  gridSize: number
+): number {
+  const a = cellCoords(from.x, from.y, gridSize);
+  const b = cellCoords(to.x, to.y, gridSize);
+  return Math.max(Math.abs(a.cx - b.cx), Math.abs(a.cy - b.cy));
+}
+
+export function formatMeasureLabel(
+  squares: number,
+  metersPerSquare: number
+): string {
+  const meters = Math.round(squares * metersPerSquare * 10) / 10;
+  return `${formatMeters(meters)} (${squares}□)`;
 }
 
 export function snapToGrid(value: number, gridSize: number): number {
@@ -410,11 +606,55 @@ export function distanceMeters(
   gridSize: number,
   metersPerSquare: number
 ): number {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  const pixels = Math.sqrt(dx * dx + dy * dy);
-  const squares = pixels / (gridSize || DEFAULT_GRID_SIZE);
+  const squares = distanceSquares5e(from, to, gridSize);
   return Math.round(squares * metersPerSquare * 10) / 10;
+}
+
+/** Células sob uma régua (caminho Chebyshev aproximado, estilo Roll20). */
+export function cellsAlongMeasure(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  gridSize: number
+): Array<{ cx: number; cy: number }> {
+  const a = cellCoords(from.x, from.y, gridSize);
+  const b = cellCoords(to.x, to.y, gridSize);
+  const dx = b.cx - a.cx;
+  const dy = b.cy - a.cy;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy));
+  if (steps === 0) return [{ cx: a.cx, cy: a.cy }];
+  const cells: Array<{ cx: number; cy: number }> = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const cx = a.cx + Math.round((dx * i) / steps);
+    const cy = a.cy + Math.round((dy * i) / steps);
+    const prev = cells[cells.length - 1];
+    if (!prev || prev.cx !== cx || prev.cy !== cy) {
+      cells.push({ cx, cy });
+    }
+  }
+  return cells;
+}
+
+/** Células cobertas por um círculo (centro do quadrado dentro do raio). */
+export function cellsInRadius(
+  center: { x: number; y: number },
+  radiusPx: number,
+  gridSize: number
+): Array<{ cx: number; cy: number }> {
+  const g = gridSize || DEFAULT_GRID_SIZE;
+  const origin = cellCoords(center.x, center.y, g);
+  const reach = Math.ceil(radiusPx / g) + 1;
+  const cells: Array<{ cx: number; cy: number }> = [];
+  for (let cy = origin.cy - reach; cy <= origin.cy + reach; cy += 1) {
+    for (let cx = origin.cx - reach; cx <= origin.cx + reach; cx += 1) {
+      const cellCenterX = cx * g + g / 2;
+      const cellCenterY = cy * g + g / 2;
+      const dist = Math.hypot(cellCenterX - center.x, cellCenterY - center.y);
+      if (dist <= radiusPx + 0.01) {
+        cells.push({ cx, cy });
+      }
+    }
+  }
+  return cells;
 }
 
 export function fogCellKey(cx: number, cy: number) {

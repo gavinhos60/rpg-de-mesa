@@ -19,7 +19,6 @@ export function PlayerPanel({
 }: PlayerPanelProps) {
   const tools: Array<{ id: BoardTool; label: string }> = [
     { id: "select", label: "Mover" },
-    { id: "effect", label: "Marcar" },
     { id: "ruler", label: "Régua" },
     { id: "draw", label: "Desenhar" },
   ];
@@ -38,8 +37,8 @@ export function PlayerPanel({
             Painel do Jogador
           </h3>
           <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
-            Arraste sua ficha para o mapa para criar o token. Edite os círculos
-            de PV no seu token.
+            Arraste sua ficha para o mapa para criar um token (pode ter vários).
+            A Régua abre o painel Medir (formas, snap e transmissão).
           </p>
         </div>
 

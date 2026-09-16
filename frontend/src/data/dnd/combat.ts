@@ -33,6 +33,7 @@ export function getInitiative(
 export function getBaseArmorClass(
     dexterity: number,
     wisdom: number,
+    constitution: number,
     characterClass?: CharacterClass
 ): number {
     const dexterityModifier =
@@ -47,7 +48,17 @@ export function getBaseArmorClass(
             dexterityModifier +
             wisdomModifier
         );
-    }
+    } 
+    if (characterClass?.id === "barbarian") {
+        const constitutionModifier =
+            getAbilityModifier(constitution);
+
+        return (
+            10 +
+            dexterityModifier +
+            constitutionModifier
+        );
+    }     
 
     return 10 + dexterityModifier;
 }
@@ -55,6 +66,7 @@ export function getBaseArmorClass(
 export function getArmorClassFromEquipment(
     dexterity: number,
     wisdom: number,
+    constitution: number,
     characterClass: CharacterClass | undefined,
     itemIds: string[]
 ): number {
@@ -70,14 +82,19 @@ export function getArmorClassFromEquipment(
         armorClass = 14 + Math.min(2, dexterityModifier);
     } else if (itemIds.includes("leather-armor")) {
         armorClass = 11 + dexterityModifier;
+    } else if (characterClass?.id === "monk" && hasShield) {
+        // Defesa sem Armadura de monge exige não usar escudo.
+        armorClass = 10 + dexterityModifier;
     } else {
         armorClass = getBaseArmorClass(
             dexterity,
             wisdom,
+            constitution,
             characterClass
         );
     }
 
+    // Escudo sempre +2 quando empunhado.
     return armorClass + (hasShield ? 2 : 0);
 }
 

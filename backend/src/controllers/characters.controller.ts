@@ -8,6 +8,9 @@ import {
   removeCharacterFromCampaign,
   deleteCharacter,
   grantCustomItemToCharacter,
+  updateCharacterWallet,
+  discardCharacterItem,
+  transferCharacterItem,
 } from "../services/characters.service";
 
 function mapCharacterError(error: unknown, res: Response, fallback: string) {
@@ -60,6 +63,17 @@ function mapCharacterError(error: unknown, res: Response, fallback: string) {
     case "ITEM_NAME_REQUIRED":
       res.status(400).json({
         error: "Informe o nome do item",
+      });
+      return true;
+    case "ITEM_NOT_FOUND":
+      res.status(404).json({ error: "Item não encontrado no inventário" });
+      return true;
+    case "ITEM_QUANTITY_INVALID":
+      res.status(400).json({ error: "Quantidade inválida para este item" });
+      return true;
+    case "TRANSFER_TARGET_INVALID":
+      res.status(400).json({
+        error: "Destinatário inválido para transferência",
       });
       return true;
     default:
@@ -278,5 +292,85 @@ export async function grantCustomItemController(req: Request, res: Response) {
     console.error(error);
     if (mapCharacterError(error, res, "Erro ao conceder item")) return;
     res.status(500).json({ error: "Erro ao conceder item" });
+  }
+}
+
+export async function updateWalletController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await updateCharacterWallet(
+      Number(req.params.id),
+      req.user.userId,
+      {
+        pl: req.body.pl != null ? Number(req.body.pl) : undefined,
+        po: req.body.po != null ? Number(req.body.po) : undefined,
+        pp: req.body.pp != null ? Number(req.body.pp) : undefined,
+      }
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao atualizar carteira")) return;
+    res.status(500).json({ error: "Erro ao atualizar carteira" });
+  }
+}
+
+export async function discardItemController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await discardCharacterItem(
+      Number(req.params.id),
+      req.user.userId,
+      {
+        kind: req.body.kind,
+        itemId: req.body.itemId,
+        customItemId: req.body.customItemId,
+        quantity:
+          req.body.quantity != null ? Number(req.body.quantity) : undefined,
+      }
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao remover item")) return;
+    res.status(500).json({ error: "Erro ao remover item" });
+  }
+}
+
+export async function transferItemController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const result = await transferCharacterItem(
+      Number(req.params.id),
+      req.user.userId,
+      {
+        kind: req.body.kind,
+        itemId: req.body.itemId,
+        customItemId: req.body.customItemId,
+        quantity:
+          req.body.quantity != null ? Number(req.body.quantity) : undefined,
+        targetCharacterId: Number(req.body.targetCharacterId),
+      }
+    );
+
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao transferir item")) return;
+    res.status(500).json({ error: "Erro ao transferir item" });
   }
 }

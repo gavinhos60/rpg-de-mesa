@@ -1,8 +1,15 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 
 export function MainLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
+  function handleLogout() {
+    logout();
+    navigate("/login", { replace: true });
+  }
   const menuItems = [
     {
       label: "Dashboard",
@@ -156,6 +163,8 @@ export function MainLayout() {
               </div>
 
               <button
+                type="button"
+                onClick={handleLogout}
                 className="text-slate-500 transition hover:text-red-400"
                 title="Sair"
               >

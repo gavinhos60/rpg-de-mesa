@@ -1,7 +1,12 @@
 import { api } from "./api";
-import type { CharacterFormData } from "../types/character";
+import type { CharacterFormData, CharacterWallet } from "../types/character";
 import { DND_CLASSES } from "../data/dnd/classes";
 import { getRaceDisplayName } from "../data/dnd/raceResolution";
+import { resolveCharacterWallet } from "../utils/wallet";
+
+export type InventoryItemAction =
+  | { kind: "catalog"; itemId: string; quantity: number }
+  | { kind: "custom"; customItemId: string; quantity: number };
 
 export interface SavedCharacter {
   id: number;
@@ -92,12 +97,16 @@ export async function createCharacterFromForm(
 ): Promise<SavedCharacter> {
   const summary = buildCharacterSummary(data);
   const avatar = options?.avatar ?? data.avatar ?? undefined;
+  const sheet: CharacterFormData = {
+    ...data,
+    wallet: data.wallet ?? resolveCharacterWallet(data),
+  };
 
   return createCharacter({
     ...summary,
     avatar: avatar || undefined,
     campaignId: options?.campaignId ?? null,
-    sheet: data,
+    sheet,
   });
 }
 
@@ -120,7 +129,10 @@ export async function updateCharacterFromForm(
   return updateCharacter(id, {
     ...summary,
     avatar: nextAvatar,
-    sheet: data,
+    sheet: {
+      ...data,
+      wallet: data.wallet ?? resolveCharacterWallet(data),
+    },
   });
 }
 
@@ -159,6 +171,39 @@ export async function grantCustomItem(
 ): Promise<SavedCharacter> {
   const response = await api.post<SavedCharacter>(
     `/characters/${characterId}/grant-item`,
+    payload
+  );
+  return response.data;
+}
+
+export async function updateCharacterWallet(
+  characterId: number,
+  wallet: CharacterWallet
+): Promise<SavedCharacter> {
+  const response = await api.patch<SavedCharacter>(
+    `/characters/${characterId}/wallet`,
+    wallet
+  );
+  return response.data;
+}
+
+export async function discardCharacterItem(
+  characterId: number,
+  payload: InventoryItemAction
+): Promise<SavedCharacter> {
+  const response = await api.post<SavedCharacter>(
+    `/characters/${characterId}/discard-item`,
+    payload
+  );
+  return response.data;
+}
+
+export async function transferCharacterItem(
+  characterId: number,
+  payload: InventoryItemAction & { targetCharacterId: number }
+): Promise<{ from: SavedCharacter; to: SavedCharacter }> {
+  const response = await api.post<{ from: SavedCharacter; to: SavedCharacter }>(
+    `/characters/${characterId}/transfer-item`,
     payload
   );
   return response.data;

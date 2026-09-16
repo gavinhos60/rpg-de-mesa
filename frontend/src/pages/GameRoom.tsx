@@ -9,16 +9,32 @@ import {
 } from "../services/game.service";
 import { getMyCharacters, getCharacterById } from "../services/character.service";
 import {
+  updateCharacterWallet,
+  discardCharacterItem,
+  transferCharacterItem,
+  type InventoryItemAction,
+} from "../services/character.service";
+import {
   createGameSocket,
   emitBoardUpdate,
   emitChatMessage,
   emitCharacterAction,
   emitCheckRequest,
+  emitCombatAdd,
+  emitCombatEnd,
+  emitCombatNext,
+  emitCombatReorder,
+  emitCombatRollNpcs,
+  emitCombatStart,
+  emitInitiativeRequest,
+  emitInitiativeRoll,
   emitRuler,
   emitSheetRoll,
   emitMonsterAction,
   emitTokenMove,
+  emitTokenRemove,
   joinSession,
+  emitRulerClear,
 } from "../services/gameSocket";
 import type {
   BoardState,
@@ -26,10 +42,19 @@ import type {
   CampaignCharacterLite,
   ChatMessage,
   CheckRequest,
+  CombatantEntry,
+  CombatState,
+  InitiativeRequest,
   SessionRuntimeState,
 } from "../types/game";
-import { emptyBoardState, snapToGrid } from "../types/game";
-import type { Ability, CharacterFormData, Skill, Spell } from "../types/character";
+import { emptyBoardState, playerIsOnFrozenScene, snapToGrid } from "../types/game";
+import type {
+  Ability,
+  CharacterFormData,
+  CharacterWallet,
+  Skill,
+  Spell,
+} from "../types/character";
 import {
   buildFeatureAction,
   buildSpellAction,
@@ -43,6 +68,8 @@ import { PlayerPanel } from "../components/game/PlayerPanel";
 import { PlayableSheetDrawer } from "../components/game/PlayableSheetDrawer";
 import { MonsterSheetDrawer } from "../components/game/MonsterSheetDrawer";
 import { CheckPrompt } from "../components/game/CheckPrompt";
+import { InitiativePrompt } from "../components/game/InitiativePrompt";
+import { TurnClock } from "../components/game/TurnClock";
 import { DiceRollOverlay, diceFromChatRoll } from "../components/game/DiceRollOverlay";
 
 export function GameRoom() {
@@ -71,6 +98,7 @@ export function GameRoom() {
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [tool, setTool] = useState<BoardTool>("select");
   const [placeOnSecretLayer, setPlaceOnSecretLayer] = useState(false);
+  const [watchPlayerScene, setWatchPlayerScene] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [diceFx, setDiceFx] = useState<{
@@ -84,9 +112,17 @@ export function GameRoom() {
   const [openCharacter, setOpenCharacter] =
     useState<CampaignCharacterLite | null>(null);
   const [sheetReadOnly, setSheetReadOnly] = useState(false);
+  const [inventoryBusy, setInventoryBusy] = useState(false);
   const [pendingCheck, setPendingCheck] = useState<CheckRequest | null>(null);
+  const [pendingInitiative, setPendingInitiative] =
+    useState<InitiativeRequest | null>(null);
+  const [combat, setCombat] = useState<CombatState | null>(null);
+  const [initiativeHoverTokenIds, setInitiativeHoverTokenIds] = useState<
+    string[]
+  >([]);
   const [openMonster, setOpenMonster] = useState<Monster | null>(null);
   const [monsterDisplayName, setMonsterDisplayName] = useState<string>("");
+  const [monsterTokenId, setMonsterTokenId] = useState<string | null>(null);
   const [monsterTokenHp, setMonsterTokenHp] = useState<{
     current?: number;
     max?: number;
@@ -101,12 +137,26 @@ export function GameRoom() {
   myCharactersRef.current = myCharacters;
   const userIdRef = useRef(user?.id);
   userIdRef.current = user?.id;
+  const roleRef = useRef(role);
+  roleRef.current = role;
   /** Tokens em arraste local — ignora ecos remotos para não teleportar. */
   const draggingTokenIdsRef = useRef<Set<string>>(new Set());
+  /** Após o drop: ignora posições intermediárias atrasadas. */
+  const settlingTokensRef = useRef<
+    Map<string, { x: number; y: number; until: number }>
+  >(new Map());
+  /** Debounce de board:update — evita eco atrasado apagar PV digitado. */
+  const boardEmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingBoardRef = useRef<BoardState | null>(null);
 
   const applyState = useCallback((state: SessionRuntimeState) => {
     setBoard(state.board ?? emptyBoardState());
-    setChat(state.chat ?? []);
+    setChat(
+      (state.chat ?? []).filter(
+        (message) => !message.secret || roleRef.current === "MASTER"
+      )
+    );
+    setCombat(state.combat ?? null);
   }, []);
 
   useEffect(() => {
@@ -138,14 +188,33 @@ export function GameRoom() {
 
         currentSocket.on("board:state", (nextBoard: BoardState) => {
           setBoard((previous) => {
+            const wasFrozen =
+              Boolean(previous.playerMapView) ||
+              Object.keys(previous.playerViewsByUserId ?? {}).length > 0;
+            const nowFrozen =
+              Boolean(nextBoard.playerMapView) ||
+              Object.keys(nextBoard.playerViewsByUserId ?? {}).length > 0;
+            if (!nowFrozen) {
+              queueMicrotask(() => setWatchPlayerScene(false));
+            } else if (!wasFrozen && nowFrozen) {
+              queueMicrotask(() => setWatchPlayerScene(true));
+            }
             const dragging = draggingTokenIdsRef.current;
-            if (dragging.size === 0) return nextBoard;
+            const settling = settlingTokensRef.current;
+            const now = performance.now();
+            if (dragging.size === 0 && settling.size === 0) return nextBoard;
             return {
               ...nextBoard,
               tokens: nextBoard.tokens.map((token) => {
-                if (!dragging.has(token.id)) return token;
-                const local = previous.tokens.find((item) => item.id === token.id);
-                return local ? { ...token, x: local.x, y: local.y } : token;
+                if (dragging.has(token.id)) {
+                  const local = previous.tokens.find((item) => item.id === token.id);
+                  return local ? { ...token, x: local.x, y: local.y } : token;
+                }
+                const settled = settling.get(token.id);
+                if (settled && settled.until > now) {
+                  return { ...token, x: settled.x, y: settled.y };
+                }
+                return token;
               }),
             };
           });
@@ -153,8 +222,24 @@ export function GameRoom() {
 
         currentSocket.on(
           "token:moved",
-          (payload: { tokenId: string; x: number; y: number }) => {
+          (payload: {
+            tokenId: string;
+            x: number;
+            y: number;
+            commit?: boolean;
+          }) => {
             if (draggingTokenIdsRef.current.has(payload.tokenId)) return;
+            const settling = settlingTokensRef.current.get(payload.tokenId);
+            if (settling && settling.until > performance.now()) {
+              // Só aceita o commit final (ou posição igual); ignora live atrasado.
+              if (payload.commit === false) return;
+              if (
+                payload.commit !== true &&
+                (payload.x !== settling.x || payload.y !== settling.y)
+              ) {
+                return;
+              }
+            }
             setBoard((previous) => ({
               ...previous,
               tokens: previous.tokens.map((token) =>
@@ -167,6 +252,8 @@ export function GameRoom() {
         );
 
         currentSocket.on("chat:message", (message: ChatMessage) => {
+          // Defesa: mensagens secretas não devem chegar a jogadores
+          if (message.secret && roleRef.current !== "MASTER") return;
           setChat((previous) => [...previous, message].slice(-200));
           if (message.type === "roll" && message.roll) {
             setDiceFx({
@@ -192,6 +279,27 @@ export function GameRoom() {
           }
         });
 
+        currentSocket.on(
+          "initiative:request",
+          (request: InitiativeRequest) => {
+            const mine = myCharactersRef.current;
+            const uid = userIdRef.current;
+            const targetsMe =
+              !request.targetCharacterId ||
+              mine.some(
+                (character) => character.id === request.targetCharacterId
+              ) ||
+              request.targetUserId === uid;
+            if (targetsMe) {
+              setPendingInitiative(request);
+            }
+          }
+        );
+
+        currentSocket.on("combat:state", (next: CombatState | null) => {
+          setCombat(next);
+        });
+
         await new Promise<void>((resolve, reject) => {
           currentSocket!.once("connect", () => resolve());
           currentSocket!.once("connect_error", (err) => reject(err));
@@ -205,6 +313,7 @@ export function GameRoom() {
 
         if (!active) return;
         setRole(joined.role ?? "PLAYER");
+        roleRef.current = joined.role ?? "PLAYER";
         setCampaignName(joined.campaignName ?? "");
         setCharacters(joined.characters ?? []);
         setMembers(joined.members ?? []);
@@ -252,9 +361,42 @@ export function GameRoom() {
   }, [applyState, campaignId, user?.id]);
 
   async function handleBoardChange(next: BoardState) {
-    setBoard(next);
+    setBoard((previous) => {
+      const nextFrozen =
+        Boolean(next.playerMapView) ||
+        Object.keys(next.playerViewsByUserId ?? {}).length > 0;
+      const prevFrozen =
+        Boolean(previous.playerMapView) ||
+        Object.keys(previous.playerViewsByUserId ?? {}).length > 0;
+      if (!nextFrozen) {
+        queueMicrotask(() => setWatchPlayerScene(false));
+      } else if (!prevFrozen && nextFrozen) {
+        queueMicrotask(() => setWatchPlayerScene(true));
+      }
+      return next;
+    });
     if (!socket || !sessionId) return;
-    await emitBoardUpdate(socket, sessionId, next);
+    pendingBoardRef.current = next;
+    if (boardEmitTimerRef.current) clearTimeout(boardEmitTimerRef.current);
+    const sid = sessionId;
+    const sock = socket;
+    boardEmitTimerRef.current = setTimeout(() => {
+      boardEmitTimerRef.current = null;
+      const payload = pendingBoardRef.current;
+      pendingBoardRef.current = null;
+      if (!payload || !sock) return;
+      void emitBoardUpdate(sock, sid, payload);
+    }, 50);
+  }
+
+  async function handleRemoveTokens(tokenIds: string[]) {
+    if (tokenIds.length === 0) return;
+    setBoard((previous) => ({
+      ...previous,
+      tokens: previous.tokens.filter((token) => !tokenIds.includes(token.id)),
+    }));
+    if (!socket || !sessionId) return;
+    await emitTokenRemove(socket, sessionId, tokenIds);
   }
 
   async function handleTokenMove(
@@ -273,6 +415,13 @@ export function GameRoom() {
         token.id === tokenId ? { ...token, x: nextX, y: nextY } : token
       ),
     }));
+    if (commit) {
+      settlingTokensRef.current.set(tokenId, {
+        x: nextX,
+        y: nextY,
+        until: performance.now() + 600,
+      });
+    }
     if (!socket || !sessionId) return;
     if (!commit) {
       // throttle leve: só envia a cada ~80ms no movimento livre
@@ -281,7 +430,7 @@ export function GameRoom() {
       if (now - last < 80) return;
       (handleTokenMove as { _t?: number })._t = now;
     }
-    await emitTokenMove(socket, sessionId, tokenId, nextX, nextY);
+    await emitTokenMove(socket, sessionId, tokenId, nextX, nextY, { commit });
   }
 
   async function handleTokensMove(
@@ -302,6 +451,16 @@ export function GameRoom() {
         return move ? { ...token, x: move.x, y: move.y } : token;
       }),
     }));
+    if (commit) {
+      const until = performance.now() + 600;
+      for (const move of next) {
+        settlingTokensRef.current.set(move.tokenId, {
+          x: move.x,
+          y: move.y,
+          until,
+        });
+      }
+    }
     if (!socket || !sessionId) return;
     if (!commit) {
       const now = performance.now();
@@ -311,7 +470,9 @@ export function GameRoom() {
     }
     await Promise.all(
       next.map((move) =>
-        emitTokenMove(socket, sessionId, move.tokenId, move.x, move.y)
+        emitTokenMove(socket, sessionId, move.tokenId, move.x, move.y, {
+          commit,
+        })
       )
     );
   }
@@ -319,7 +480,16 @@ export function GameRoom() {
   async function openCharacterFromToken(token: BoardToken) {
     if (!token.characterId) return;
     try {
-      await openCharacterSheet(token.characterId, true);
+      const isOwn = Boolean(
+        user &&
+          (myCharacters.some((character) => character.id === token.characterId) ||
+            characters.some(
+              (character) =>
+                character.id === token.characterId &&
+                character.playerId === user.id
+            ))
+      );
+      await openCharacterSheet(token.characterId, !isOwn);
     } catch (err) {
       console.error(err);
       alert("Não foi possível abrir a ficha deste NPC.");
@@ -348,12 +518,102 @@ export function GameRoom() {
     setSheetReadOnly(readOnly);
   }
 
+  function applyCharacterUpdate(updated: {
+    id: number;
+    name?: string;
+    className?: string;
+    race?: string;
+    level?: number;
+    avatar?: string | null;
+    sheet?: unknown;
+    playerId?: number;
+    player?: CampaignCharacterLite["player"];
+  }) {
+    const patch: Partial<CampaignCharacterLite> = {
+      id: updated.id,
+      name: updated.name,
+      className: updated.className,
+      race: updated.race,
+      level: updated.level,
+      avatar: updated.avatar,
+      sheet: updated.sheet,
+      playerId: updated.playerId,
+      player: updated.player,
+    };
+    setCharacters((previous) =>
+      previous.map((character) =>
+        character.id === updated.id ? { ...character, ...patch } : character
+      )
+    );
+    setOpenCharacter((current) =>
+      current?.id === updated.id ? { ...current, ...patch } : current
+    );
+  }
+
+  async function handleUpdateWallet(wallet: CharacterWallet) {
+    if (!openCharacter) return;
+    setInventoryBusy(true);
+    try {
+      const updated = await updateCharacterWallet(openCharacter.id, wallet);
+      applyCharacterUpdate(updated);
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
+  async function handleDiscardItem(payload: InventoryItemAction) {
+    if (!openCharacter) return;
+    setInventoryBusy(true);
+    try {
+      const updated = await discardCharacterItem(openCharacter.id, payload);
+      applyCharacterUpdate(updated);
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
+  async function handleTransferItem(
+    payload: InventoryItemAction & { targetCharacterId: number }
+  ) {
+    if (!openCharacter) return;
+    setInventoryBusy(true);
+    try {
+      const result = await transferCharacterItem(openCharacter.id, payload);
+      applyCharacterUpdate(result.from);
+      applyCharacterUpdate(result.to);
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
   async function handleRuler(
     from: { x: number; y: number },
-    to: { x: number; y: number }
+    to: { x: number; y: number },
+    options?: {
+      sticky?: boolean;
+      clear?: boolean;
+      clearAll?: boolean;
+      broadcast?: boolean;
+      shape?: "line" | "square" | "circle" | "cone" | "beam";
+      color?: string;
+    }
   ) {
     if (!socket || !sessionId) return;
-    await emitRuler(socket, sessionId, from, to);
+    if (options?.broadcast === false && !options?.clear && !options?.clearAll) {
+      return;
+    }
+    if (options?.clear || options?.clearAll) {
+      await emitRulerClear(socket, sessionId, {
+        clearAll: Boolean(options.clearAll),
+      });
+      return;
+    }
+    await emitRuler(socket, sessionId, from, to, {
+      sticky: options?.sticky,
+      byUserName: user?.name,
+      shape: options?.shape,
+      color: options?.color,
+    });
   }
 
   async function handleSendChat(text: string) {
@@ -434,6 +694,176 @@ export function GameRoom() {
     });
   }
 
+  async function handleRequestInitiative(payload: {
+    targetCharacterId?: number | null;
+  }) {
+    if (!socket || !sessionId || !user || !isMaster) return;
+    await emitInitiativeRequest(socket, sessionId, {
+      ...payload,
+      userName: user.name,
+    });
+  }
+
+  async function handleCombatAdd(payload: {
+    name: string;
+    initiative: number;
+    kind?: "monster" | "other";
+  }) {
+    if (!socket || !sessionId || !user || !isMaster) return;
+    const result = await emitCombatAdd(socket, sessionId, {
+      ...payload,
+      userName: user.name,
+    });
+    if (!result.ok) {
+      alert(result.error || "Falha ao adicionar ao relógio");
+    }
+  }
+
+  async function handleRollTokenInitiative(tokens: BoardToken[]) {
+    if (!socket || !sessionId || !user || !isMaster) return;
+
+    const characters = tokens.filter((token) => token.characterId);
+    const npcOnly = tokens.filter((token) => !token.characterId);
+
+    for (const token of characters) {
+      if (!token.characterId) continue;
+      const result = await emitInitiativeRoll(socket, sessionId, {
+        characterId: token.characterId,
+        userName: user.name,
+      });
+      if (!result.ok) {
+        alert(result.error || `Falha na iniciativa de ${token.name}`);
+        return;
+      }
+    }
+
+    if (npcOnly.length > 0) {
+      const entries = npcOnly.map((token) => {
+        const monster = token.monsterId
+          ? getMonsterById(token.monsterId)
+          : undefined;
+        return {
+          tokenId: token.id,
+          name: token.name || monster?.name || "NPC",
+          dexterity: monster?.abilities.dexterity ?? 10,
+        };
+      });
+      const result = await emitCombatRollNpcs(socket, sessionId, {
+        entries,
+        userName: user.name,
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha ao rolar iniciativa dos NPCs");
+      }
+    }
+  }
+
+  async function handleCombatStart() {
+    if (!socket || !sessionId || !user || !isMaster) return;
+    const result = await emitCombatStart(socket, sessionId, user.name);
+    if (!result.ok) {
+      alert(result.error || "Falha ao iniciar o relógio");
+    }
+  }
+
+  async function handleCombatNext() {
+    if (!socket || !sessionId || !user || !isMaster) return;
+    const result = await emitCombatNext(socket, sessionId, user.name);
+    if (!result.ok) {
+      alert(result.error || "Falha ao avançar turno");
+    }
+  }
+
+  async function handleCombatReorder(orderIds: string[]) {
+    if (!socket || !sessionId || !user || !isMaster) return;
+    // Atualização otimista para o arraste ficar fluido
+    setCombat((previous) => {
+      if (!previous) return previous;
+      const byId = new Map(previous.order.map((entry) => [entry.id, entry]));
+      const nextOrder = orderIds
+        .map((id) => byId.get(id))
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+      for (const entry of previous.order) {
+        if (!nextOrder.some((item) => item.id === entry.id)) {
+          nextOrder.push(entry);
+        }
+      }
+      const currentId = previous.order[previous.currentIndex]?.id;
+      const currentIndex = currentId
+        ? Math.max(
+            0,
+            nextOrder.findIndex((entry) => entry.id === currentId)
+          )
+        : 0;
+      return { ...previous, order: nextOrder, currentIndex };
+    });
+    const result = await emitCombatReorder(
+      socket,
+      sessionId,
+      orderIds,
+      user.name
+    );
+    if (!result.ok) {
+      alert(result.error || "Falha ao reordenar o relógio");
+    }
+  }
+
+  async function handleCombatEnd() {
+    if (!socket || !sessionId || !user || !isMaster) return;
+    setInitiativeHoverTokenIds([]);
+    await emitCombatEnd(socket, sessionId, user.name);
+  }
+
+  function handleHoverCombatant(entry: CombatantEntry | null) {
+    if (!entry) {
+      setInitiativeHoverTokenIds([]);
+      return;
+    }
+    const ids = board.tokens
+      .filter((token) => {
+        if (entry.tokenId && token.id === entry.tokenId) return true;
+        if (
+          entry.characterId != null &&
+          token.characterId === entry.characterId
+        ) {
+          return true;
+        }
+        return false;
+      })
+      .map((token) => token.id);
+    setInitiativeHoverTokenIds(ids);
+  }
+
+  async function handlePendingInitiativeRoll(options?: {
+    advantage?: boolean;
+  }) {
+    if (!pendingInitiative) {
+      setPendingInitiative(null);
+      return;
+    }
+
+    const target =
+      (pendingInitiative.targetCharacterId != null
+        ? myCharacters.find(
+            (character) =>
+              character.id === pendingInitiative.targetCharacterId
+          )
+        : null) || myCharacters[0];
+
+    if (!target) {
+      setPendingInitiative(null);
+      return;
+    }
+
+    if (!socket || !sessionId || !user) return;
+    await emitInitiativeRoll(socket, sessionId, {
+      characterId: target.id,
+      userName: user.name,
+      advantage: Boolean(options?.advantage),
+    });
+    setPendingInitiative(null);
+  }
+
   async function handleMonsterAction(payload: {
     monsterName: string;
     actionName: string;
@@ -446,6 +876,7 @@ export function GameRoom() {
     if (!socket || !sessionId || !user || !isMaster) return;
     const result = await emitMonsterAction(socket, sessionId, {
       ...payload,
+      tokenId: monsterTokenId,
       userName: user.name,
     });
     if (!result.ok) {
@@ -495,6 +926,7 @@ export function GameRoom() {
     if (!monster) return;
     setOpenMonster(monster);
     setMonsterDisplayName(token.name || monster.name);
+    setMonsterTokenId(token.id);
     setMonsterTokenHp({
       current: token.hpCurrent,
       max: token.hpMax,
@@ -558,6 +990,21 @@ export function GameRoom() {
           </p>
         </div>
 
+        {combat && (combat.active || combat.collecting || combat.order.length > 0) ? (
+          <div className="mb-2 shrink-0">
+            <TurnClock
+              combat={combat}
+              isMaster={isMaster}
+              tokens={board.tokens}
+              onStart={handleCombatStart}
+              onNext={handleCombatNext}
+              onEnd={handleCombatEnd}
+              onReorder={isMaster ? handleCombatReorder : undefined}
+              onHoverCombatant={handleHoverCombatant}
+            />
+          </div>
+        ) : null}
+
         {/* Mapa dominante; painéis laterais mais estreitos em monitores médios */}
         <div
           className={[
@@ -620,8 +1067,10 @@ export function GameRoom() {
                       onBoardChange={handleBoardChange}
                       placeOnSecretLayer={placeOnSecretLayer}
                       onPlaceOnSecretLayerChange={setPlaceOnSecretLayer}
+                      watchPlayerScene={watchPlayerScene}
+                      onWatchPlayerSceneChange={setWatchPlayerScene}
                       onOpenSheet={(character) => {
-                        void openCharacterSheet(character.id, true).catch((err) => {
+                        void openCharacterSheet(character.id, false).catch((err) => {
                           console.error(err);
                           alert("Não foi possível abrir a ficha.");
                         });
@@ -629,12 +1078,19 @@ export function GameRoom() {
                       onOpenMonster={(monster) => {
                         setOpenMonster(monster);
                         setMonsterDisplayName(monster.name);
+                        setMonsterTokenId(null);
                         setMonsterTokenHp({
                           current: monster.hp,
                           max: monster.hp,
                         });
                       }}
                       onRequestCheck={handleRequestCheck}
+                      combat={combat}
+                      onRequestInitiative={handleRequestInitiative}
+                      onCombatAdd={handleCombatAdd}
+                      onCombatStart={handleCombatStart}
+                      onCombatNext={handleCombatNext}
+                      onCombatEnd={handleCombatEnd}
                       onCloseSession={handleCloseSession}
                       onCharacterUpdated={(updated) => {
                         setCharacters((previous) =>
@@ -691,40 +1147,39 @@ export function GameRoom() {
               currentUserId={user?.id ?? 0}
               isMaster={isMaster}
               placeOnSecretLayer={placeOnSecretLayer}
+              watchPlayerScene={isMaster && watchPlayerScene}
               onMoveToken={handleTokenMove}
               onMoveTokens={handleTokensMove}
               draggingTokenIdsRef={draggingTokenIdsRef}
               onChangeBoard={handleBoardChange}
+              onRemoveTokens={handleRemoveTokens}
+              onRollTokenInitiative={
+                isMaster ? handleRollTokenInitiative : undefined
+              }
+              highlightedTokenIds={initiativeHoverTokenIds}
               onRuler={handleRuler}
               onOpenMonsterSheet={openMonsterFromToken}
               onOpenCharacterSheet={openCharacterFromToken}
               onDropCharacter={(characterId, x, y) => {
                 const character =
                   myCharacters.find((item) => item.id === characterId) ||
-                  characters.find((item) => item.id === characterId);
+                  characters.find((item) => item.id === characterId) ||
+                  masterCharacters.find((item) => item.id === characterId);
                 if (!character || !user) return;
-                if (
-                  board.tokens.some(
-                    (token) =>
-                      token.characterId === character.id &&
-                      token.ownerUserId === user.id
-                  )
-                ) {
-                  alert("Seu token já está no mapa.");
-                  return;
-                }
                 const grid = board.gridSize || 50;
                 const { hpMax, hpCurrent } = hitPointsFromSheet(character.sheet);
+                const ownerUserId = character.playerId || user.id;
+                const onFrozen = playerIsOnFrozenScene(board, ownerUserId);
                 handleBoardChange({
                   ...board,
                   tokens: [
                     ...board.tokens,
                     {
-                      id: `pc-${character.id}`,
+                      id: `pc-${character.id}-${Date.now()}`,
                       kind: "pc",
                       name: character.name,
                       characterId: character.id,
-                      ownerUserId: user.id,
+                      ownerUserId,
                       x,
                       y,
                       color: "var(--color-green)",
@@ -735,6 +1190,7 @@ export function GameRoom() {
                       hpMax,
                       hpCurrent,
                       customValue: "",
+                      ...(onFrozen ? { onPlayerScene: true as const } : {}),
                     },
                   ],
                 });
@@ -810,6 +1266,16 @@ export function GameRoom() {
           }
           onUseFeature={handleUseFeature}
           onCastSpell={handleCastSpell}
+          inventoryRecipients={characters
+            .filter((character) => character.id !== openCharacter.id)
+            .map((character) => ({
+              id: character.id,
+              name: character.name,
+            }))}
+          inventoryBusy={inventoryBusy}
+          onUpdateWallet={handleUpdateWallet}
+          onDiscardItem={handleDiscardItem}
+          onTransferItem={handleTransferItem}
         />
       )}
 
@@ -824,6 +1290,7 @@ export function GameRoom() {
           onClose={() => {
             setOpenMonster(null);
             setMonsterDisplayName("");
+            setMonsterTokenId(null);
           }}
         />
       )}
@@ -840,6 +1307,22 @@ export function GameRoom() {
           }
           onRoll={handlePendingCheckRoll}
           onDismiss={() => setPendingCheck(null)}
+        />
+      )}
+
+      {pendingInitiative && !isMaster && (
+        <InitiativePrompt
+          request={pendingInitiative}
+          characterName={
+            pendingInitiative.characterName ||
+            myCharacters.find(
+              (character) =>
+                character.id === pendingInitiative.targetCharacterId
+            )?.name ||
+            myCharacters[0]?.name
+          }
+          onRoll={handlePendingInitiativeRoll}
+          onDismiss={() => setPendingInitiative(null)}
         />
       )}
     </div>

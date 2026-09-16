@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { BoardEffect, BoardRuler, BoardState, BoardToken } from "../../types/game";
+import type {
+  BoardEffect,
+  BoardState,
+  BoardToken,
+  MeasureShape,
+} from "../../types/game";
 import {
-  distanceMeters,
+  distanceSquares5e,
+  formatMeasureLabel,
   formatMeters,
   boardMapForViewer,
   isTokenVisibleThroughFog,
   lightSourcesForViewer,
   loadMapImageSize,
   metersPerSquareOf,
+  snapToCellCenter,
+  snapToCellCorner,
   snapToGrid,
   tokenFootprintPx,
   tokensForViewer,
@@ -22,8 +30,43 @@ import {
 } from "../../data/dnd/conditions";
 import { FogLightOverlay } from "./FogLightOverlay";
 import { ConditionIcon } from "./ConditionIcon";
+import {
+  DEFAULT_MEASURE_SETTINGS,
+  MeasurePanel,
+  type MeasureSettings,
+} from "./MeasurePanel";
 
-export type BoardTool = "select" | "draw" | "ruler" | "effect" | "party-move";
+export type BoardTool = "select" | "draw" | "ruler" | "party-move";
+
+/** Visual de medição próximo ao Roll20. */
+const DEFAULT_MEASURE_COLOR = "#3DDCFF";
+
+function hexToRgba(hex: string, alpha: number): string {
+  const raw = hex.replace("#", "").trim();
+  const full =
+    raw.length === 3
+      ? raw
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : raw;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) {
+    return `rgba(61, 220, 255, ${alpha})`;
+  }
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function measureColors(color?: string) {
+  const stroke = color || DEFAULT_MEASURE_COLOR;
+  return {
+    stroke,
+    fill: hexToRgba(stroke, 0.18),
+    labelBg: "rgba(12, 28, 40, 0.88)",
+  };
+}
 
 interface GameBoardProps {
   board: BoardState;
@@ -43,32 +86,287 @@ interface GameBoardProps {
     options?: { commit?: boolean }
   ) => void;
   onChangeBoard: (board: BoardState) => void;
-  onRuler: (from: { x: number; y: number }, to: { x: number; y: number }) => void;
+  onRuler: (
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    options?: {
+      sticky?: boolean;
+      clear?: boolean;
+      clearAll?: boolean;
+      broadcast?: boolean;
+      shape?: MeasureShape;
+      color?: string;
+    }
+  ) => void;
   onSelectToken?: (token: BoardToken | null) => void;
   onOpenMonsterSheet?: (token: BoardToken) => void;
   onOpenCharacterSheet?: (token: BoardToken) => void;
   onDropCharacter?: (characterId: number, x: number, y: number) => void;
   /** Mestre coloca novos desenhos/efeitos/NPCs na camada secreta. */
   placeOnSecretLayer?: boolean;
+  /** Mestre inspeciona o mapa congelado dos jogadores. */
+  watchPlayerScene?: boolean;
+  /** Remoção explícita (socket token:remove) — evita race no board:update. */
+  onRemoveTokens?: (tokenIds: string[]) => void;
+  /** Mestre: rolar iniciativa dos tokens selecionados (NPCs e fichas) e colocar no relógio. */
+  onRollTokenInitiative?: (tokens: BoardToken[]) => void;
+  /** Destaca tokens no mapa (ex.: hover na régua de iniciativa) sem selecionar. */
+  highlightedTokenIds?: string[];
   /** Ref compartilhado: ids em arraste (GameRoom ignora ecos remotos). */
   draggingTokenIdsRef?: React.MutableRefObject<Set<string>>;
+}
+
+function applyMeasureSnap(
+  point: { x: number; y: number },
+  gridSize: number,
+  snap: MeasureSettings["snap"]
+) {
+  if (snap === "center") return snapToCellCenter(point.x, point.y, gridSize);
+  if (snap === "corner") return snapToCellCorner(point.x, point.y, gridSize);
+  return point;
+}
+
+function conePath(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  angleDeg = 53
+) {
+  const angle = Math.atan2(to.y - from.y, to.x - from.x);
+  const len = Math.max(1, Math.hypot(to.x - from.x, to.y - from.y));
+  const half = ((angleDeg * Math.PI) / 180) / 2;
+  const x1 = from.x + Math.cos(angle - half) * len;
+  const y1 = from.y + Math.sin(angle - half) * len;
+  const x2 = from.x + Math.cos(angle + half) * len;
+  const y2 = from.y + Math.sin(angle + half) * len;
+  return `M ${from.x} ${from.y} L ${x1} ${y1} L ${x2} ${y2} Z`;
+}
+
+function beamPolygon(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  width: number
+) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.max(1, Math.hypot(dx, dy));
+  const nx = (-dy / len) * (width / 2);
+  const ny = (dx / len) * (width / 2);
+  return [
+    `${from.x + nx},${from.y + ny}`,
+    `${to.x + nx},${to.y + ny}`,
+    `${to.x - nx},${to.y - ny}`,
+    `${from.x - nx},${from.y - ny}`,
+  ].join(" ");
+}
+
+function MeasureShapeGraphic({
+  shape,
+  from,
+  to,
+  gridSize,
+  label,
+  byUserName,
+  color,
+}: {
+  shape: MeasureShape;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  gridSize: number;
+  label: string;
+  byUserName?: string;
+  color?: string;
+}) {
+  const midX = (from.x + to.x) / 2;
+  const midY = (from.y + to.y) / 2;
+  const radius = Math.hypot(to.x - from.x, to.y - from.y);
+  const badgeText = byUserName ? `${byUserName}: ${label}` : label;
+  const palette = measureColors(color);
+
+  if (shape === "square") {
+    const x = Math.min(from.x, to.x);
+    const y = Math.min(from.y, to.y);
+    const w = Math.max(4, Math.abs(to.x - from.x));
+    const h = Math.max(4, Math.abs(to.y - from.y));
+    return (
+      <g className="pointer-events-none">
+        <rect
+          x={x}
+          y={y}
+          width={w}
+          height={h}
+          fill={palette.fill}
+          stroke={palette.stroke}
+          strokeWidth={2.5}
+        />
+        <MeasureBadge
+          x={x + w / 2}
+          y={y - 14}
+          text={badgeText}
+          color={palette.stroke}
+        />
+      </g>
+    );
+  }
+
+  if (shape === "circle") {
+    return (
+      <g className="pointer-events-none">
+        <circle
+          cx={from.x}
+          cy={from.y}
+          r={Math.max(4, radius)}
+          fill={palette.fill}
+          stroke={palette.stroke}
+          strokeWidth={2.5}
+        />
+        <circle
+          cx={from.x}
+          cy={from.y}
+          r={3.5}
+          fill={palette.stroke}
+          stroke="#FFFFFF"
+          strokeWidth={1.5}
+        />
+        <MeasureBadge
+          x={from.x}
+          y={from.y - Math.max(4, radius) - 14}
+          text={badgeText}
+          color={palette.stroke}
+        />
+      </g>
+    );
+  }
+
+  if (shape === "cone") {
+    return (
+      <g className="pointer-events-none">
+        <path
+          d={conePath(from, to)}
+          fill={palette.fill}
+          stroke={palette.stroke}
+          strokeWidth={2.5}
+        />
+        <MeasureBadge
+          x={midX}
+          y={midY - 16}
+          text={badgeText}
+          color={palette.stroke}
+        />
+      </g>
+    );
+  }
+
+  if (shape === "beam") {
+    return (
+      <g className="pointer-events-none">
+        <polygon
+          points={beamPolygon(from, to, gridSize)}
+          fill={palette.fill}
+          stroke={palette.stroke}
+          strokeWidth={2}
+        />
+        <MeasureBadge
+          x={midX}
+          y={midY - 16}
+          text={badgeText}
+          color={palette.stroke}
+        />
+      </g>
+    );
+  }
+
+  return (
+    <g className="pointer-events-none">
+      <line
+        x1={from.x}
+        y1={from.y}
+        x2={to.x}
+        y2={to.y}
+        stroke={palette.stroke}
+        strokeWidth={3}
+        strokeLinecap="round"
+      />
+      <circle
+        cx={from.x}
+        cy={from.y}
+        r={5}
+        fill="#FFFFFF"
+        stroke={palette.stroke}
+        strokeWidth={2}
+      />
+      <circle
+        cx={to.x}
+        cy={to.y}
+        r={5}
+        fill="#FFFFFF"
+        stroke={palette.stroke}
+        strokeWidth={2}
+      />
+      <MeasureBadge
+        x={midX}
+        y={midY - 16}
+        text={badgeText}
+        color={palette.stroke}
+      />
+    </g>
+  );
 }
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function hpRatio(token: BoardToken) {
-  const max = token.hpMax ?? 0;
-  const cur = token.hpCurrent ?? max;
-  if (max <= 0) return 1;
-  return Math.max(0, Math.min(1, cur / max));
+function MeasureBadge({
+  x,
+  y,
+  text,
+  color,
+}: {
+  x: number;
+  y: number;
+  text: string;
+  color?: string;
+}) {
+  if (!text) return null;
+  const width = Math.max(72, text.length * 6.6 + 16);
+  const height = 22;
+  const stroke = color || DEFAULT_MEASURE_COLOR;
+  return (
+    <g className="pointer-events-none">
+      <rect
+        x={x - width / 2}
+        y={y - height / 2}
+        width={width}
+        height={height}
+        rx={4}
+        ry={4}
+        fill="rgba(12, 28, 40, 0.9)"
+        stroke={stroke}
+        strokeWidth={1}
+      />
+      <text
+        x={x}
+        y={y + 4}
+        fill="#F2FBFF"
+        fontSize="11"
+        fontWeight={600}
+        textAnchor="middle"
+        style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
+      >
+        {text}
+      </text>
+    </g>
+  );
 }
 
-function hpBarColor(ratio: number) {
-  if (ratio > 0.5) return "var(--color-green)";
-  if (ratio > 0.25) return "#8A5A1E";
-  return "var(--color-crimson)";
+function isTokenDead(token: BoardToken) {
+  return typeof token.hpCurrent === "number" && token.hpCurrent <= 0;
+}
+
+function parseHpDraft(raw: string | undefined, fallback: number | undefined) {
+  if (raw != null && /^\d+$/.test(raw.trim())) return Number(raw.trim());
+  if (typeof fallback === "number") return fallback;
+  return null;
 }
 
 function rectsOverlap(
@@ -87,8 +385,10 @@ function rectsOverlap(
   );
 }
 
-const MIN_ZOOM = 0.25;
-const MAX_ZOOM = 6;
+/** Escala absoluta mundo→tela (1 = 100% = 1 px do mapa por px da tela), como no Roll20. */
+const MIN_SCALE = 0.05;
+const MAX_SCALE = 2.5;
+const ZOOM_FACTOR = 1.12;
 
 export function GameBoard({
   board,
@@ -105,6 +405,10 @@ export function GameBoard({
   onOpenCharacterSheet,
   onDropCharacter,
   placeOnSecretLayer = false,
+  watchPlayerScene = false,
+  onRemoveTokens,
+  onRollTokenInitiative,
+  highlightedTokenIds = [],
   draggingTokenIdsRef,
 }: GameBoardProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -142,20 +446,25 @@ export function GameBoard({
     x: number;
     y: number;
   } | null>(null);
-  const [effectStart, setEffectStart] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const [effectPreview, setEffectPreview] = useState<{
-    x: number;
-    y: number;
-    radius: number;
-  } | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [measureSettings, setMeasureSettings] = useState<MeasureSettings>(
+    DEFAULT_MEASURE_SETTINGS
+  );
+  const [measurePanelCollapsed, setMeasurePanelCollapsed] = useState(false);
+  const [localStickyMeasures, setLocalStickyMeasures] = useState<
+    Array<{
+      id: string;
+      shape: MeasureShape;
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+      color: string;
+    }>
+  >([]);
+  const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState({ w: 1, h: 1 });
   const [fieldDrafts, setFieldDrafts] = useState<Record<string, string>>({});
   const [isPanning, setIsPanning] = useState(false);
+  const hpCommitLockRef = useRef<Set<string>>(new Set());
   const panOriginRef = useRef<{
     pointerX: number;
     pointerY: number;
@@ -163,21 +472,30 @@ export function GameBoard({
     panY: number;
   } | null>(null);
   const lastEmitRef = useRef(0);
-  const zoomRef = useRef(zoom);
+  const scaleRef = useRef(scale);
   const panRef = useRef(pan);
-  const fitScaleRef = useRef(1);
+  /** Enquanto true, redimensionar viewport/mapa reencaixa (zoom = fit). */
+  const followFitRef = useRef(true);
   const liveDragRef = useRef<Record<string, { x: number; y: number }>>({});
   const probedMapRef = useRef<string | null>(null);
-  zoomRef.current = zoom;
+  scaleRef.current = scale;
   panRef.current = pan;
 
   const mapBoard = useMemo(
-    () => boardMapForViewer(board, isMaster),
-    [board, isMaster]
+    () =>
+      boardMapForViewer(board, isMaster, {
+        watchPlayerScene,
+        currentUserId,
+      }),
+    [board, isMaster, watchPlayerScene, currentUserId]
   );
   const viewTokens = useMemo(
-    () => tokensForViewer(board, isMaster),
-    [board, isMaster]
+    () =>
+      tokensForViewer(board, isMaster, {
+        watchPlayerScene,
+        currentUserId,
+      }),
+    [board, isMaster, watchPlayerScene, currentUserId]
   );
   const sceneBoard = useMemo(
     () => ({ ...mapBoard, tokens: viewTokens }),
@@ -187,11 +505,11 @@ export function GameBoard({
   const mPerSquare = metersPerSquareOf(mapBoard);
   const world = worldSizeOf(mapBoard);
   const fitScale = Math.min(
-    viewportSize.w / world.width,
-    viewportSize.h / world.height
+    viewportSize.w / Math.max(1, world.width),
+    viewportSize.h / Math.max(1, world.height)
   );
-  const displayScale = fitScale * zoom;
-  fitScaleRef.current = fitScale;
+  const displayScale = scale;
+  const minScale = Math.min(MIN_SCALE, fitScale * 0.85);
   const fogViewer = useMemo(
     () => ({ isMaster, currentUserId }),
     [isMaster, currentUserId]
@@ -227,20 +545,25 @@ export function GameBoard({
   function localPoint(event: { clientX: number; clientY: number }) {
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
-    const scale = fitScaleRef.current * zoomRef.current;
+    const s = scaleRef.current;
     const p = panRef.current;
     return {
-      x: (event.clientX - rect.left - p.x) / scale,
-      y: (event.clientY - rect.top - p.y) / scale,
+      x: (event.clientX - rect.left - p.x) / s,
+      y: (event.clientY - rect.top - p.y) / s,
     };
   }
 
-  function centerPanForZoom(nextZoom: number) {
-    const scale = fitScaleRef.current * nextZoom;
+  function centerPanForScale(nextScale: number) {
     setPan({
-      x: (viewportSize.w - world.width * scale) / 2,
-      y: (viewportSize.h - world.height * scale) / 2,
+      x: (viewportSize.w - world.width * nextScale) / 2,
+      y: (viewportSize.h - world.height * nextScale) / 2,
     });
+  }
+
+  function fitToViewport() {
+    followFitRef.current = true;
+    setScale(fitScale);
+    centerPanForScale(fitScale);
   }
 
   function canDragToken(token: BoardToken) {
@@ -267,6 +590,35 @@ export function GameBoard({
     );
   }
 
+  /** Mestre vê todos os números; jogador só os do próprio personagem. */
+  function canSeeTokenHpNumbers(token: BoardToken) {
+    if (isMaster) return true;
+    return Number(token.ownerUserId) === Number(currentUserId);
+  }
+
+  function isNpcToken(token: BoardToken) {
+    return Boolean(token.monsterId) || !token.characterId;
+  }
+
+  /** Token que pode entrar no relógio (ficha ou NPC). */
+  function canRollInitiative(token: BoardToken) {
+    return Boolean(token.characterId) || isNpcToken(token);
+  }
+
+  function initiativeTokensFromIds(ids: string[]) {
+    return board.tokens.filter(
+      (token) => ids.includes(token.id) && canRollInitiative(token)
+    );
+  }
+
+  function rollInitiativeForTokens(tokens: BoardToken[]) {
+    if (!isMaster || !onRollTokenInitiative) return;
+    const targets = tokens.filter(canRollInitiative);
+    if (targets.length === 0) return;
+    onRollTokenInitiative(targets);
+    setTokenLayerMenu(null);
+  }
+
   function canDeleteAnnotation(byUserId?: number) {
     return isMaster || byUserId === currentUserId;
   }
@@ -288,6 +640,47 @@ export function GameBoard({
         item.id === tokenId ? { ...item, ...patch } : item
       ),
     });
+  }
+
+  /** Aplica PV absoluto ou relativo (+20 / -20) a partir do texto do input. */
+  function commitTokenHpField(
+    tokenId: string,
+    field: "hpMax" | "hpCurrent",
+    rawInput: string
+  ) {
+    const draftKey = `${tokenId}:${field}`;
+    if (hpCommitLockRef.current.has(draftKey)) return;
+    hpCommitLockRef.current.add(draftKey);
+    queueMicrotask(() => hpCommitLockRef.current.delete(draftKey));
+
+    setFieldDrafts((prev) => {
+      if (!(draftKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[draftKey];
+      return next;
+    });
+    const live = board.tokens.find((item) => item.id === tokenId);
+    if (!live || !canEditTokenFields(live)) return;
+    const raw = rawInput.trim();
+    if (raw === "") {
+      updateTokenFields(tokenId, { [field]: undefined } as Partial<BoardToken>);
+      return;
+    }
+    if (/^[+-]\d+$/.test(raw)) {
+      const base =
+        field === "hpCurrent"
+          ? (live.hpCurrent ?? live.hpMax ?? 0)
+          : (live.hpMax ?? 0);
+      updateTokenFields(tokenId, {
+        [field]: Math.max(0, base + Number(raw)),
+      } as Partial<BoardToken>);
+      return;
+    }
+    const num = Number(raw);
+    if (Number.isNaN(num)) return;
+    updateTokenFields(tokenId, {
+      [field]: Math.max(0, num),
+    } as Partial<BoardToken>);
   }
 
   function setTokenLayer(tokenId: string, secret: boolean) {
@@ -337,33 +730,42 @@ export function GameBoard({
     if (selectedIds.length === 0) return;
     const removable = viewTokens.filter((token) => {
       if (!selectedIds.includes(token.id)) return false;
-      return isMaster || token.ownerUserId === currentUserId;
+      return (
+        isMaster ||
+        Number(token.ownerUserId) === Number(currentUserId)
+      );
     });
     if (removable.length === 0) return;
-    const removeIds = new Set(removable.map((token) => token.id));
-    onChangeBoard({
-      ...board,
-      tokens: board.tokens.filter((token) => !removeIds.has(token.id)),
-    });
+    const removeIds = removable.map((token) => token.id);
+    if (onRemoveTokens) {
+      onRemoveTokens(removeIds);
+    } else {
+      const removeSet = new Set(removeIds);
+      onChangeBoard({
+        ...board,
+        tokens: board.tokens.filter((token) => !removeSet.has(token.id)),
+      });
+    }
     setSelection([]);
   }
 
-  function adjustZoom(next: number, anchor?: { x: number; y: number }) {
-    const clamped = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+  function adjustScale(next: number, anchor?: { x: number; y: number }) {
+    followFitRef.current = false;
+    const clamped = Math.min(MAX_SCALE, Math.max(minScale, next));
     if (!viewportRef.current) {
-      setZoom(clamped);
+      setScale(clamped);
       return;
     }
     const rect = viewportRef.current.getBoundingClientRect();
     const ax = anchor?.x ?? rect.width / 2;
     const ay = anchor?.y ?? rect.height / 2;
-    const fit = fitScaleRef.current;
-    const worldX = (ax - pan.x) / (fit * zoom);
-    const worldY = (ay - pan.y) / (fit * zoom);
-    setZoom(clamped);
+    const current = scaleRef.current;
+    const worldX = (ax - pan.x) / current;
+    const worldY = (ay - pan.y) / current;
+    setScale(clamped);
     setPan({
-      x: ax - worldX * fit * clamped,
-      y: ay - worldY * fit * clamped,
+      x: ax - worldX * clamped,
+      y: ay - worldY * clamped,
     });
   }
 
@@ -384,16 +786,24 @@ export function GameBoard({
   }, []);
 
   useEffect(() => {
-    if (zoom !== 1) return;
-    const scale = Math.min(
-      viewportSize.w / world.width,
-      viewportSize.h / world.height
-    );
+    followFitRef.current = true;
+    setScale(fitScale);
     setPan({
-      x: (viewportSize.w - world.width * scale) / 2,
-      y: (viewportSize.h - world.height * scale) / 2,
+      x: (viewportSize.w - world.width * fitScale) / 2,
+      y: (viewportSize.h - world.height * fitScale) / 2,
     });
-  }, [world.width, world.height, viewportSize.w, viewportSize.h, zoom]);
+    // Novo mapa / grade: reencaixa como ao abrir a página no Roll20.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [world.width, world.height, gridSize, mapBoard.mapUrl]);
+
+  useEffect(() => {
+    if (!followFitRef.current) return;
+    setScale(fitScale);
+    setPan({
+      x: (viewportSize.w - world.width * fitScale) / 2,
+      y: (viewportSize.h - world.height * fitScale) / 2,
+    });
+  }, [world.width, world.height, viewportSize.w, viewportSize.h, fitScale]);
 
   useEffect(() => {
     if (!isMaster || !board.mapUrl) return;
@@ -439,6 +849,30 @@ export function GameBoard({
   }, [tokenLayerMenu]);
 
   useEffect(() => {
+    function onPointerDownOutside(event: PointerEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        target.closest("[data-token]") ||
+        target.closest("[data-token-selection]") ||
+        target.closest("[data-token-layer-menu]") ||
+        target.closest("[data-condition-menu]")
+      ) {
+        return;
+      }
+      // Clique dentro do mapa: handleBoardPointerDown já desmarca.
+      if (viewportRef.current?.contains(target)) return;
+      setSelection([]);
+      setSelectedAnnotation(null);
+      setConditionMenuOpen(false);
+      setTokenLayerMenu(null);
+    }
+    window.addEventListener("pointerdown", onPointerDownOutside, true);
+    return () =>
+      window.removeEventListener("pointerdown", onPointerDownOutside, true);
+  }, []);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (
@@ -462,16 +896,53 @@ export function GameBoard({
         setSelectedAnnotation(null);
       }
       if (event.key === "+" || event.key === "=") {
-        adjustZoom(zoom + 0.15);
+        adjustScale(scale * ZOOM_FACTOR);
       }
       if (event.key === "-" || event.key === "_") {
-        adjustZoom(zoom - 0.15);
+        adjustScale(scale / ZOOM_FACTOR);
+      }
+
+      const arrowDelta: Record<string, { dx: number; dy: number }> = {
+        ArrowUp: { dx: 0, dy: -1 },
+        ArrowDown: { dx: 0, dy: 1 },
+        ArrowLeft: { dx: -1, dy: 0 },
+        ArrowRight: { dx: 1, dy: 0 },
+      };
+      const delta = arrowDelta[event.key];
+      if (delta && selectedIds.length > 0 && !selectedAnnotation) {
+        const movable = board.tokens.filter(
+          (token) => selectedIds.includes(token.id) && canDragToken(token)
+        );
+        if (movable.length === 0) return;
+        event.preventDefault();
+        const step = gridSize;
+        const moves = movable.map((token) => {
+          const nextX = snapToGrid(token.x + delta.dx * step, step);
+          const nextY = snapToGrid(token.y + delta.dy * step, step);
+          return { tokenId: token.id, x: nextX, y: nextY };
+        });
+        if (moves.length === 1) {
+          onMoveToken(moves[0].tokenId, moves[0].x, moves[0].y, {
+            commit: true,
+          });
+        } else {
+          onMoveTokens?.(moves, { commit: true });
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, selectedIds, selectedAnnotation, tokenLayerMenu, isMaster, zoom, pan]);
+  }, [
+    board,
+    selectedIds,
+    selectedAnnotation,
+    tokenLayerMenu,
+    isMaster,
+    scale,
+    pan,
+    gridSize,
+  ]);
 
   const dragTokenIdsRef = useRef(dragTokenIds);
   const dragOriginRef = useRef(dragOrigin);
@@ -568,10 +1039,12 @@ export function GameBoard({
             moveOne(move.tokenId, move.x, move.y, { commit: true });
           }
         }
-        // Mantém bloqueio de eco um instante após o drop (pacotes atrasados).
+        // Mantém bloqueio de eco após o drop (pacotes live atrasados).
         window.setTimeout(() => {
-          draggingTokenIdsRef?.current.clear();
-        }, 200);
+          for (const id of activeDragIds) {
+            draggingTokenIdsRef?.current.delete(id);
+          }
+        }, 500);
       }
 
       const currentMarquee = marqueeRef.current;
@@ -616,6 +1089,10 @@ export function GameBoard({
     }
 
     setTokenLayerMenu(null);
+    // Clique no vazio do mapa (ou fora do token): desmarca.
+    setSelection([]);
+    setSelectedAnnotation(null);
+    setConditionMenuOpen(false);
 
     if (event.button === 1 || event.altKey || (tool === "select" && !event.shiftKey)) {
       event.preventDefault();
@@ -655,14 +1132,11 @@ export function GameBoard({
     }
 
     if (tool === "select" && isMaster && event.shiftKey) {
-      setSelection([]);
       setMarquee({ x1: point.x, y1: point.y, x2: point.x, y2: point.y });
       return;
     }
 
     if (tool === "select") {
-      setSelection([]);
-      setSelectedAnnotation(null);
       return;
     }
 
@@ -672,14 +1146,10 @@ export function GameBoard({
     }
 
     if (tool === "ruler") {
-      setRulerStart(point);
-      setRulerPreview(point);
+      const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap);
+      setRulerStart(snapped);
+      setRulerPreview(snapped);
       return;
-    }
-
-    if (tool === "effect" && canAnnotate) {
-      setEffectStart(point);
-      setEffectPreview({ x: point.x, y: point.y, radius: 0 });
     }
   }
 
@@ -689,20 +1159,13 @@ export function GameBoard({
       setDrawPoints((prev) => [...prev, point]);
     }
     if (tool === "ruler" && rulerStart) {
-      setRulerPreview(point);
-    }
-    if (tool === "effect" && effectStart) {
-      const radius = Math.max(
-        4,
-        Math.sqrt(
-          (point.x - effectStart.x) ** 2 + (point.y - effectStart.y) ** 2
-        )
-      );
-      setEffectPreview({ x: effectStart.x, y: effectStart.y, radius });
+      // Só preview local — evita “replay” de ecos do socket a cada frame.
+      const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap);
+      setRulerPreview(snapped);
     }
   }
 
-  function handleBoardPointerUp() {
+  function handleBoardPointerUp(event?: React.PointerEvent) {
     if (tool === "draw" && drawPoints.length > 1 && canAnnotate) {
       onChangeBoard({
         ...board,
@@ -722,53 +1185,64 @@ export function GameBoard({
     setDrawPoints([]);
 
     if (tool === "ruler" && rulerStart && rulerPreview) {
-      onRuler(rulerStart, rulerPreview);
+      const stay =
+        measureSettings.fade === "stay" || Boolean(event?.shiftKey);
+      if (stay) {
+        if (measureSettings.broadcast) {
+          onRuler(rulerStart, rulerPreview, {
+            sticky: true,
+            broadcast: true,
+            shape: measureSettings.shape,
+            color: measureSettings.color,
+          });
+        } else {
+          setLocalStickyMeasures((previous) => [
+            ...previous,
+            {
+              id: uid("local-measure"),
+              shape: measureSettings.shape,
+              from: rulerStart,
+              to: rulerPreview,
+              color: measureSettings.color,
+            },
+          ]);
+        }
+      }
+      // Instantânea: some só o preview local; não apaga marcações fixas.
     }
     setRulerStart(null);
     setRulerPreview(null);
-
-    if (tool === "effect" && effectStart && effectPreview && canAnnotate) {
-      const meters =
-        Math.round((effectPreview.radius / gridSize) * mPerSquare * 10) / 10;
-      if (effectPreview.radius >= 8) {
-        const effect: BoardEffect = {
-          id: uid("fx"),
-          x: effectPreview.x,
-          y: effectPreview.y,
-          radius: effectPreview.radius,
-          meters,
-          color: "rgba(122,37,48,0.35)",
-          label: formatMeters(meters),
-          byUserId: currentUserId,
-          secret: placeOnSecretLayer && isMaster ? true : undefined,
-        };
-        onChangeBoard({
-          ...board,
-          effects: [...board.effects, effect],
-        });
-      }
-    }
-    setEffectStart(null);
-    setEffectPreview(null);
   }
 
   function handleWheel(event: React.WheelEvent) {
     event.preventDefault();
     const rect = viewportRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const delta = event.deltaY > 0 ? -0.12 : 0.12;
-    adjustZoom(zoom + delta, {
+    const factor = event.deltaY > 0 ? 1 / ZOOM_FACTOR : ZOOM_FACTOR;
+    adjustScale(scale * factor, {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
     });
   }
 
-  const previewMeters =
+  const previewSquares =
     rulerStart && rulerPreview
-      ? distanceMeters(rulerStart, rulerPreview, gridSize, mPerSquare)
-      : effectPreview
-        ? Math.round((effectPreview.radius / gridSize) * mPerSquare * 10) / 10
-        : null;
+      ? distanceSquares5e(rulerStart, rulerPreview, gridSize)
+      : null;
+  const previewLabel =
+    previewSquares != null
+      ? formatMeasureLabel(previewSquares, mPerSquare)
+      : null;
+  const activeMeasure =
+    rulerStart && rulerPreview
+      ? {
+          shape: measureSettings.shape,
+          from: rulerStart,
+          to: rulerPreview,
+          label: previewLabel ?? "",
+          color: measureSettings.color,
+        }
+      : null;
 
   return (
     <div
@@ -779,6 +1253,20 @@ export function GameBoard({
         minHeight: 420,
       }}
     >
+      {tool === "ruler" ? (
+        <div className="absolute left-2 top-2 z-40">
+          <MeasurePanel
+            settings={measureSettings}
+            onChange={setMeasureSettings}
+            metersPerSquare={mPerSquare}
+            collapsed={measurePanelCollapsed}
+            onToggleCollapsed={() =>
+              setMeasurePanelCollapsed((value) => !value)
+            }
+          />
+        </div>
+      ) : null}
+
       <div className="absolute right-2 top-2 z-30 flex items-center gap-1">
         <button
           type="button"
@@ -787,7 +1275,7 @@ export function GameBoard({
             backgroundColor: "rgba(26,20,15,0.85)",
             borderColor: "var(--color-border-strong)",
           }}
-          onClick={() => adjustZoom(zoom - 0.15)}
+          onClick={() => adjustScale(scale / ZOOM_FACTOR)}
           title="Afastar (−)"
         >
           −
@@ -799,13 +1287,16 @@ export function GameBoard({
             backgroundColor: "rgba(26,20,15,0.85)",
             borderColor: "var(--color-border-strong)",
           }}
-          onClick={() => {
-            setZoom(1);
-            centerPanForZoom(1);
+          onClick={fitToViewport}
+          title="Enquadrar mapa (duplo clique = 100%)"
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            followFitRef.current = false;
+            setScale(1);
+            centerPanForScale(1);
           }}
-          title="Enquadrar mapa"
         >
-          {Math.round(zoom * 100)}%
+          {Math.round(scale * 100)}%
         </button>
         <button
           type="button"
@@ -814,7 +1305,7 @@ export function GameBoard({
             backgroundColor: "rgba(26,20,15,0.85)",
             borderColor: "var(--color-border-strong)",
           }}
-          onClick={() => adjustZoom(zoom + 0.15)}
+          onClick={() => adjustScale(scale * ZOOM_FACTOR)}
           title="Aproximar (+)"
         >
           +
@@ -889,15 +1380,22 @@ export function GameBoard({
               const selected =
                 selectedAnnotation?.kind === "effect" &&
                 selectedAnnotation.id === effect.id;
+              const squares =
+                effect.meters != null
+                  ? Math.max(1, Math.round(effect.meters / mPerSquare))
+                  : Math.max(1, Math.round(effect.radius / gridSize));
+              const label =
+                effect.label || formatMeasureLabel(squares, mPerSquare);
+              const palette = measureColors(effect.color);
               return (
               <g key={effect.id}>
                 <circle
                   cx={effect.x}
                   cy={effect.y}
                   r={effect.radius}
-                  fill={effect.color}
-                  stroke={selected ? "#C09A5A" : "var(--color-crimson)"}
-                  strokeWidth={selected ? 3 : 2}
+                  fill={effect.color?.startsWith("rgba") ? effect.color : palette.fill}
+                  stroke={selected ? "#F0D080" : palette.stroke}
+                  strokeWidth={selected ? 3 : 2.5}
                   style={{ cursor: tool === "select" ? "pointer" : "default" }}
                   onPointerDown={(event) => {
                     if (tool !== "select") return;
@@ -906,18 +1404,12 @@ export function GameBoard({
                     setSelectedAnnotation({ kind: "effect", id: effect.id });
                   }}
                 />
-                {effect.meters != null && (
-                  <text
-                    x={effect.x}
-                    y={effect.y - effect.radius - 6}
-                    fill="var(--color-ink-inverse)"
-                    fontSize="11"
-                    textAnchor="middle"
-                    className="pointer-events-none"
-                  >
-                    {formatMeters(effect.meters)}
-                  </text>
-                )}
+                <MeasureBadge
+                  x={effect.x}
+                  y={effect.y - effect.radius - 14}
+                  text={label}
+                  color={palette.stroke}
+                />
               </g>
             );
             })}
@@ -955,80 +1447,52 @@ export function GameBoard({
                 className="pointer-events-none"
               />
             )}
-            {mapBoard.rulers.map((ruler) => {
-              const legacyFeet = (ruler as BoardRuler & { feet?: number }).feet;
-              const meters =
-                typeof ruler.meters === "number"
-                  ? ruler.meters
-                  : typeof legacyFeet === "number"
-                    ? Math.round(legacyFeet * 0.3 * 10) / 10
-                    : 0;
+            {mapBoard.rulers
+              .filter((ruler) => !ruler.live)
+              .map((ruler) => {
+              const squares =
+                typeof ruler.squares === "number"
+                  ? ruler.squares
+                  : distanceSquares5e(ruler.from, ruler.to, gridSize);
+              const label = formatMeasureLabel(squares, mPerSquare);
+              const shape = (ruler.shape ?? "line") as MeasureShape;
               return (
-                <g key={ruler.id} className="pointer-events-none">
-                  <line
-                    x1={ruler.from.x}
-                    y1={ruler.from.y}
-                    x2={ruler.to.x}
-                    y2={ruler.to.y}
-                    stroke="var(--color-parchment)"
-                    strokeWidth={2}
-                    strokeDasharray="6 4"
-                  />
-                  <text
-                    x={(ruler.from.x + ruler.to.x) / 2}
-                    y={(ruler.from.y + ruler.to.y) / 2 - 8}
-                    fill="var(--color-parchment)"
-                    fontSize="12"
-                    textAnchor="middle"
-                  >
-                    {formatMeters(meters)}
-                  </text>
-                </g>
+                <MeasureShapeGraphic
+                  key={ruler.id}
+                  shape={shape}
+                  from={ruler.from}
+                  to={ruler.to}
+                  gridSize={gridSize}
+                  label={label}
+                  byUserName={ruler.byUserName}
+                  color={ruler.color}
+                />
               );
             })}
-            {rulerStart && rulerPreview && (
-              <g>
-                <line
-                  x1={rulerStart.x}
-                  y1={rulerStart.y}
-                  x2={rulerPreview.x}
-                  y2={rulerPreview.y}
-                  stroke="var(--color-ink-inverse)"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                />
-                <text
-                  x={(rulerStart.x + rulerPreview.x) / 2}
-                  y={(rulerStart.y + rulerPreview.y) / 2 - 8}
-                  fill="var(--color-ink-inverse)"
-                  fontSize="12"
-                  textAnchor="middle"
-                >
-                  {formatMeters(previewMeters ?? 0)}
-                </text>
-              </g>
-            )}
-            {effectPreview && effectPreview.radius > 0 && (
-              <g>
-                <circle
-                  cx={effectPreview.x}
-                  cy={effectPreview.y}
-                  r={effectPreview.radius}
-                  fill="rgba(192,154,90,0.25)"
-                  stroke="#C09A5A"
-                  strokeWidth={2}
-                />
-                <text
-                  x={effectPreview.x}
-                  y={effectPreview.y - effectPreview.radius - 6}
-                  fill="var(--color-ink-inverse)"
-                  fontSize="12"
-                  textAnchor="middle"
-                >
-                  {formatMeters(previewMeters ?? 0)}
-                </text>
-              </g>
-            )}
+            {localStickyMeasures.map((mark) => (
+              <MeasureShapeGraphic
+                key={mark.id}
+                shape={mark.shape}
+                from={mark.from}
+                to={mark.to}
+                gridSize={gridSize}
+                label={formatMeasureLabel(
+                  distanceSquares5e(mark.from, mark.to, gridSize),
+                  mPerSquare
+                )}
+                color={mark.color}
+              />
+            ))}
+            {activeMeasure ? (
+              <MeasureShapeGraphic
+                shape={activeMeasure.shape}
+                from={activeMeasure.from}
+                to={activeMeasure.to}
+                gridSize={gridSize}
+                label={activeMeasure.label}
+                color={activeMeasure.color}
+              />
+            ) : null}
             {marquee && (
               <rect
                 x={Math.min(marquee.x1, marquee.x2)}
@@ -1058,26 +1522,32 @@ export function GameBoard({
             .map((token) => {
             const size = tokenFootprintPx(token, gridSize);
             const selected = selectedIds.includes(token.id);
-            const ratio = hpRatio(token);
+            const highlighted =
+              !selected && highlightedTokenIds.includes(token.id);
+            const emphasize = selected || highlighted;
             const showHp =
               typeof token.hpMax === "number" ||
               typeof token.hpCurrent === "number";
+            const dead = isTokenDead(token);
             const dragging = dragTokenIds.includes(token.id);
+            const live = liveDragRef.current[token.id];
+            const renderX = dragging && live ? live.x : token.x;
+            const renderY = dragging && live ? live.y : token.y;
             const span = size / gridSize;
 
-            const inset = Math.max(2, Math.round(gridSize * 0.08));
+            const inset = Math.max(1, Math.round(gridSize * 0.04));
             const body = Math.max(8, size - inset * 2);
-            /** Controles (PV / status) proporcionais ao círculo do token. */
+            /** Controles (PV / status) um pouco maiores. */
             const controlSize = Math.max(
-              16,
-              Math.min(48, Math.round(body * 0.45))
+              24,
+              Math.min(58, Math.round(body * 0.58))
             );
             const controlFont = Math.max(
-              8,
-              Math.min(16, Math.round(controlSize * 0.36))
+              10,
+              Math.min(18, Math.round(controlSize * 0.38))
             );
-            const controlIcon = Math.max(10, Math.round(controlSize * 0.5));
-            const controlGap = Math.max(2, Math.round(controlSize * 0.12));
+            const controlIcon = Math.max(12, Math.round(controlSize * 0.5));
+            const controlGap = Math.max(3, Math.round(controlSize * 0.14));
             const conditionBadge = Math.max(
               12,
               Math.min(28, Math.round(body * 0.3))
@@ -1086,10 +1556,46 @@ export function GameBoard({
               7,
               Math.round(conditionBadge * 0.58)
             );
-            const nameFont = Math.max(9, Math.min(14, Math.round(body * 0.22)));
+            /** Nome legível só quando o token tem tamanho útil na tela. */
+            const tokenScreenPx = size * displayScale;
+            const showNameplate = tokenScreenPx >= 28;
+            const invScale = 1 / Math.max(0.001, displayScale);
+            const nameFont = 11 * invScale;
+            const namePadX = 5 * invScale;
+            const namePadY = 2 * invScale;
+            const nameRadius = 3 * invScale;
+            const nameMaxWidth = Math.max(size * 1.8, 88 * invScale);
+            const nameGap = 3 * invScale;
+            const initialFont = Math.max(
+              8,
+              Math.min(18, Math.round(body * 0.28))
+            );
+            const hpBarWidth = size * 1.28;
+            const hpBarHeight = Math.max(8, Math.round(size * 0.12));
+            const hpBarFont = Math.max(6, Math.round(hpBarHeight * 0.55));
+            const hpBarGap = Math.max(2, Math.round(size * 0.03));
+            const hpBarTop = -inset - hpBarHeight - hpBarGap;
             const controlsTop = showHp
-              ? -inset - controlSize - Math.round(controlSize * 0.35) - 8
+              ? hpBarTop - controlSize - Math.round(controlSize * 0.25)
               : -inset - controlSize - Math.round(controlSize * 0.2);
+            const draftMax = fieldDrafts[`${token.id}:hpMax`];
+            const draftCur = fieldDrafts[`${token.id}:hpCurrent`];
+            const hpMaxNum = parseHpDraft(draftMax, token.hpMax);
+            const hpCurNum = parseHpDraft(
+              draftCur,
+              typeof token.hpCurrent === "number"
+                ? token.hpCurrent
+                : token.hpMax
+            );
+            const hpMaxLabel =
+              hpMaxNum != null ? String(hpMaxNum) : "—";
+            const hpCurLabel =
+              hpCurNum != null ? String(hpCurNum) : "—";
+            const hpRatio =
+              hpMaxNum != null && hpMaxNum > 0 && hpCurNum != null
+                ? Math.max(0, Math.min(1, hpCurNum / hpMaxNum))
+                : 0;
+            const showHpNumbers = canSeeTokenHpNumbers(token);
 
             return (
               <div
@@ -1097,43 +1603,63 @@ export function GameBoard({
                 data-token="true"
                 className="absolute overflow-visible"
                 style={{
-                  left: token.x,
-                  top: token.y,
+                  left: renderX,
+                  top: renderY,
                   width: size,
                   height: size,
-                  zIndex: selected || dragging ? 20 : 10,
-                  transition: dragging
-                    ? "none"
-                    : "left 50ms linear, top 50ms linear",
+                  zIndex: emphasize || dragging ? 20 : 10,
+                  // Sem transition de posição: ecos live + CSS = "andar/rollback".
+                  transition: "none",
                   willChange: dragging ? "left, top" : undefined,
                 }}
               >
-                {showHp && (
+                {showHp ? (
                   <div
-                    className="absolute left-0 right-0 overflow-hidden border"
+                    className="pointer-events-none absolute left-1/2 z-[14] overflow-hidden"
                     style={{
-                      top: -inset - Math.max(4, Math.round(body * 0.08)),
-                      height: Math.max(3, Math.round(body * 0.06)),
-                      borderColor: "var(--color-parchment)",
-                      backgroundColor: "var(--color-panel)",
+                      top: hpBarTop,
+                      width: hpBarWidth,
+                      height: hpBarHeight,
+                      marginLeft: -hpBarWidth / 2,
+                      borderRadius: Math.max(3, Math.round(hpBarHeight * 0.2)),
+                      backgroundColor: "rgba(40, 20, 20, 0.85)",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.45)",
                     }}
                     data-token="true"
                   >
                     <div
-                      className="h-full transition-all"
+                      className="absolute inset-y-0 left-0"
                       style={{
-                        width: `${ratio * 100}%`,
-                        backgroundColor: hpBarColor(ratio),
+                        width: `${hpRatio * 100}%`,
+                        backgroundColor: "#C62828",
                       }}
                     />
+                    {showHpNumbers ? (
+                      <span
+                        className="absolute inset-0 flex items-center justify-center font-arial tabular-nums"
+                        style={{
+                          fontFamily: "Arial, Helvetica, sans-serif",
+                          fontSize: hpBarFont,
+                          lineHeight: 1,
+                          color: "#FFFFFF",
+                          textShadow: "0 1px 1px rgba(0,0,0,0.55)",
+                          letterSpacing: "0.02em",
+                          whiteSpace: "nowrap",
+                          paddingLeft: 2,
+                          paddingRight: 2,
+                        }}
+                      >
+                        {hpMaxLabel} / {hpCurLabel}
+                      </span>
+                    ) : null}
                   </div>
-                )}
+                ) : null}
 
                 {selected &&
                   selectedIds.length === 1 &&
                   canEditTokenFields(token) && (
                   <div
-                    className="absolute left-1/2 z-40 flex -translate-x-1/2 items-center"
+                    className="token-controls-rise absolute left-1/2 z-40 flex -translate-x-1/2 items-center"
                     style={{
                       top: controlsTop,
                       gap: controlGap,
@@ -1160,37 +1686,46 @@ export function GameBoard({
                           setFieldDrafts((prev) => ({ ...prev, [draftKey]: raw }));
                           if (field === "customValue") {
                             updateTokenFields(token.id, { customValue: raw });
-                          }
-                        }}
-                        onBlur={() => {
-                          const raw = (fieldDrafts[draftKey] ?? value).trim();
-                          setFieldDrafts((prev) => {
-                            const next = { ...prev };
-                            delete next[draftKey];
-                            return next;
-                          });
-                          if (field === "customValue") return;
-                          if (raw === "") {
-                            updateTokenFields(token.id, { [field]: undefined } as Partial<BoardToken>);
                             return;
                           }
-                          if (/^[+-]\d+$/.test(raw)) {
-                            const base =
-                              field === "hpCurrent"
-                                ? (token.hpCurrent ?? token.hpMax ?? 0)
-                                : (token.hpMax ?? 0);
+                          // Absolute ao digitar; relativo (+20/-20) só no Enter/blur.
+                          if (/^\d+$/.test(raw.trim())) {
                             updateTokenFields(token.id, {
-                              [field]: Math.max(0, base + Number(raw)),
+                              [field]: Math.max(0, Number(raw.trim())),
                             } as Partial<BoardToken>);
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (field === "customValue") {
+                            (event.target as HTMLInputElement).blur();
                             return;
                           }
-                          const num = Number(raw);
-                          if (Number.isNaN(num)) return;
-                          updateTokenFields(token.id, {
-                            [field]: Math.max(0, num),
-                          } as Partial<BoardToken>);
+                          commitTokenHpField(
+                            token.id,
+                            field,
+                            (event.target as HTMLInputElement).value
+                          );
+                          (event.target as HTMLInputElement).blur();
                         }}
-                        className="rounded-full border-2 text-center font-semibold outline-none"
+                        onBlur={(event) => {
+                          if (field === "customValue") {
+                            setFieldDrafts((prev) => {
+                              const next = { ...prev };
+                              delete next[draftKey];
+                              return next;
+                            });
+                            return;
+                          }
+                          commitTokenHpField(
+                            token.id,
+                            field,
+                            event.currentTarget.value
+                          );
+                        }}
+                        className="rounded-full border-2 text-center font-semibold outline-none shadow"
                         style={{
                           width: controlSize,
                           height: controlSize,
@@ -1198,12 +1733,13 @@ export function GameBoard({
                           borderColor: border,
                           backgroundColor: "var(--color-surface)",
                           color: "var(--color-ink)",
+                          fontFamily: "Arial, Helvetica, sans-serif",
                         }}
                         title={
                           field === "hpMax"
-                            ? "PV máximo (use +10 / -10)"
+                            ? "PV máximo (use +10 / -10 e Enter)"
                             : field === "hpCurrent"
-                              ? "PV atual (use +10 / -10)"
+                              ? "PV atual (use +10 / -10 e Enter)"
                               : "Campo livre"
                         }
                       />
@@ -1297,7 +1833,11 @@ export function GameBoard({
                     event.preventDefault();
                     event.stopPropagation();
                     if (!isMaster) return;
-                    setSelection([token.id]);
+                    const nextSelection =
+                      selectedIds.includes(token.id) && selectedIds.length > 1
+                        ? selectedIds
+                        : [token.id];
+                    setSelection(nextSelection);
                     setConditionMenuOpen(false);
                     setTokenLayerMenu({
                       tokenId: token.id,
@@ -1335,7 +1875,7 @@ export function GameBoard({
                     if (token.monsterId) onOpenMonsterSheet?.(token);
                     else if (token.characterId) onOpenCharacterSheet?.(token);
                   }}
-                  className="absolute flex items-center justify-center overflow-hidden border-2 font-semibold text-[var(--color-ink-inverse)] shadow"
+                  className="absolute flex items-center justify-center overflow-hidden font-semibold text-[var(--color-ink-inverse)]"
                   style={{
                     left: inset,
                     top: inset,
@@ -1343,18 +1883,18 @@ export function GameBoard({
                     height: body,
                     borderRadius: span <= 1 ? "9999px" : "10%",
                     backgroundColor: token.color,
-                    borderColor: selected
+                    borderStyle: "solid",
+                    borderWidth: 1,
+                    borderColor: emphasize
                       ? "#C09A5A"
                       : token.borderColor || "var(--color-parchment)",
-                    boxShadow: selected
-                      ? "0 0 0 2px #7A2530"
-                      : token.borderColor
-                        ? `0 0 0 1px ${token.borderColor}`
-                        : undefined,
+                    boxShadow: emphasize
+                      ? "0 0 0 1px #7A2530"
+                      : undefined,
                     opacity: token.secret ? 0.75 : 1,
                     outline: token.secret ? "1px dashed #C09A5A" : undefined,
                     fontFamily: "'Cinzel', serif",
-                    fontSize: nameFont,
+                    fontSize: initialFont,
                     cursor:
                       canDragToken(token) && tool === "select"
                         ? "grab"
@@ -1370,11 +1910,73 @@ export function GameBoard({
                   {!token.imageUrl && token.name.slice(0, 2).toUpperCase()}
                 </button>
 
+                {dead ? (
+                  <div
+                    className="pointer-events-none absolute z-[16]"
+                    style={{
+                      left: inset,
+                      top: inset,
+                      width: body,
+                      height: body,
+                    }}
+                    aria-hidden
+                  >
+                    <svg
+                      viewBox="0 0 100 100"
+                      className="h-full w-full"
+                      overflow="visible"
+                    >
+                      <line
+                        x1="16"
+                        y1="16"
+                        x2="84"
+                        y2="84"
+                        stroke="#1A0505"
+                        strokeWidth="18"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="84"
+                        y1="16"
+                        x2="16"
+                        y2="84"
+                        stroke="#1A0505"
+                        strokeWidth="18"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="16"
+                        y1="16"
+                        x2="84"
+                        y2="84"
+                        stroke="#E11D2E"
+                        strokeWidth="11"
+                        strokeLinecap="round"
+                      />
+                      <line
+                        x1="84"
+                        y1="16"
+                        x2="16"
+                        y2="84"
+                        stroke="#E11D2E"
+                        strokeWidth="11"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </div>
+                ) : null}
+
                 {(token.conditions ?? []).length > 0 && (
                   <div
                     className="pointer-events-none absolute left-1/2 z-30 flex -translate-x-1/2 flex-nowrap items-center justify-center"
                     style={{
-                      top: size + inset * 0.25 + Math.round(conditionBadge * 0.35),
+                      top: showNameplate
+                        ? size +
+                          nameGap +
+                          nameFont +
+                          namePadY * 2 +
+                          2 * invScale
+                        : size + inset * 0.25 + Math.round(conditionBadge * 0.35),
                       gap: Math.max(2, Math.round(conditionBadge * 0.12)),
                     }}
                     data-token="true"
@@ -1411,18 +2013,28 @@ export function GameBoard({
                   </div>
                 )}
 
-                <div
-                  className="pointer-events-none absolute left-1/2 truncate text-center font-medium text-[var(--color-ink-inverse)]"
-                  style={{
-                    top: size + inset * 0.25,
-                    width: size + Math.round(body * 0.4),
-                    transform: "translateX(-50%)",
-                    fontSize: nameFont,
-                    textShadow: "0 1px 2px #1A140F",
-                  }}
-                >
-                  {token.name}
-                </div>
+                {showNameplate ? (
+                  <div
+                    className="pointer-events-none absolute left-1/2 z-20 text-center font-semibold"
+                    style={{
+                      top: size + nameGap,
+                      maxWidth: nameMaxWidth,
+                      transform: "translateX(-50%)",
+                      fontSize: nameFont,
+                      lineHeight: 1.2,
+                      padding: `${namePadY}px ${namePadX}px`,
+                      borderRadius: nameRadius,
+                      color: "#1A140F",
+                      backgroundColor: "rgba(255, 255, 255, 0.55)",
+                      boxShadow: `0 ${1 * invScale}px ${3 * invScale}px rgba(0,0,0,0.25)`,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {token.name}
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -1443,8 +2055,16 @@ export function GameBoard({
           );
           if (!menuToken || !isMaster) return null;
           const onSecret = Boolean(menuToken.secret);
-          const menuWidth = 180;
-          const menuHeight = 96;
+          const menuTargets =
+            selectedIds.includes(menuToken.id) && selectedIds.length > 1
+              ? initiativeTokensFromIds(selectedIds)
+              : canRollInitiative(menuToken)
+                ? [menuToken]
+                : [];
+          const showInitiative =
+            Boolean(onRollTokenInitiative) && menuTargets.length > 0;
+          const menuWidth = 200;
+          const menuHeight = showInitiative ? 148 : 96;
           const left = Math.min(
             tokenLayerMenu.x,
             window.innerWidth - menuWidth - 8
@@ -1456,7 +2076,7 @@ export function GameBoard({
           return (
             <div
               data-token-layer-menu
-              className="fixed z-[60] min-w-[11rem] border-2 py-1 shadow-xl"
+              className="fixed z-[60] min-w-[12rem] border-2 py-1 shadow-xl"
               style={{
                 left: Math.max(8, left),
                 top: Math.max(8, top),
@@ -1470,8 +2090,21 @@ export function GameBoard({
                 className="border-b px-3 py-1.5 text-[11px] text-[var(--color-ink-muted)]"
                 style={{ borderColor: "var(--color-border)" }}
               >
-                Camada — {menuToken.name}
+                {menuTargets.length > 1
+                  ? `${menuTargets.length} tokens`
+                  : `Camada — ${menuToken.name}`}
               </p>
+              {showInitiative ? (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-[var(--color-parchment)]"
+                  onClick={() => rollInitiativeForTokens(menuTargets)}
+                >
+                  {menuTargets.length > 1
+                    ? `Rolar iniciativa (${menuTargets.length})`
+                    : "Rolar iniciativa"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-[var(--color-parchment)]"
@@ -1514,6 +2147,7 @@ export function GameBoard({
         canEditTokenFields(selectedToken) && (
           <div
             className="absolute inset-0 z-50 flex items-end justify-center bg-black/35 p-3 sm:items-center"
+            data-condition-menu
             onPointerDown={(event) => {
               if (event.target === event.currentTarget) {
                 setConditionMenuOpen(false);
@@ -1604,6 +2238,7 @@ export function GameBoard({
 
       {(selectedToken || selectedIds.length > 1 || selectedAnnotation) && (
         <div
+          data-token-selection
           className="absolute bottom-2 left-2 z-40 max-w-[min(96vw,28rem)] rounded border px-2 py-1 text-[11px] text-[var(--color-ink-inverse)]"
           style={{
             backgroundColor: "rgba(26,20,15,0.92)",
@@ -1628,9 +2263,32 @@ export function GameBoard({
                   })()}
                 {typeof selectedToken?.hpCurrent === "number" &&
                   typeof selectedToken?.hpMax === "number" &&
+                  canSeeTokenHpNumbers(selectedToken) &&
                   ` · PV ${selectedToken.hpCurrent}/${selectedToken.hpMax}`}
               </span>
             )}
+            {isMaster &&
+              onRollTokenInitiative &&
+              (() => {
+                const targets =
+                  selectedIds.length > 1
+                    ? initiativeTokensFromIds(selectedIds)
+                    : selectedToken && canRollInitiative(selectedToken)
+                      ? [selectedToken]
+                      : [];
+                if (targets.length === 0) return null;
+                return (
+                  <button
+                    type="button"
+                    className="pointer-events-auto underline"
+                    onClick={() => rollInitiativeForTokens(targets)}
+                  >
+                    {targets.length > 1
+                      ? `Iniciativa (${targets.length})`
+                      : "Iniciativa"}
+                  </button>
+                );
+              })()}
             {selectedToken &&
               selectedIds.length === 1 &&
               (isMaster ||
@@ -1689,7 +2347,7 @@ export function GameBoard({
                 className="pointer-events-auto underline text-[#E8D4C4]"
                 onClick={deleteSelected}
               >
-                Delete
+                Apagar
               </button>
             )}
           </div>

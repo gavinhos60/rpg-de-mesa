@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type {
     Ability,
@@ -52,6 +52,18 @@ import {
 } from "../../data/dnd/spellcasting";
 import { getLanguageOptions } from "../character/CharacterTalentChoices";
 import { AdvantageConfirm } from "../game/AdvantageConfirm";
+import {
+    COIN_DEFINITIONS,
+    COINS_PER_POUND,
+    formatPoValue,
+    formatWallet,
+    resolveCharacterWallet,
+    totalCoinCount,
+    walletValueInPo,
+    walletWeightLb,
+} from "../../utils/wallet";
+import type { CharacterWallet } from "../../types/character";
+import type { InventoryItemAction } from "../../services/character.service";
 
 interface CharacterSheetReviewProps {
     data: CharacterFormData;
@@ -61,6 +73,16 @@ interface CharacterSheetReviewProps {
     onUseFeature?: (name: string, description: string) => void;
     onCastSpell?: (spell: Spell, options?: { advantage?: boolean }) => void;
     canRoll?: boolean;
+    /** Gerenciar carteira/itens na mesa (ficha do próprio jogador). */
+    inventoryManage?: {
+        recipients: Array<{ id: number; name: string }>;
+        busy?: boolean;
+        onUpdateWallet: (wallet: CharacterWallet) => Promise<void>;
+        onDiscardItem: (payload: InventoryItemAction) => Promise<void>;
+        onTransferItem: (
+            payload: InventoryItemAction & { targetCharacterId: number }
+        ) => Promise<void>;
+    };
 }
 
 const ALIGNMENT_NAMES: Record<string, string> = {
@@ -112,6 +134,7 @@ export function CharacterSheetReview({
     onUseFeature,
     onCastSpell,
     canRoll = false,
+    inventoryManage,
 }: CharacterSheetReviewProps) {
     const [activeTab, setActiveTab] = useState<
         "summary" | "combat" | "spells" | "inventory" | "story"
@@ -122,6 +145,24 @@ export function CharacterSheetReview({
         label: string;
         spell?: Spell;
     } | null>(null);
+    const [walletDraft, setWalletDraft] = useState<CharacterWallet>(() =>
+        resolveCharacterWallet(data)
+    );
+    const [itemAction, setItemAction] = useState<{
+        kind: "catalog" | "custom";
+        itemId?: string;
+        customItemId?: string;
+        name: string;
+        maxQuantity: number;
+        quantity: number;
+        targetCharacterId: string;
+        mode: "discard" | "transfer";
+    } | null>(null);
+
+    useEffect(() => {
+        setWalletDraft(resolveCharacterWallet(data));
+    }, [data]);
+
     const abilities = getFinalAbilities(data);
     const rollAbilities = Boolean(canRoll && onRollAbility);
     const rollSkills = Boolean(canRoll && onRollSkill);
@@ -172,9 +213,11 @@ export function CharacterSheetReview({
         .join(" / ");
 
     const inventory = buildInventory(data);
+    const wallet = resolveCharacterWallet(data);
     const armorClass = getArmorClassFromEquipment(
         abilities.dexterity,
         abilities.wisdom,
+        abilities.constitution,
         primaryClass,
         inventory.map((row) => row.itemId)
     );
@@ -185,8 +228,11 @@ export function CharacterSheetReview({
     }, 0) + (data.equipment.customItems ?? []).reduce(
         (total, item) => total + (item.weight ?? 0) * item.quantity,
         0
-    );
+    ) + walletWeightLb(wallet);
     const isOverCapacity = inventoryWeight > carryingCapacity;
+    const coinCount = totalCoinCount(wallet);
+    const coinWeight = walletWeightLb(wallet);
+    const coinValue = walletValueInPo(wallet);
 
     const slots = getCombinedSpellSlots(data.classes);
     const spellGroups = collectSpells(data);
@@ -547,11 +593,168 @@ export function CharacterSheetReview({
                         Inventário
                     </h3>
                     <span className={isOverCapacity ? "text-sm text-[var(--color-danger)]" : "text-sm text-[var(--color-ink-muted)]"}>
-                        {background ? `${background.startingGoldGp} PO • ` : ""}
+                        {formatWallet(wallet)}
+                        {" • "}
                         {formatMetricWeight(inventoryWeight)} / {formatMetricWeight(carryingCapacity)}
                         {isOverCapacity ? " • Sobrecarga" : ""}
                     </span>
                 </div>
+
+                <div
+                    className="mb-4 border p-3"
+                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment)" }}
+                >
+                    <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                            <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
+                                Carteira
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[var(--color-ink-soft)]">
+                                50 moedas = 1 lb ({formatMetricWeight(1)}) · conversão padrão D&D
+                            </p>
+                        </div>
+                        <div className="text-right text-xs text-[var(--color-ink-muted)]">
+                            <p>
+                                {coinCount} moeda{coinCount === 1 ? "" : "s"} ·{" "}
+                                {formatMetricWeight(coinWeight)}
+                            </p>
+                            <p style={cinzel} className="text-[var(--color-ink)]">
+                                ≈ {formatPoValue(coinValue)}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
+                            <thead>
+                                <tr className="text-[11px] uppercase tracking-wide text-[var(--color-ink-soft)]">
+                                    <th className="pb-2 pr-2 font-normal">Moeda</th>
+                                    <th className="pb-2 pr-2 font-normal">Qtd.</th>
+                                    <th className="pb-2 pr-2 font-normal">Valor</th>
+                                    <th className="pb-2 font-normal">Peso</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {COIN_DEFINITIONS.map((coin) => {
+                                    const amount = inventoryManage
+                                        ? walletDraft[coin.key]
+                                        : wallet[coin.key];
+                                    const rowWeight = amount / COINS_PER_POUND;
+                                    const rowValue = amount * coin.valueInPo;
+                                    return (
+                                        <tr
+                                            key={coin.key}
+                                            className="border-t"
+                                            style={{ borderColor: "var(--color-border)" }}
+                                        >
+                                            <td className="py-2 pr-2 align-middle">
+                                                <span className="text-[var(--color-ink)]" style={cinzel}>
+                                                    {coin.short}
+                                                </span>
+                                                <span className="ml-2 text-xs text-[var(--color-ink-soft)]">
+                                                    {coin.label}
+                                                </span>
+                                                <span className="mt-0.5 block text-[10px] text-[var(--color-ink-soft)]">
+                                                    {coin.valueInPo >= 1
+                                                        ? `1 ${coin.short} = ${coin.valueInPo} PO`
+                                                        : `10 ${coin.short} = 1 PO`}
+                                                </span>
+                                            </td>
+                                            <td className="py-2 pr-2 align-middle">
+                                                {inventoryManage ? (
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        step={1}
+                                                        value={walletDraft[coin.key]}
+                                                        disabled={inventoryManage.busy}
+                                                        onChange={(event) =>
+                                                            setWalletDraft((previous) => ({
+                                                                ...previous,
+                                                                [coin.key]: Math.max(
+                                                                    0,
+                                                                    Math.floor(
+                                                                        Number(event.target.value) || 0
+                                                                    )
+                                                                ),
+                                                            }))
+                                                        }
+                                                        className="w-24 border px-2 py-1 text-sm text-[var(--color-ink)]"
+                                                        style={{
+                                                            borderColor: "var(--color-border)",
+                                                            backgroundColor: "var(--color-surface)",
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <span className="text-[var(--color-ink)]">{amount}</span>
+                                                )}
+                                            </td>
+                                            <td className="py-2 pr-2 align-middle text-xs text-[var(--color-ink-muted)]">
+                                                {formatPoValue(rowValue)}
+                                            </td>
+                                            <td className="py-2 align-middle text-xs text-[var(--color-ink-muted)]">
+                                                {formatMetricWeight(rowWeight)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                            <tfoot>
+                                <tr
+                                    className="border-t text-sm"
+                                    style={{ borderColor: "var(--color-border-strong)" }}
+                                >
+                                    <td className="pt-2 pr-2 text-[var(--color-ink)]" style={cinzel}>
+                                        Total
+                                    </td>
+                                    <td className="pt-2 pr-2 text-[var(--color-ink)]">
+                                        {inventoryManage
+                                            ? totalCoinCount(walletDraft)
+                                            : coinCount}
+                                    </td>
+                                    <td className="pt-2 pr-2 text-[var(--color-ink)]">
+                                        {formatPoValue(
+                                            inventoryManage
+                                                ? walletValueInPo(walletDraft)
+                                                : coinValue
+                                        )}
+                                    </td>
+                                    <td className="pt-2 text-[var(--color-ink)]">
+                                        {formatMetricWeight(
+                                            inventoryManage
+                                                ? walletWeightLb(walletDraft)
+                                                : coinWeight
+                                        )}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    {inventoryManage ? (
+                        <div className="mt-3 flex justify-end">
+                            <button
+                                type="button"
+                                disabled={inventoryManage.busy}
+                                onClick={() => {
+                                    void inventoryManage.onUpdateWallet(walletDraft).catch((err) => {
+                                        console.error(err);
+                                        alert("Não foi possível atualizar a carteira.");
+                                    });
+                                }}
+                                className="border px-3 py-1.5 text-xs"
+                                style={{
+                                    borderColor: "var(--color-border-strong)",
+                                    backgroundColor: "var(--color-surface)",
+                                    fontFamily: "'Cinzel', serif",
+                                }}
+                            >
+                                Salvar carteira
+                            </button>
+                        </div>
+                    ) : null}
+                </div>
+
                 {inventory.length === 0 &&
                 (data.equipment.customItems ?? []).length === 0 ? (
                     <p className="text-sm italic text-[var(--color-ink-muted)]">Nenhum item registrado.</p>
@@ -576,6 +779,50 @@ export function CharacterSheetReview({
                                                             {row.classQuantity > 0 && row.manualQuantity > 0 ? " + " : ""}
                                                             {row.manualQuantity > 0 ? "Adicionado" : ""}
                                                         </span>
+                                                        {inventoryManage && quantity > 0 ? (
+                                                            <span className="mt-1 flex flex-wrap gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    className="text-[11px] underline"
+                                                                    style={{ color: "var(--color-crimson)" }}
+                                                                    onClick={() =>
+                                                                        setItemAction({
+                                                                            kind: "catalog",
+                                                                            itemId: row.itemId,
+                                                                            name: item?.name ?? row.itemId,
+                                                                            maxQuantity: quantity,
+                                                                            quantity: 1,
+                                                                            targetCharacterId: "",
+                                                                            mode: "discard",
+                                                                        })
+                                                                    }
+                                                                >
+                                                                    Remover
+                                                                </button>
+                                                                {inventoryManage.recipients.length > 0 ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-[11px] underline"
+                                                                        style={{ color: "var(--color-ink-muted)" }}
+                                                                        onClick={() =>
+                                                                            setItemAction({
+                                                                                kind: "catalog",
+                                                                                itemId: row.itemId,
+                                                                                name: item?.name ?? row.itemId,
+                                                                                maxQuantity: quantity,
+                                                                                quantity: 1,
+                                                                                targetCharacterId: String(
+                                                                                    inventoryManage.recipients[0].id
+                                                                                ),
+                                                                                mode: "transfer",
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        Enviar
+                                                                    </button>
+                                                                ) : null}
+                                                            </span>
+                                                        ) : null}
                                                     </span>
                                                     <span className="shrink-0 text-xs text-[var(--color-ink-soft)]">
                                                         {formatMetricWeight((item?.weight ?? 0) * quantity)}
@@ -610,6 +857,50 @@ export function CharacterSheetReview({
                                                     Concedido por {item.grantedByName}
                                                 </p>
                                             ) : null}
+                                            {inventoryManage && item.quantity > 0 ? (
+                                                <span className="mt-1 flex flex-wrap gap-2">
+                                                    <button
+                                                        type="button"
+                                                        className="text-[11px] underline"
+                                                        style={{ color: "var(--color-crimson)" }}
+                                                        onClick={() =>
+                                                            setItemAction({
+                                                                kind: "custom",
+                                                                customItemId: item.id,
+                                                                name: item.name,
+                                                                maxQuantity: item.quantity,
+                                                                quantity: 1,
+                                                                targetCharacterId: "",
+                                                                mode: "discard",
+                                                            })
+                                                        }
+                                                    >
+                                                        Remover
+                                                    </button>
+                                                    {inventoryManage.recipients.length > 0 ? (
+                                                        <button
+                                                            type="button"
+                                                            className="text-[11px] underline"
+                                                            style={{ color: "var(--color-ink-muted)" }}
+                                                            onClick={() =>
+                                                                setItemAction({
+                                                                    kind: "custom",
+                                                                    customItemId: item.id,
+                                                                    name: item.name,
+                                                                    maxQuantity: item.quantity,
+                                                                    quantity: 1,
+                                                                    targetCharacterId: String(
+                                                                        inventoryManage.recipients[0].id
+                                                                    ),
+                                                                    mode: "transfer",
+                                                                })
+                                                            }
+                                                        >
+                                                            Enviar
+                                                        </button>
+                                                    ) : null}
+                                                </span>
+                                            ) : null}
                                         </li>
                                     ))}
                                 </ul>
@@ -617,6 +908,134 @@ export function CharacterSheetReview({
                         )}
                     </div>
                 )}
+
+                {itemAction && inventoryManage ? (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-[color:var(--color-overlay)] px-4">
+                        <div
+                            className="w-full max-w-md border-2 p-5"
+                            style={{
+                                backgroundColor: "var(--color-surface)",
+                                borderColor: "var(--color-border-wood)",
+                            }}
+                        >
+                            <h4 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
+                                {itemAction.mode === "discard" ? "Remover item" : "Enviar item"}
+                            </h4>
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                                {itemAction.name}
+                            </p>
+                            <label className="mt-4 block text-xs text-[var(--color-ink-muted)]">
+                                Quantidade (máx. {itemAction.maxQuantity})
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={itemAction.maxQuantity}
+                                    value={itemAction.quantity}
+                                    onChange={(event) =>
+                                        setItemAction((previous) =>
+                                            previous
+                                                ? {
+                                                      ...previous,
+                                                      quantity: Math.min(
+                                                          previous.maxQuantity,
+                                                          Math.max(1, Math.floor(Number(event.target.value) || 1))
+                                                      ),
+                                                  }
+                                                : previous
+                                        )
+                                    }
+                                    className="mt-1 w-full border px-2 py-1.5 text-sm"
+                                    style={{
+                                        borderColor: "var(--color-border)",
+                                        backgroundColor: "var(--color-parchment)",
+                                    }}
+                                />
+                            </label>
+                            {itemAction.mode === "transfer" ? (
+                                <label className="mt-3 block text-xs text-[var(--color-ink-muted)]">
+                                    Destinatário
+                                    <select
+                                        value={itemAction.targetCharacterId}
+                                        onChange={(event) =>
+                                            setItemAction((previous) =>
+                                                previous
+                                                    ? {
+                                                          ...previous,
+                                                          targetCharacterId: event.target.value,
+                                                      }
+                                                    : previous
+                                            )
+                                        }
+                                        className="mt-1 w-full border px-2 py-1.5 text-sm"
+                                        style={{
+                                            borderColor: "var(--color-border)",
+                                            backgroundColor: "var(--color-parchment)",
+                                        }}
+                                    >
+                                        {inventoryManage.recipients.map((recipient) => (
+                                            <option key={recipient.id} value={recipient.id}>
+                                                {recipient.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </label>
+                            ) : null}
+                            <div className="mt-5 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setItemAction(null)}
+                                    className="border px-3 py-1.5 text-xs"
+                                    style={{ borderColor: "var(--color-border)" }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={inventoryManage.busy}
+                                    onClick={() => {
+                                        const payload =
+                                            itemAction.kind === "catalog"
+                                                ? {
+                                                      kind: "catalog" as const,
+                                                      itemId: itemAction.itemId!,
+                                                      quantity: itemAction.quantity,
+                                                  }
+                                                : {
+                                                      kind: "custom" as const,
+                                                      customItemId: itemAction.customItemId!,
+                                                      quantity: itemAction.quantity,
+                                                  };
+                                        const run =
+                                            itemAction.mode === "discard"
+                                                ? inventoryManage.onDiscardItem(payload)
+                                                : inventoryManage.onTransferItem({
+                                                      ...payload,
+                                                      targetCharacterId: Number(itemAction.targetCharacterId),
+                                                  });
+                                        void run
+                                            .then(() => setItemAction(null))
+                                            .catch((err) => {
+                                                console.error(err);
+                                                alert(
+                                                    itemAction.mode === "discard"
+                                                        ? "Não foi possível remover o item."
+                                                        : "Não foi possível enviar o item."
+                                                );
+                                            });
+                                    }}
+                                    className="border px-3 py-1.5 text-xs"
+                                    style={{
+                                        borderColor: "var(--color-crimson)",
+                                        color: "var(--color-crimson)",
+                                        fontFamily: "'Cinzel', serif",
+                                    }}
+                                >
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
             </section>
 
             <section className={activeTab === "spells" ? "" : "hidden"}>
@@ -1115,7 +1534,25 @@ function buildInventory(data: CharacterFormData): ReviewInventoryRow[] {
         addInventoryQuantity(counts, stack.itemId, stack.quantity, "manual");
     }
 
-    return [...counts.values()];
+    for (const stack of data.equipment.removedItems ?? []) {
+        let remaining = Math.max(0, stack.quantity);
+        const current = counts.get(stack.itemId);
+        if (!current || remaining <= 0) continue;
+        const fromClass = Math.min(current.classQuantity, remaining);
+        current.classQuantity -= fromClass;
+        remaining -= fromClass;
+        const fromManual = Math.min(current.manualQuantity, remaining);
+        current.manualQuantity -= fromManual;
+        if (current.classQuantity <= 0 && current.manualQuantity <= 0) {
+            counts.delete(stack.itemId);
+        } else {
+            counts.set(stack.itemId, current);
+        }
+    }
+
+    return [...counts.values()].filter(
+        (row) => row.classQuantity + row.manualQuantity > 0
+    );
 }
 
 function addInventoryQuantity(

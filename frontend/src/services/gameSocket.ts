@@ -4,6 +4,8 @@ import type {
   CampaignCharacterLite,
   ChatMessage,
   CheckRequest,
+  CombatState,
+  InitiativeRequest,
   SessionRuntimeState,
 } from "../types/game";
 import { api } from "./api";
@@ -71,13 +73,35 @@ export function emitTokenMove(
   sessionId: number,
   tokenId: string,
   x: number,
-  y: number
+  y: number,
+  options?: { commit?: boolean }
 ): Promise<{ ok: boolean; error?: string }> {
   return new Promise((resolve) => {
     socket.emit(
       "token:move",
-      { sessionId, tokenId, x, y },
+      {
+        sessionId,
+        tokenId,
+        x,
+        y,
+        commit: options?.commit !== false,
+      },
       (response: { ok: boolean; error?: string }) => resolve(response)
+    );
+  });
+}
+
+export function emitTokenRemove(
+  socket: Socket,
+  sessionId: number,
+  tokenIds: string[]
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "token:remove",
+      { sessionId, tokenIds },
+      (response: { ok: boolean; error?: string }) =>
+        resolve(response ?? { ok: false, error: "Sem resposta" })
     );
   });
 }
@@ -128,6 +152,7 @@ export function emitMonsterAction(
     damage?: string | null;
     abilityModifier?: number | null;
     abilityLabel?: string | null;
+    tokenId?: string | null;
     userName: string;
   }
 ): Promise<{ ok: boolean; error?: string; message?: ChatMessage }> {
@@ -187,16 +212,214 @@ export function emitCheckRequest(
   });
 }
 
+export function emitInitiativeRequest(
+  socket: Socket,
+  sessionId: number,
+  payload: {
+    targetCharacterId?: number | null;
+    userName: string;
+  }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  request?: InitiativeRequest;
+  combat?: CombatState;
+}> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "initiative:request",
+      { sessionId, ...payload },
+      ((response) =>
+        resolve(
+          response as {
+            ok: boolean;
+            error?: string;
+            request?: InitiativeRequest;
+            combat?: CombatState;
+          }
+        )) as Ack
+    );
+  });
+}
+
+export function emitInitiativeRoll(
+  socket: Socket,
+  sessionId: number,
+  payload: {
+    characterId: number;
+    userName: string;
+    advantage?: boolean;
+  }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  message?: ChatMessage;
+  combat?: CombatState;
+}> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "initiative:roll",
+      { sessionId, ...payload },
+      ((response) =>
+        resolve(
+          response as {
+            ok: boolean;
+            error?: string;
+            message?: ChatMessage;
+            combat?: CombatState;
+          }
+        )) as Ack
+    );
+  });
+}
+
+export function emitCombatAdd(
+  socket: Socket,
+  sessionId: number,
+  payload: {
+    name: string;
+    initiative: number;
+    kind?: "monster" | "other";
+    tokenId?: string | null;
+    userName: string;
+  }
+): Promise<{ ok: boolean; error?: string; combat?: CombatState }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "combat:add",
+      { sessionId, ...payload },
+      ((response) =>
+        resolve(response as { ok: boolean; error?: string; combat?: CombatState })) as Ack
+    );
+  });
+}
+
+export function emitCombatRollNpcs(
+  socket: Socket,
+  sessionId: number,
+  payload: {
+    entries: Array<{
+      tokenId: string;
+      name: string;
+      dexterity?: number;
+    }>;
+    userName: string;
+  }
+): Promise<{ ok: boolean; error?: string; combat?: CombatState }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "combat:roll-npcs",
+      { sessionId, ...payload },
+      ((response) =>
+        resolve(response as { ok: boolean; error?: string; combat?: CombatState })) as Ack
+    );
+  });
+}
+
+export function emitCombatStart(
+  socket: Socket,
+  sessionId: number,
+  userName: string
+): Promise<{ ok: boolean; error?: string; combat?: CombatState }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "combat:start",
+      { sessionId, userName },
+      ((response) =>
+        resolve(response as { ok: boolean; error?: string; combat?: CombatState })) as Ack
+    );
+  });
+}
+
+export function emitCombatNext(
+  socket: Socket,
+  sessionId: number,
+  userName: string
+): Promise<{ ok: boolean; error?: string; combat?: CombatState }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "combat:next",
+      { sessionId, userName },
+      ((response) =>
+        resolve(response as { ok: boolean; error?: string; combat?: CombatState })) as Ack
+    );
+  });
+}
+
+export function emitCombatReorder(
+  socket: Socket,
+  sessionId: number,
+  orderIds: string[],
+  userName: string
+): Promise<{ ok: boolean; error?: string; combat?: CombatState }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "combat:reorder",
+      { sessionId, orderIds, userName },
+      ((response) =>
+        resolve(response as { ok: boolean; error?: string; combat?: CombatState })) as Ack
+    );
+  });
+}
+
+export function emitCombatEnd(
+  socket: Socket,
+  sessionId: number,
+  userName: string
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "combat:end",
+      { sessionId, userName },
+      ((response) => resolve(response as { ok: boolean; error?: string })) as Ack
+    );
+  });
+}
+
 export function emitRuler(
   socket: Socket,
   sessionId: number,
   from: { x: number; y: number },
-  to: { x: number; y: number }
+  to: { x: number; y: number },
+  options?: {
+    sticky?: boolean;
+    live?: boolean;
+    byUserName?: string;
+    shape?: "line" | "square" | "circle" | "cone" | "beam";
+    color?: string;
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   return new Promise((resolve) => {
     socket.emit(
       "ruler:set",
-      { sessionId, from, to },
+      {
+        sessionId,
+        from,
+        to,
+        sticky: Boolean(options?.sticky),
+        live: Boolean(options?.live),
+        byUserName: options?.byUserName,
+        shape: options?.shape ?? "line",
+        color: options?.color,
+      },
+      (response: { ok: boolean; error?: string }) => resolve(response)
+    );
+  });
+}
+
+export function emitRulerClear(
+  socket: Socket,
+  sessionId: number,
+  options?: { clearAll?: boolean }
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "ruler:set",
+      {
+        sessionId,
+        clear: !options?.clearAll,
+        clearAll: Boolean(options?.clearAll),
+      },
       (response: { ok: boolean; error?: string }) => resolve(response)
     );
   });

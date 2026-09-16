@@ -104,7 +104,9 @@ const initialData: CharacterFormData = {
         choiceSelections: {},
         manualItems: [],
         customItems: [],
+        removedItems: [],
     },
+    wallet: { pl: 0, po: 0, pp: 0 },
     spells: {
         byClass: {},
         talent: {
@@ -178,7 +180,15 @@ function mergeSheet(
             choiceSelections: sheet.equipment?.choiceSelections ?? {},
             manualItems: sheet.equipment?.manualItems ?? [],
             customItems: sheet.equipment?.customItems ?? [],
+            removedItems: sheet.equipment?.removedItems ?? [],
         },
+        wallet: sheet.wallet
+            ? {
+                  pl: Math.max(0, Math.floor(Number(sheet.wallet.pl) || 0)),
+                  po: Math.max(0, Math.floor(Number(sheet.wallet.po) || 0)),
+                  pp: Math.max(0, Math.floor(Number(sheet.wallet.pp) || 0)),
+              }
+            : undefined,
         spells: {
             byClass: sheet.spells?.byClass ?? {},
             talent: {

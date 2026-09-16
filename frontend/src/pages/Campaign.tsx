@@ -23,7 +23,7 @@ import { StatCard } from "../components/StatCard";
 import { useAuth } from "../contexts/AuthContext";
 
 import {
-    EmblemIcon,
+    CrowMark,
     WaxSealIcon,
     BrokenSealIcon,
     QuillIcon,
@@ -302,7 +302,7 @@ export function Campaign() {
 
                 {/* Resumo */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
-                    <StatCard label="Membros" value={campaign.members.length} Icon={EmblemIcon} />
+                    <StatCard label="Membros" value={campaign.members.length} Icon={CrowMark} />
                     <StatCard label="Jogadores" value={players.length} Icon={GroupIcon} />
                     <StatCard label="Personagens" value={campaign.characters.length} Icon={ScrollIcon} />
                 </div>

@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../contexts/AuthContext";
 import {
-    EmblemIcon,
+    CrowMark,
     KeyIcon,
     BrokenSealIcon,
     RibbonButton,
+    FeatherIcon,
 } from "../components/icons/MedievalIcons";
 import { ThemeToggle } from "../components/ThemeToggle";
+import { KenkuAtmosphere } from "../components/KenkuAtmosphere";
 
 type AuthTab = "login" | "register";
 
@@ -88,25 +90,22 @@ export function Login() {
     const labelStyle = { fontFamily: "'Cinzel', serif" } as const;
 
     return (
-        <div
-            className="min-h-screen flex items-center justify-center px-4"
-            style={{
-                fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "var(--color-shell-deep)",
-                backgroundImage:
-                    "repeating-linear-gradient(115deg, rgba(184,147,78,0.035) 0px, rgba(184,147,78,0.035) 1px, transparent 1px, transparent 5px)",
-            }}
-        >
-            <div className="absolute right-4 top-4">
+        <div className="kenku-shell relative flex min-h-screen items-center justify-center px-4 sm:justify-end sm:px-10 lg:px-16">
+            <KenkuAtmosphere density="normal" showArt artFocus="left" />
+            <div className="absolute right-4 top-4 z-20">
                 <ThemeToggle />
             </div>
-            <div className="w-full max-w-md">
+            <div className="relative z-10 w-full max-w-md">
                 <div
-                    className="border-2 p-8"
-                    style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border-wood)" }}
+                    className="border-2 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.65)]"
+                    style={{
+                        backgroundColor:
+                            "color-mix(in srgb, var(--color-surface) 94%, transparent)",
+                        borderColor: "var(--color-border-wood)",
+                    }}
                 >
-                    <div className="text-center mb-6">
-                        <EmblemIcon className="w-10 h-10 mx-auto mb-3 text-[var(--color-border-strong)]" />
+                    <div className="mb-6 text-center">
+                        <CrowMark className="mx-auto mb-3 h-10 w-10 text-[var(--color-border-strong)]" />
 
                         <h1
                             className="text-3xl text-[var(--color-ink)]"
@@ -115,7 +114,8 @@ export function Login() {
                             SUA MESA!
                         </h1>
 
-                        <p className="text-[var(--color-ink-muted)] mt-2">
+                        <p className="mt-2 flex items-center justify-center gap-1.5 text-[var(--color-ink-muted)]">
+                            <FeatherIcon className="h-4 w-3 text-[var(--color-crow)]" />
                             {tab === "login"
                                 ? "Entre para continuar sua jornada"
                                 : "Crie sua conta de aventureiro"}

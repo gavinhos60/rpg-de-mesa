@@ -11,11 +11,12 @@ import { CreateCampaignModal } from "../components/CreateCampaignModal";
 import { useNavigate } from "react-router-dom";
 
 import {
-    EmblemIcon,
+    CrowMark,
     WaxSealIcon,
     BrokenSealIcon,
     QuillIcon,
     RibbonButton,
+    FeatherIcon,
 } from "../components/icons/MedievalIcons";
 
 export function Dashboard() {
@@ -47,29 +48,25 @@ export function Dashboard() {
     }, []);
 
     return (
-        <div
-            className="relative min-h-[calc(100vh-4rem)] text-[var(--color-ink)]"
-            style={{
-                fontFamily: "'EB Garamond', Georgia, serif",
-                backgroundColor: "var(--color-parchment)",
-                backgroundImage:
-                    "repeating-linear-gradient(115deg, rgba(107,68,35,0.03) 0px, rgba(107,68,35,0.03) 1px, transparent 1px, transparent 5px)",
-            }}
-        >
-            <div className="max-w-6xl mx-auto px-4 py-6 sm:px-6 sm:py-10">
+        <div className="kenku-parchment relative min-h-[calc(100vh-4rem)] text-[var(--color-ink)]">
+            <div className="pointer-events-none absolute right-6 top-8 opacity-[0.08]" aria-hidden>
+                <CrowMark className="h-24 w-24 text-[var(--color-crow)]" />
+            </div>
+            <div className="relative mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
 
                 {/* Cabeçalho — banner de manuscrito */}
-                <header className="mb-10 border-t-2 border-b border-[var(--color-border-strong)] pt-5 pb-6">
+                <header className="mb-10 border-b border-t-2 border-[var(--color-border-strong)] pb-6 pt-5">
                     <div className="flex items-center gap-4">
-                        <EmblemIcon className="w-10 h-10 text-[var(--color-border-strong)] shrink-0" />
+                        <CrowMark className="h-10 w-10 shrink-0 text-[var(--color-border-strong)]" />
                         <div>
                             <h1
-                                className="text-3xl text-[var(--color-ink)] leading-tight"
+                                className="text-3xl leading-tight text-[var(--color-ink)]"
                                 style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
                             >
                                 Saudações, {user?.name}
                             </h1>
-                            <p className="text-[var(--color-ink-muted)] mt-1 italic">
+                            <p className="mt-1 flex items-center gap-1.5 italic text-[var(--color-ink-muted)]">
+                                <FeatherIcon className="h-3.5 w-3 text-[var(--color-crow)]" />
                                 Bem-vindo ao seu refúgio de campanhas.
                             </p>
                         </div>
@@ -147,7 +144,7 @@ export function Dashboard() {
                                 />
 
                                 <div className="flex items-start justify-between">
-                                    <EmblemIcon className="w-8 h-8 text-[var(--color-border-strong)]" />
+                                    <CrowMark className="h-8 w-8 text-[var(--color-border-strong)]" />
                                     <WaxSealIcon className="w-9 h-9" label={campaign.id} />
                                 </div>
 

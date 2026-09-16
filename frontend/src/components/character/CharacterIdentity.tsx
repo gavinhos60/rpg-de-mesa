@@ -150,6 +150,11 @@ export function CharacterIdentity({
         onChange({
             ...data,
             backgroundId,
+            wallet: {
+                pl: data.wallet?.pl ?? 0,
+                po: background?.startingGoldGp ?? 0,
+                pp: data.wallet?.pp ?? 0,
+            },
             backgroundChoices: {
                 skills: [],
                 tools: [],

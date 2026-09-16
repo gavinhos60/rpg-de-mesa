@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { BoardState, BoardToken, CampaignCharacterLite } from "../../types/game";
+import type { BoardState, BoardToken, CampaignCharacterLite, CombatState } from "../../types/game";
 import {
   DEFAULT_GRID_SIZE,
   DEFAULT_MAP_COLS,
@@ -9,10 +9,12 @@ import {
   loadMapImageSize,
   mapSquaresOf,
   metersPerSquareOf,
+  playerIsOnFrozenScene,
   sizeCategoryToSpan,
   snapToGrid,
   snapshotPlayerMapView,
 } from "../../types/game";
+import type { PlayerMapView } from "../../types/game";
 import { ABILITIES } from "../../data/dnd/abilities";
 import { DND_SKILLS } from "../../data/dnd/skills";
 import {
@@ -25,6 +27,28 @@ import { hitPointsFromSheet } from "../../utils/characterCombat";
 import { grantCustomItem } from "../../services/character.service";
 import type { BoardTool } from "./GameBoard";
 import { RibbonButton } from "../icons/MedievalIcons";
+
+/** Nome legível do mapa: preparado, arquivo da URL ou fallback curto. */
+function mapDisplayName(
+  url: string | undefined | null,
+  preparedMaps?: Array<{ name: string; mapUrl: string }>
+): string {
+  if (!url?.trim()) return "Sem mapa";
+  const prepared = preparedMaps?.find((entry) => entry.mapUrl === url);
+  if (prepared?.name?.trim()) return prepared.name.trim();
+  if (url.startsWith("data:")) return "Mapa (imagem)";
+  try {
+    const path = new URL(url, "https://local.invalid").pathname;
+    const base = decodeURIComponent(path.split("/").filter(Boolean).pop() || "");
+    if (base) {
+      const withoutExt = base.replace(/\.[a-z0-9]+$/i, "");
+      return withoutExt || base;
+    }
+  } catch {
+    /* ignore */
+  }
+  return url.length > 36 ? `${url.slice(0, 33)}…` : url;
+}
 
 interface MasterPanelProps {
   board: BoardState;
@@ -46,10 +70,24 @@ interface MasterPanelProps {
     key: string;
     targetCharacterId?: number | null;
   }) => void;
+  combat?: CombatState | null;
+  onRequestInitiative?: (payload: {
+    targetCharacterId?: number | null;
+  }) => void;
+  onCombatAdd?: (payload: {
+    name: string;
+    initiative: number;
+    kind?: "monster" | "other";
+  }) => void;
+  onCombatStart?: () => void;
+  onCombatNext?: () => void;
+  onCombatEnd?: () => void;
   onCloseSession?: () => void;
   onCharacterUpdated?: (character: CampaignCharacterLite) => void;
   placeOnSecretLayer: boolean;
   onPlaceOnSecretLayerChange: (enabled: boolean) => void;
+  watchPlayerScene?: boolean;
+  onWatchPlayerSceneChange?: (enabled: boolean) => void;
 }
 
 function uid(prefix: string) {
@@ -90,10 +128,10 @@ type NpcSource = "monster" | "sheet" | "custom";
 type MasterTab = "mapa" | "visao" | "tokens" | "grupo";
 
 const MASTER_TABS: Array<{ id: MasterTab; label: string; hint: string }> = [
-  { id: "mapa", label: "Mapa", hint: "Imagem, grade e mapas salvos" },
+  { id: "mapa", label: "Mapa", hint: "Imagem, tamanho e mapas salvos" },
   { id: "visao", label: "Visão", hint: "Escuridão e camadas" },
   { id: "tokens", label: "Tokens", hint: "NPCs e monstros" },
-  { id: "grupo", label: "Grupo", hint: "Fichas, itens e testes" },
+  { id: "grupo", label: "Grupo", hint: "Fichas, itens, testes e turnos" },
 ];
 
 const fieldStyle = {
@@ -112,10 +150,18 @@ export function MasterPanel({
   onOpenSheet,
   onOpenMonster,
   onRequestCheck,
+  combat,
+  onRequestInitiative,
+  onCombatAdd,
+  onCombatStart,
+  onCombatNext,
+  onCombatEnd,
   onCloseSession,
   onCharacterUpdated,
   placeOnSecretLayer,
   onPlaceOnSecretLayerChange,
+  watchPlayerScene = false,
+  onWatchPlayerSceneChange,
 }: MasterPanelProps) {
   const [mapUrl, setMapUrl] = useState(board.mapUrl || "");
   const [mapWidthDraft, setMapWidthDraft] = useState(() =>
@@ -127,12 +173,6 @@ export function MasterPanel({
   const [visionDraft, setVisionDraft] = useState(
     String(board.visionRadiusSquares ?? DEFAULT_VISION_RADIUS_SQUARES)
   );
-  const [gridSizeDraft, setGridSizeDraft] = useState(
-    String(board.gridSize || DEFAULT_GRID_SIZE)
-  );
-  const [metersDraft, setMetersDraft] = useState(
-    String(metersPerSquareOf(board) || DEFAULT_METERS_PER_SQUARE)
-  );
   const [preparedMapName, setPreparedMapName] = useState("");
   const [activeTab, setActiveTab] = useState<MasterTab>("mapa");
   const [pendingScene, setPendingScene] = useState<{
@@ -143,10 +183,9 @@ export function MasterPanel({
     metersPerSquare?: number;
     widthDraft?: string;
     heightDraft?: string;
-    gridDraft?: string;
-    metersDraft?: string;
   } | null>(null);
-  const [moveTokenIds, setMoveTokenIds] = useState<string[]>([]);
+  /** Jogadores que vão para o novo mapa (câmera + todos os tokens deles). */
+  const [movePlayerIds, setMovePlayerIds] = useState<number[]>([]);
   const [npcSource, setNpcSource] = useState<NpcSource>("monster");
   const [npcName, setNpcName] = useState("Goblin");
   const [customImageUrl, setCustomImageUrl] = useState<string>("");
@@ -184,6 +223,9 @@ export function MasterPanel({
   const [checkType, setCheckType] = useState<"skill" | "ability">("skill");
   const [checkKey, setCheckKey] = useState<string>("perception");
   const [targetCharacterId, setTargetCharacterId] = useState<string>("");
+  const [initiativeTargetId, setInitiativeTargetId] = useState<string>("");
+  const [clockNpcName, setClockNpcName] = useState("");
+  const [clockNpcInit, setClockNpcInit] = useState("10");
   const [itemTargetId, setItemTargetId] = useState<string>("");
   const [itemName, setItemName] = useState("");
   const [itemDescription, setItemDescription] = useState("");
@@ -299,15 +341,26 @@ export function MasterPanel({
     metersPerSquare?: number;
     widthDraft?: string;
     heightDraft?: string;
-    gridDraft?: string;
-    metersDraft?: string;
   }) {
     if (next.mapUrl !== board.mapUrl) {
-      setMoveTokenIds([]);
+      // Padrão: levar todos os jogadores (câmera + tokens).
+      setMovePlayerIds(fogPlayers.map((player) => player.userId));
       setPendingScene(next);
       return;
     }
-    commitSceneChange(next, []);
+    // Mesmo mapa: só atualiza tamanho/grade.
+    onBoardChange({
+      ...board,
+      ...(next.mapWidth != null ? { mapWidth: next.mapWidth } : {}),
+      ...(next.mapHeight != null ? { mapHeight: next.mapHeight } : {}),
+      ...(next.gridSize != null ? { gridSize: next.gridSize } : {}),
+      ...(next.metersPerSquare != null
+        ? { metersPerSquare: next.metersPerSquare }
+        : {}),
+    });
+    setMapUrl(next.mapUrl);
+    if (next.widthDraft != null) setMapWidthDraft(next.widthDraft);
+    if (next.heightDraft != null) setMapHeightDraft(next.heightDraft);
   }
 
   function commitSceneChange(
@@ -319,99 +372,149 @@ export function MasterPanel({
       metersPerSquare?: number;
       widthDraft?: string;
       heightDraft?: string;
-      gridDraft?: string;
-      metersDraft?: string;
     },
-    tokensToMove: string[]
+    bringPlayerIds: number[]
   ) {
-    const moveSet = new Set(tokensToMove);
-    const tokens = board.tokens.map((token) => {
-      if (moveSet.has(token.id)) {
-        return { ...token, onPlayerScene: undefined };
+    const bring = new Set(bringPlayerIds.map(Number));
+    const allPlayerIds = new Set(fogPlayers.map((player) => player.userId));
+    for (const token of board.tokens) {
+      if (token.kind === "pc" && token.ownerUserId != null) {
+        allPlayerIds.add(Number(token.ownerUserId));
       }
-      // Não movidos (e os que já estavam no mapa dos jogadores) ficam no cenário antigo.
-      return { ...token, onPlayerScene: true };
-    });
+    }
 
-    const anyOnPlayerScene = tokens.some((token) => token.onPlayerScene);
-    const playerMapView = anyOnPlayerScene
-      ? board.playerMapView ?? snapshotPlayerMapView(board)
-      : null;
+    const leavingIds = [...allPlayerIds].filter((id) => !bring.has(id));
+    const leave = new Set(leavingIds);
+    const movingEveryone =
+      allPlayerIds.size === 0 || leavingIds.length === 0;
+    const movingNobody = bring.size === 0;
+    // Parcial: só os jogadores escolhidos mudam de mapa — o mestre permanece.
+    const masterStays = !movingEveryone && !movingNobody;
+
+    const leavingSnapshot = snapshotPlayerMapView(board);
+    const prevViews = { ...(board.playerViewsByUserId ?? {}) };
+
+    const destinationView: PlayerMapView = {
+      mapUrl: next.mapUrl,
+      mapWidth: next.mapWidth ?? board.mapWidth,
+      mapHeight: next.mapHeight ?? board.mapHeight,
+      gridSize: next.gridSize ?? board.gridSize,
+      metersPerSquare:
+        next.metersPerSquare ?? metersPerSquareOf(board),
+      drawings: [],
+      effects: [],
+      rulers: [],
+    };
+
+    let nextViews: Record<string, PlayerMapView> = {};
+    let nextMapUrl = board.mapUrl;
+    let nextMapWidth = board.mapWidth;
+    let nextMapHeight = board.mapHeight;
+    let nextGridSize = board.gridSize;
+    let nextMeters = metersPerSquareOf(board);
+    let clearMasterAnnotations = false;
+
+    if (masterStays) {
+      // Mestre fica; jogadores escolhidos vão para o novo mapa (sem tokens).
+      nextViews = { ...prevViews };
+      for (const userId of bring) {
+        nextViews[String(userId)] = destinationView;
+      }
+      // Quem não foi: se já tinha view, mantém; se estava com o mestre, continua no ativo.
+      for (const userId of leavingIds) {
+        const key = String(userId);
+        if (prevViews[key]) nextViews[key] = prevViews[key];
+        else delete nextViews[key];
+      }
+    } else if (movingNobody) {
+      // Só o mestre muda de mapa; todos os jogadores ficam no mapa atual.
+      nextMapUrl = next.mapUrl;
+      if (next.mapWidth != null) nextMapWidth = next.mapWidth;
+      if (next.mapHeight != null) nextMapHeight = next.mapHeight;
+      if (next.gridSize != null) nextGridSize = next.gridSize;
+      if (next.metersPerSquare != null) nextMeters = next.metersPerSquare;
+      clearMasterAnnotations = true;
+      for (const userId of leavingIds) {
+        const key = String(userId);
+        nextViews[key] =
+          prevViews[key] ??
+          (board.playerMapView && Object.keys(prevViews).length === 0
+            ? board.playerMapView
+            : leavingSnapshot);
+      }
+    } else {
+      // Todos os jogadores vão com o mestre para o novo mapa.
+      nextMapUrl = next.mapUrl;
+      if (next.mapWidth != null) nextMapWidth = next.mapWidth;
+      if (next.mapHeight != null) nextMapHeight = next.mapHeight;
+      if (next.gridSize != null) nextGridSize = next.gridSize;
+      if (next.metersPerSquare != null) nextMeters = next.metersPerSquare;
+      clearMasterAnnotations = true;
+      nextViews = {};
+    }
+
+    // Tokens dos jogadores que mudam de mapa são removidos (recolocam no novo).
+    const tokens = board.tokens
+      .filter((token) => {
+        const owner =
+          token.ownerUserId != null ? Number(token.ownerUserId) : null;
+        if (owner != null && bring.has(owner)) return false;
+        return true;
+      })
+      .map((token) => {
+        const owner =
+          token.ownerUserId != null ? Number(token.ownerUserId) : null;
+        if (owner != null && leave.has(owner) && !masterStays) {
+          // Jogadores deixados para trás quando o mestre muda de mapa.
+          return { ...token, onPlayerScene: true as const };
+        }
+        if (owner != null && nextViews[String(owner)]) {
+          return { ...token, onPlayerScene: true as const };
+        }
+        return { ...token, onPlayerScene: undefined };
+      });
+
+    const hasFrozen = Object.keys(nextViews).length > 0;
 
     onBoardChange({
       ...board,
-      mapUrl: next.mapUrl,
-      ...(next.mapWidth != null ? { mapWidth: next.mapWidth } : {}),
-      ...(next.mapHeight != null ? { mapHeight: next.mapHeight } : {}),
-      ...(next.gridSize != null ? { gridSize: next.gridSize } : {}),
-      ...(next.metersPerSquare != null
-        ? { metersPerSquare: next.metersPerSquare }
-        : {}),
+      mapUrl: nextMapUrl,
+      ...(nextMapWidth != null ? { mapWidth: nextMapWidth } : {}),
+      ...(nextMapHeight != null ? { mapHeight: nextMapHeight } : {}),
+      ...(nextGridSize != null ? { gridSize: nextGridSize } : {}),
+      metersPerSquare: nextMeters,
       tokens,
-      // Novo cenário do mestre começa limpo de anotações; as antigas ficam no playerMapView.
-      drawings: anyOnPlayerScene ? [] : board.drawings,
-      effects: anyOnPlayerScene ? [] : board.effects,
-      rulers: anyOnPlayerScene ? [] : board.rulers,
-      playerMapView,
+      drawings: clearMasterAnnotations ? [] : board.drawings,
+      effects: clearMasterAnnotations ? [] : board.effects,
+      rulers: clearMasterAnnotations ? [] : board.rulers,
+      playerMapView: hasFrozen
+        ? Object.values(nextViews)[0] ?? leavingSnapshot
+        : null,
+      playerViewsByUserId: hasFrozen ? nextViews : {},
     });
 
-    setMapUrl(next.mapUrl);
-    if (next.widthDraft != null) setMapWidthDraft(next.widthDraft);
-    if (next.heightDraft != null) setMapHeightDraft(next.heightDraft);
-    if (next.gridDraft != null) setGridSizeDraft(next.gridDraft);
-    if (next.metersDraft != null) setMetersDraft(next.metersDraft);
+    // Input do painel: só muda se o mestre de fato trocou de mapa.
+    if (!masterStays) {
+      setMapUrl(next.mapUrl);
+      if (next.widthDraft != null) setMapWidthDraft(next.widthDraft);
+      if (next.heightDraft != null) setMapHeightDraft(next.heightDraft);
+    } else {
+      setMapUrl(board.mapUrl || "");
+    }
     setPendingScene(null);
-    setMoveTokenIds([]);
+    setMovePlayerIds([]);
   }
 
   function bringPlayersToCurrentScene() {
     onBoardChange({
       ...board,
       playerMapView: null,
+      playerViewsByUserId: {},
       tokens: board.tokens.map((token) => ({
         ...token,
         onPlayerScene: undefined,
       })),
     });
-  }
-
-  function applyGrid() {
-    const gridSize = Math.max(20, Math.min(120, Number(gridSizeDraft) || DEFAULT_GRID_SIZE));
-    const metersPerSquare = Math.max(
-      0.5,
-      Math.min(10, Number(String(metersDraft).replace(",", ".")) || DEFAULT_METERS_PER_SQUARE)
-    );
-    const { cols, rows } = mapSquaresOf(board);
-    onBoardChange({
-      ...board,
-      gridSize,
-      metersPerSquare,
-      mapWidth: cols,
-      mapHeight: rows,
-      tokens: board.tokens.map((token) => {
-        const span =
-          typeof token.gridSpan === "number"
-            ? token.gridSpan
-            : token.sizeCategory === "Large"
-              ? 2
-              : token.sizeCategory === "Huge"
-                ? 3
-                : token.sizeCategory === "Gargantuan"
-                  ? 4
-                  : 1;
-        return {
-          ...token,
-          gridSpan: span,
-          size: span * gridSize,
-          x: snapToGrid(token.x, gridSize),
-          y: snapToGrid(token.y, gridSize),
-        };
-      }),
-    });
-    setGridSizeDraft(String(gridSize));
-    setMetersDraft(String(metersPerSquare));
-    setMapWidthDraft(String(cols));
-    setMapHeightDraft(String(rows));
   }
 
   function addNpcToken() {
@@ -628,15 +731,122 @@ export function MasterPanel({
       metersPerSquare: meters,
       widthDraft: String(squares.cols),
       heightDraft: String(squares.rows),
-      gridDraft: String(gridSize),
-      metersDraft: String(meters),
     });
+  }
+
+  function removePreparedMap(entry: { id: string; name: string }) {
+    const ok = window.confirm(
+      `Tem certeza que deseja remover o mapa "${entry.name}"?`
+    );
+    if (!ok) return;
+    onBoardChange({
+      ...board,
+      preparedMaps: (board.preparedMaps ?? []).filter(
+        (map) => map.id !== entry.id
+      ),
+    });
+  }
+
+  /** Mapas disponíveis no popup de troca (preparados + atual + destino pendente). */
+  const sceneMapOptions = useMemo(() => {
+    type SceneOption = {
+      key: string;
+      name: string;
+      mapUrl: string;
+      mapWidth?: number;
+      mapHeight?: number;
+      gridSize?: number;
+      metersPerSquare?: number;
+    };
+    const options: SceneOption[] = [];
+    const seen = new Set<string>();
+
+    function push(option: SceneOption) {
+      const url = option.mapUrl?.trim() ?? "";
+      const key = url || `__empty__:${option.key}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      options.push({ ...option, mapUrl: url, key });
+    }
+
+    for (const entry of board.preparedMaps ?? []) {
+      push({
+        key: entry.id,
+        name: entry.name,
+        mapUrl: entry.mapUrl,
+        mapWidth: entry.mapWidth,
+        mapHeight: entry.mapHeight,
+        gridSize: entry.gridSize,
+        metersPerSquare: entry.metersPerSquare,
+      });
+    }
+
+    if (board.mapUrl?.trim()) {
+      const squares = mapSquaresOf(board);
+      push({
+        key: "current",
+        name: mapDisplayName(board.mapUrl, board.preparedMaps),
+        mapUrl: board.mapUrl,
+        mapWidth: squares.cols,
+        mapHeight: squares.rows,
+        gridSize: board.gridSize,
+        metersPerSquare: metersPerSquareOf(board),
+      });
+    }
+
+    if (pendingScene?.mapUrl?.trim()) {
+      push({
+        key: "pending",
+        name: mapDisplayName(pendingScene.mapUrl, board.preparedMaps),
+        mapUrl: pendingScene.mapUrl,
+        mapWidth: pendingScene.mapWidth,
+        mapHeight: pendingScene.mapHeight,
+        gridSize: pendingScene.gridSize,
+        metersPerSquare: pendingScene.metersPerSquare,
+      });
+    }
+
+    return options;
+  }, [board, pendingScene]);
+
+  function teleportToSceneMap(option: {
+    mapUrl: string;
+    mapWidth?: number;
+    mapHeight?: number;
+    gridSize?: number;
+    metersPerSquare?: number;
+  }) {
+    const gridSize = option.gridSize || board.gridSize || DEFAULT_GRID_SIZE;
+    const meters =
+      option.metersPerSquare ??
+      metersPerSquareOf(board) ??
+      DEFAULT_METERS_PER_SQUARE;
+    const squares = mapSquaresOf({
+      ...board,
+      mapWidth: option.mapWidth,
+      mapHeight: option.mapHeight,
+      gridSize,
+    });
+    const next = {
+      mapUrl: option.mapUrl,
+      mapWidth: squares.cols,
+      mapHeight: squares.rows,
+      gridSize,
+      metersPerSquare: meters,
+      widthDraft: String(squares.cols),
+      heightDraft: String(squares.rows),
+    };
+    if (next.mapUrl === (board.mapUrl || "")) {
+      setPendingScene(null);
+      setMovePlayerIds([]);
+      return;
+    }
+    commitSceneChange(next, movePlayerIds);
   }
 
   const tools: Array<{ id: BoardTool; label: string }> = [
     { id: "select", label: "Mover" },
     { id: "party-move", label: "Grupo" },
-    { id: "effect", label: "Marcar" },
     { id: "ruler", label: "Régua" },
     { id: "draw", label: "Desenhar" },
   ];
@@ -732,7 +942,8 @@ export function MasterPanel({
           </button>
         </div>
 
-        {board.playerMapView ? (
+        {Object.keys(board.playerViewsByUserId ?? {}).length > 0 ||
+        board.playerMapView ? (
           <div
             className="mt-2 rounded border px-2 py-1.5"
             style={{
@@ -742,18 +953,36 @@ export function MasterPanel({
             }}
           >
             <p className="text-[11px] leading-snug text-[var(--color-ink)]">
-              Jogadores em outro cenário
+              {Object.keys(board.playerViewsByUserId ?? {}).length > 0
+                ? `${Object.keys(board.playerViewsByUserId ?? {}).length} jogador(es) em outro cenário`
+                : "Jogadores em outro cenário"}
               {board.tokens.some((t) => t.onPlayerScene)
                 ? ` · ${board.tokens.filter((t) => t.onPlayerScene).length} token(s) lá`
                 : ""}
             </p>
-            <button
-              type="button"
-              onClick={bringPlayersToCurrentScene}
-              className="mt-1 text-[11px] font-medium text-[var(--color-crimson)] underline"
-            >
-              Trazer jogadores e tokens para este mapa
-            </button>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+              <button
+                type="button"
+                onClick={() =>
+                  onWatchPlayerSceneChange?.(!watchPlayerScene)
+                }
+                className="text-[11px] font-medium text-[var(--color-crimson)] underline"
+              >
+                {watchPlayerScene
+                  ? "Voltar ao meu mapa"
+                  : "Ver mapa dos jogadores"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onWatchPlayerSceneChange?.(false);
+                  bringPlayersToCurrentScene();
+                }}
+                className="text-[11px] font-medium text-[var(--color-crimson)] underline"
+              >
+                Trazer todos para este mapa
+              </button>
+            </div>
           </div>
         ) : null}
       </header>
@@ -824,92 +1053,52 @@ export function MasterPanel({
               </RibbonButton>
             </section>
 
-            <div className="grid grid-cols-2 gap-2">
-              <section
-                className="rounded border p-2.5"
-                style={{
-                  borderColor: "var(--color-border)",
-                  backgroundColor: "var(--color-parchment-soft)",
-                }}
+            <section
+              className="rounded border p-2.5"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-parchment-soft)",
+              }}
+            >
+              <h4
+                className="mb-2 text-xs tracking-wide text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
               >
-                <h4
-                  className="mb-2 text-xs tracking-wide text-[var(--color-ink)]"
-                  style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-                >
-                  Tamanho
-                </h4>
-                <div className="mb-2 grid grid-cols-2 gap-1.5">
-                  <label className="block text-[10px] text-[var(--color-ink-soft)]">
-                    Largura
-                    <input
-                      value={mapWidthDraft}
-                      onChange={(event) => setMapWidthDraft(event.target.value)}
-                      placeholder="30"
-                      className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
-                      style={fieldStyle}
-                    />
-                  </label>
-                  <label className="block text-[10px] text-[var(--color-ink-soft)]">
-                    Altura
-                    <input
-                      value={mapHeightDraft}
-                      onChange={(event) => setMapHeightDraft(event.target.value)}
-                      placeholder="40"
-                      className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
-                      style={fieldStyle}
-                    />
-                  </label>
-                </div>
-                <p className="mb-2 text-[10px] leading-snug text-[var(--color-ink-soft)]">
-                  Em quadrados (ex.: 30×40).
-                </p>
-                <RibbonButton
-                  type="button"
-                  onClick={applyMapSize}
-                  className="w-full"
-                >
-                  Aplicar
-                </RibbonButton>
-              </section>
-
-              <section
-                className="rounded border p-2.5"
-                style={{
-                  borderColor: "var(--color-border)",
-                  backgroundColor: "var(--color-parchment-soft)",
-                }}
+                Tamanho
+              </h4>
+              <div className="mb-2 grid grid-cols-2 gap-1.5">
+                <label className="block text-[10px] text-[var(--color-ink-soft)]">
+                  Largura
+                  <input
+                    value={mapWidthDraft}
+                    onChange={(event) => setMapWidthDraft(event.target.value)}
+                    placeholder="30"
+                    className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
+                    style={fieldStyle}
+                  />
+                </label>
+                <label className="block text-[10px] text-[var(--color-ink-soft)]">
+                  Altura
+                  <input
+                    value={mapHeightDraft}
+                    onChange={(event) => setMapHeightDraft(event.target.value)}
+                    placeholder="40"
+                    className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
+                    style={fieldStyle}
+                  />
+                </label>
+              </div>
+              <p className="mb-2 text-[10px] leading-snug text-[var(--color-ink-soft)]">
+                Em quadrados (ex.: 30×40).
+              </p>
+              <RibbonButton
+                type="button"
+                onClick={applyMapSize}
+                className="w-full"
               >
-                <h4
-                  className="mb-2 text-xs tracking-wide text-[var(--color-ink)]"
-                  style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-                >
-                  Grade
-                </h4>
-                <div className="mb-2 grid grid-cols-1 gap-1.5">
-                  <label className="block text-[10px] text-[var(--color-ink-soft)]">
-                    px / quad
-                    <input
-                      value={gridSizeDraft}
-                      onChange={(event) => setGridSizeDraft(event.target.value)}
-                      className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
-                      style={fieldStyle}
-                    />
-                  </label>
-                  <label className="block text-[10px] text-[var(--color-ink-soft)]">
-                    m / quad
-                    <input
-                      value={metersDraft}
-                      onChange={(event) => setMetersDraft(event.target.value)}
-                      className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
-                      style={fieldStyle}
-                    />
-                  </label>
-                </div>
-                <RibbonButton type="button" onClick={applyGrid} className="w-full">
-                  Aplicar
-                </RibbonButton>
-              </section>
-            </div>
+                Aplicar
+              </RibbonButton>
+            </section>
 
             <section
               className="rounded border p-2.5"
@@ -948,16 +1137,29 @@ export function MasterPanel({
               ) : (
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {(board.preparedMaps ?? []).map((entry) => (
-                    <button
+                    <div
                       key={entry.id}
-                      type="button"
-                      onClick={() => usePreparedMap(entry)}
-                      className="truncate border px-2 py-2 text-left text-xs text-[var(--color-ink)]"
+                      className="flex min-w-0 items-stretch border"
                       style={fieldStyle}
-                      title={`Usar ${entry.name}`}
                     >
-                      {entry.name}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => usePreparedMap(entry)}
+                        className="min-w-0 flex-1 truncate px-2 py-2 text-left text-xs text-[var(--color-ink)]"
+                        title={`Usar ${entry.name}`}
+                      >
+                        {entry.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePreparedMap(entry)}
+                        className="shrink-0 px-2 text-sm leading-none text-[var(--color-ink-soft)] hover:text-[var(--color-crimson)]"
+                        title={`Remover ${entry.name}`}
+                        aria-label={`Remover mapa ${entry.name}`}
+                      >
+                        ×
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1385,30 +1587,52 @@ export function MasterPanel({
               >
                 Personagens
               </h4>
-              {characters.length === 0 ? (
+              <p className="mb-2 text-[10px] text-[var(--color-ink-soft)]">
+                Arraste a ficha para o mapa para criar o token (ou clique para
+                abrir).
+              </p>
+              {characters.length === 0 && masterCharacters.length === 0 ? (
                 <p className="text-[11px] italic text-[var(--color-ink-soft)]">
-                  Nenhum personagem na campanha.
+                  Nenhum personagem disponível.
                 </p>
               ) : (
                 <div className="grid grid-cols-1 gap-1.5">
-                  {characters.map((character) => (
-                    <button
+                  {[
+                    ...characters,
+                    ...masterCharacters.filter(
+                      (mine) =>
+                        !characters.some((character) => character.id === mine.id)
+                    ),
+                  ].map((character) => (
+                    <div
                       key={character.id}
-                      type="button"
-                      onClick={() => onOpenSheet(character)}
-                      className="border px-2.5 py-2 text-left"
-                      style={fieldStyle}
+                      draggable
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData(
+                          "application/x-rpg-character",
+                          String(character.id)
+                        );
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
+                      className="cursor-grab active:cursor-grabbing"
                     >
-                      <span className="block truncate text-sm text-[var(--color-ink)]">
-                        {character.name}
-                      </span>
-                      <span className="block truncate text-[10px] text-[var(--color-ink-soft)]">
-                        {character.className} · Nv. {character.level}
-                        {character.player?.name
-                          ? ` · ${character.player.name}`
-                          : ""}
-                      </span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => onOpenSheet(character)}
+                        className="w-full border px-2.5 py-2 text-left"
+                        style={fieldStyle}
+                      >
+                        <span className="block truncate text-sm text-[var(--color-ink)]">
+                          {character.name}
+                        </span>
+                        <span className="block truncate text-[10px] text-[var(--color-ink-soft)]">
+                          {character.className} · Nv. {character.level}
+                          {character.player?.name
+                            ? ` · ${character.player.name}`
+                            : " · sua ficha"}
+                        </span>
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1491,6 +1715,138 @@ export function MasterPanel({
               >
                 Pedir teste
               </RibbonButton>
+            </section>
+
+            <section
+              className="rounded border p-2.5"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-parchment-soft)",
+              }}
+            >
+              <h4
+                className="mb-1 text-xs tracking-wide text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+              >
+                Relógio de turnos
+              </h4>
+              <p className="mb-2 text-[10px] text-[var(--color-ink-soft)]">
+                Peça iniciativa aos jogadores e depois inicie o relógio. Só o
+                mestre pula a vez.
+              </p>
+              <select
+                value={initiativeTargetId}
+                onChange={(event) => setInitiativeTargetId(event.target.value)}
+                className="mb-2 w-full border px-1.5 py-1.5 text-sm"
+                style={fieldStyle}
+              >
+                <option value="">Todos os personagens</option>
+                {characters.map((character) => (
+                  <option key={character.id} value={character.id}>
+                    {character.name}
+                  </option>
+                ))}
+              </select>
+              <RibbonButton
+                type="button"
+                className="mb-2 w-full"
+                onClick={() =>
+                  onRequestInitiative?.({
+                    targetCharacterId: initiativeTargetId
+                      ? Number(initiativeTargetId)
+                      : null,
+                  })
+                }
+              >
+                Pedir iniciativa
+              </RibbonButton>
+
+              <div className="mb-2 grid grid-cols-[1fr_4.5rem] gap-1.5">
+                <input
+                  value={clockNpcName}
+                  onChange={(event) => setClockNpcName(event.target.value)}
+                  placeholder="Monstro / NPC"
+                  className="border px-1.5 py-1.5 text-sm"
+                  style={fieldStyle}
+                />
+                <input
+                  value={clockNpcInit}
+                  onChange={(event) => setClockNpcInit(event.target.value)}
+                  placeholder="Init"
+                  type="number"
+                  className="border px-1.5 py-1.5 text-sm"
+                  style={fieldStyle}
+                />
+              </div>
+              <button
+                type="button"
+                className="mb-2 w-full border px-2 py-1.5 text-xs text-[var(--color-ink)]"
+                style={fieldStyle}
+                onClick={() => {
+                  const name = clockNpcName.trim();
+                  if (!name) {
+                    window.alert("Informe o nome do combatente.");
+                    return;
+                  }
+                  onCombatAdd?.({
+                    name,
+                    initiative: Number(clockNpcInit) || 0,
+                    kind: "monster",
+                  });
+                  setClockNpcName("");
+                }}
+              >
+                Adicionar ao relógio
+              </button>
+
+              {combat && combat.order.length > 0 ? (
+                <ul className="mb-2 max-h-28 space-y-0.5 overflow-y-auto text-[11px] text-[var(--color-ink-muted)]">
+                  {combat.order.map((entry, index) => (
+                    <li key={entry.id} className="flex justify-between gap-2">
+                      <span
+                        className={
+                          combat.active && index === combat.currentIndex
+                            ? "font-semibold text-[var(--color-crimson)]"
+                            : ""
+                        }
+                      >
+                        {entry.name}
+                      </span>
+                      <span>
+                        {entry.initiative}
+                        {entry.natural === 20
+                          ? " · 20!"
+                          : entry.natural === 1
+                            ? " · 1"
+                            : ""}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              <div className="flex flex-col gap-1.5">
+                {!combat?.active && (combat?.order.length ?? 0) > 0 ? (
+                  <RibbonButton type="button" className="w-full" onClick={onCombatStart}>
+                    Iniciar relógio
+                  </RibbonButton>
+                ) : null}
+                {combat?.active ? (
+                  <RibbonButton type="button" className="w-full" onClick={onCombatNext}>
+                    Próximo turno
+                  </RibbonButton>
+                ) : null}
+                {combat ? (
+                  <button
+                    type="button"
+                    className="w-full border px-2 py-1.5 text-xs text-[var(--color-ink-muted)] hover:text-[var(--color-danger)]"
+                    style={fieldStyle}
+                    onClick={onCombatEnd}
+                  >
+                    Encerrar combate
+                  </button>
+                ) : null}
+              </div>
             </section>
 
             <section
@@ -1608,12 +1964,12 @@ export function MasterPanel({
           onPointerDown={(event) => {
             if (event.target === event.currentTarget) {
               setPendingScene(null);
-              setMoveTokenIds([]);
+              setMovePlayerIds([]);
             }
           }}
         >
           <div
-            className="flex max-h-[min(90vh,40rem)] w-full max-w-md flex-col border-2 shadow-xl"
+            className="flex max-h-[min(90vh,44rem)] w-full max-w-2xl flex-col border-2 shadow-xl"
             style={{
               backgroundColor: "var(--color-surface)",
               borderColor: "var(--color-crimson)",
@@ -1628,18 +1984,90 @@ export function MasterPanel({
                 Troca de cenário
               </h4>
               <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-                Quem vai para o novo mapa? Os demais continuam no mapa atual dos
-                jogadores.
+                Escolha os jogadores e clique no mapa de destino para teleportar.
+                Tokens dos que mudam são removidos.
               </p>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <p className="mb-2 text-[11px] text-[var(--color-ink-muted)]">
+                Mapas — clique para ir
+              </p>
+              {sceneMapOptions.length === 0 ? (
+                <p className="mb-4 text-[11px] italic text-[var(--color-ink-soft)]">
+                  Nenhum mapa disponível. Salve mapas preparados ou aplique uma
+                  imagem.
+                </p>
+              ) : (
+                <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {sceneMapOptions.map((option) => {
+                    const isCurrent =
+                      (option.mapUrl || "") === (board.mapUrl || "");
+                    const isTarget =
+                      Boolean(pendingScene) &&
+                      (option.mapUrl || "") === (pendingScene?.mapUrl || "");
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        className="overflow-hidden border text-left transition hover:opacity-95"
+                        style={{
+                          borderColor: isTarget
+                            ? "var(--color-crimson)"
+                            : isCurrent
+                              ? "var(--color-border)"
+                              : "var(--color-border-subtle)",
+                          boxShadow: isTarget
+                            ? "0 0 0 1px var(--color-crimson)"
+                            : undefined,
+                          backgroundColor: "var(--color-panel)",
+                        }}
+                        title={
+                          isCurrent
+                            ? "Mapa atual"
+                            : `Ir para ${option.name}`
+                        }
+                        onClick={() => teleportToSceneMap(option)}
+                      >
+                        <div
+                          className="overflow-hidden"
+                          style={{ aspectRatio: "16 / 10" }}
+                        >
+                          {option.mapUrl ? (
+                            <img
+                              src={option.mapUrl}
+                              alt={option.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full items-center justify-center px-2 text-center text-[10px] text-[var(--color-ink-soft)]">
+                              Sem imagem
+                            </div>
+                          )}
+                        </div>
+                        <div className="border-t px-2 py-1.5" style={{ borderColor: "var(--color-border-subtle)" }}>
+                          <p className="truncate text-[11px] text-[var(--color-ink)]">
+                            {option.name}
+                          </p>
+                          <p className="text-[10px] text-[var(--color-ink-soft)]">
+                            {isCurrent ? "Atual" : "Clique para ir"}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p className="mb-2 text-[11px] text-[var(--color-ink-muted)]">
+                Jogadores que mudam de mapa:
+              </p>
               <div className="mb-2 flex flex-wrap gap-1.5">
                 <button
                   type="button"
                   className="border px-2 py-1 text-[11px] text-[var(--color-ink-muted)]"
                   style={fieldStyle}
-                  onClick={() => setMoveTokenIds([])}
+                  onClick={() => setMovePlayerIds([])}
                 >
                   Ninguém
                 </button>
@@ -1648,39 +2076,34 @@ export function MasterPanel({
                   className="border px-2 py-1 text-[11px] text-[var(--color-ink-muted)]"
                   style={fieldStyle}
                   onClick={() =>
-                    setMoveTokenIds(board.tokens.map((token) => token.id))
+                    setMovePlayerIds(fogPlayers.map((player) => player.userId))
                   }
                 >
                   Todos
                 </button>
-                <button
-                  type="button"
-                  className="border px-2 py-1 text-[11px] text-[var(--color-ink-muted)]"
-                  style={fieldStyle}
-                  onClick={() =>
-                    setMoveTokenIds(
-                      board.tokens
-                        .filter((token) => token.kind === "pc")
-                        .map((token) => token.id)
-                    )
-                  }
-                >
-                  Só personagens
-                </button>
               </div>
 
-              {board.tokens.length === 0 ? (
+              {fogPlayers.length === 0 ? (
                 <p className="text-[11px] italic text-[var(--color-ink-soft)]">
-                  Nenhum token na mesa — o novo mapa ficará vazio.
+                  Nenhum jogador na campanha — só o mestre muda de mapa.
                 </p>
               ) : (
                 <div className="space-y-1">
-                  {board.tokens.map((token) => {
-                    const checked = moveTokenIds.includes(token.id);
+                  {fogPlayers.map((player) => {
+                    const checked = movePlayerIds.includes(player.userId);
+                    const playerTokens = board.tokens.filter(
+                      (token) =>
+                        Number(token.ownerUserId) === Number(player.userId)
+                    );
+                    const frozen = playerIsOnFrozenScene(board, player.userId);
+                    const mapUrl = frozen
+                      ? board.playerViewsByUserId?.[String(player.userId)]
+                          ?.mapUrl ?? board.playerMapView?.mapUrl ?? board.mapUrl
+                      : board.mapUrl;
                     return (
                       <label
-                        key={token.id}
-                        className="flex cursor-pointer items-center gap-2 border px-2 py-1.5 text-sm"
+                        key={player.userId}
+                        className="flex cursor-pointer items-start gap-2 border px-2 py-1.5 text-sm"
                         style={{
                           ...fieldStyle,
                           borderColor: checked
@@ -1690,24 +2113,29 @@ export function MasterPanel({
                       >
                         <input
                           type="checkbox"
+                          className="mt-1"
                           checked={checked}
                           onChange={() => {
-                            setMoveTokenIds((prev) =>
+                            setMovePlayerIds((prev) =>
                               checked
-                                ? prev.filter((id) => id !== token.id)
-                                : [...prev, token.id]
+                                ? prev.filter((id) => id !== player.userId)
+                                : [...prev, player.userId]
                             );
                           }}
                         />
-                        <span
-                          className="h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: token.color }}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-[var(--color-ink)]">
-                          {token.name}
-                          <span className="text-[10px] text-[var(--color-ink-soft)]">
-                            {token.kind === "pc" ? " · PC" : " · NPC"}
-                            {token.onPlayerScene ? " · no mapa dos jogadores" : ""}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[var(--color-ink)]">
+                            {player.name}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] leading-snug text-[var(--color-ink-muted)]">
+                            {playerTokens.length} token(s)
+                            {playerTokens.length > 0
+                              ? `: ${playerTokens.map((t) => t.name).join(", ")}`
+                              : ""}
+                            <br />
+                            Mapa atual:{" "}
+                            {mapDisplayName(mapUrl, board.preparedMaps)}
+                            {frozen ? " · congelado" : ""}
                           </span>
                         </span>
                       </label>
@@ -1715,6 +2143,12 @@ export function MasterPanel({
                   })}
                 </div>
               )}
+
+              {board.tokens.some((token) => token.kind === "npc") ? (
+                <p className="mt-3 text-[11px] leading-snug text-[var(--color-ink-soft)]">
+                  NPCs acompanham o mestre no novo mapa.
+                </p>
+              ) : null}
             </div>
 
             <div
@@ -1722,25 +2156,18 @@ export function MasterPanel({
               style={{ borderColor: "var(--color-border)" }}
             >
               <p className="text-[11px] leading-snug text-[var(--color-ink-soft)]">
-                {moveTokenIds.length === 0
-                  ? "Nenhum token será movido. Jogadores ficam no mapa antigo com todos os tokens."
-                  : moveTokenIds.length === board.tokens.length
-                    ? "Todos os tokens vão para o novo mapa. Jogadores acompanham o cenário."
-                    : `${moveTokenIds.length} token(s) no novo mapa; o restante fica no mapa dos jogadores.`}
+                {movePlayerIds.length === 0
+                  ? "Só o mestre vai para o mapa clicado. Jogadores ficam onde estão (com tokens)."
+                  : movePlayerIds.length === fogPlayers.length
+                    ? "Mestre e todos os jogadores vão ao mapa clicado. Tokens dos jogadores são removidos."
+                    : "Só o(s) jogador(es) marcado(s) vão ao mapa clicado. O mestre permanece se a ida for parcial."}
               </p>
-              <RibbonButton
-                type="button"
-                className="w-full"
-                onClick={() => commitSceneChange(pendingScene, moveTokenIds)}
-              >
-                Confirmar troca
-              </RibbonButton>
               <button
                 type="button"
                 className="w-full text-xs text-[var(--color-ink-soft)] underline"
                 onClick={() => {
                   setPendingScene(null);
-                  setMoveTokenIds([]);
+                  setMovePlayerIds([]);
                 }}
               >
                 Cancelar

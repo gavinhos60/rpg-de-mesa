@@ -1,5 +1,5 @@
 import { useAuth } from "../contexts/AuthContext";
-import { WaxSealIcon } from "./icons/MedievalIcons";
+import { CrowIcon, WaxSealIcon } from "./icons/MedievalIcons";
 import { ThemeToggle } from "./ThemeToggle";
 
 interface HeaderProps {
@@ -58,6 +58,11 @@ export function Header({
             </div>
 
             <div className="flex min-w-0 items-center gap-2 sm:gap-4">
+                <CrowIcon
+                    className={`hidden shrink-0 text-[var(--color-crow-soft)] opacity-70 sm:block ${
+                        compact ? "h-5 w-5" : "h-6 w-6"
+                    }`}
+                />
                 <div className="min-w-0 text-right">
                     <p
                         className="max-w-[7rem] truncate text-sm text-[var(--color-ink-inverse)] sm:max-w-[14rem]"

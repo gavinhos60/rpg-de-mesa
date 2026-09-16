@@ -1,7 +1,8 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
-    EmblemIcon,
+    CrowMark,
+    FeatherIcon,
     CastleIcon,
     CompassIcon,
     ScrollIcon,
@@ -16,6 +17,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose, drawerOnly = false }: SidebarProps) {
+    const navigate = useNavigate();
     const { logout } = useAuth();
 
     const links = [
@@ -40,15 +42,21 @@ export function Sidebar({ open, onClose, drawerOnly = false }: SidebarProps) {
                             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border"
                             style={{ borderColor: "var(--color-border)" }}
                         >
-                            <EmblemIcon className="h-6 w-6 text-[var(--color-border)]" />
+                            <CrowMark className="h-6 w-6 text-[var(--color-crow-soft)]" />
                         </div>
 
-                        <h1
-                            className="truncate text-xl text-[var(--color-ink-inverse)]"
-                            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-                        >
-                            SUA MESA!
-                        </h1>
+                        <div className="min-w-0">
+                            <h1
+                                className="truncate text-xl text-[var(--color-ink-inverse)]"
+                                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                            >
+                                SUA MESA!
+                            </h1>
+                            <p className="mt-0.5 flex items-center gap-1 text-[10px] tracking-wide text-[var(--color-crow-soft)]">
+                                <FeatherIcon className="h-3 w-2.5" />
+                                ninho kenku
+                            </p>
+                        </div>
                     </div>
 
                     <div
@@ -109,6 +117,7 @@ export function Sidebar({ open, onClose, drawerOnly = false }: SidebarProps) {
                     onClick={() => {
                         onClose();
                         logout();
+                        navigate("/login", { replace: true });
                     }}
                     className="flex items-center gap-3 text-[var(--color-ink-soft)] transition-colors hover:text-[var(--color-danger)]"
                     style={{ fontFamily: "'Cinzel', serif" }}

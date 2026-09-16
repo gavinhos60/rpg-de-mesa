@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { Ability, CharacterFormData, Skill, Spell } from "../../types/character";
+import type { Ability, CharacterFormData, CharacterWallet, Skill, Spell } from "../../types/character";
 import type { CampaignCharacterLite } from "../../types/game";
 import { CharacterSheetReview } from "../character/CharacterSheetReview";
 import { DND_BACKGROUNDS } from "../../data/dnd/backgrounds";
@@ -12,6 +12,7 @@ import {
 import { getFinalAbilities } from "../../data/dnd/characterStats";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { AdvantageConfirm } from "./AdvantageConfirm";
+import type { InventoryItemAction } from "../../services/character.service";
 
 interface PlayableSheetDrawerProps {
   character: CampaignCharacterLite;
@@ -21,6 +22,13 @@ interface PlayableSheetDrawerProps {
   onUseFeature: (name: string, description: string) => void;
   onCastSpell: (spell: Spell, options?: { advantage?: boolean }) => void;
   readOnly?: boolean;
+  inventoryRecipients?: Array<{ id: number; name: string }>;
+  inventoryBusy?: boolean;
+  onUpdateWallet?: (wallet: CharacterWallet) => Promise<void>;
+  onDiscardItem?: (payload: InventoryItemAction) => Promise<void>;
+  onTransferItem?: (
+    payload: InventoryItemAction & { targetCharacterId: number }
+  ) => Promise<void>;
 }
 
 function formatMod(value: number) {
@@ -40,6 +48,11 @@ export function PlayableSheetDrawer({
   onUseFeature,
   onCastSpell,
   readOnly = false,
+  inventoryRecipients = [],
+  inventoryBusy = false,
+  onUpdateWallet,
+  onDiscardItem,
+  onTransferItem,
 }: PlayableSheetDrawerProps) {
   const sheet = asFormData(character);
   const [pendingRoll, setPendingRoll] = useState<{
@@ -188,6 +201,17 @@ export function PlayableSheetDrawer({
             onRollSkill={onRollSkill}
             onUseFeature={onUseFeature}
             onCastSpell={onCastSpell}
+            inventoryManage={
+              !readOnly && onUpdateWallet && onDiscardItem && onTransferItem
+                ? {
+                    recipients: inventoryRecipients,
+                    busy: inventoryBusy,
+                    onUpdateWallet,
+                    onDiscardItem,
+                    onTransferItem,
+                  }
+                : undefined
+            }
           />
         </div>
       </div>

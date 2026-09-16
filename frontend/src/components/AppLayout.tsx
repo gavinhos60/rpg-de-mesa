@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { KenkuAtmosphere } from "./KenkuAtmosphere";
 
 export function AppLayout() {
     const location = useLocation();
@@ -23,10 +24,11 @@ export function AppLayout() {
     }, [navOpen]);
 
     return (
-        <div
-            className="min-h-screen overflow-x-hidden"
-            style={{ backgroundColor: "var(--color-shell)" }}
-        >
+        <div className="kenku-shell relative min-h-screen overflow-x-hidden">
+            {!isPlayRoom ? (
+                <KenkuAtmosphere density="light" showArt={false} />
+            ) : null}
+
             {navOpen ? (
                 <button
                     type="button"
@@ -43,7 +45,7 @@ export function AppLayout() {
                 drawerOnly={isPlayRoom}
             />
 
-            <div className={`min-w-0 ${isPlayRoom ? "" : "lg:ml-64"}`}>
+            <div className={`relative z-10 min-w-0 ${isPlayRoom ? "" : "lg:ml-64"}`}>
                 <Header
                     onMenuClick={() => setNavOpen(true)}
                     forceMenuButton={isPlayRoom}
