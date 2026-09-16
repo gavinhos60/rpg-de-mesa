@@ -13,6 +13,7 @@ import papirosRoutes from "./routes/papiros.routes";
 import mercadoRoutes from "./routes/mercado.routes";
 import notesRoutes from "./routes/notes.routes";
 
+import { prisma } from "./lib/prisma";
 import { authMiddleware } from "./middleware/auth.middleware";
 import { attachGameSocket } from "./socket/game.gateway";
 
