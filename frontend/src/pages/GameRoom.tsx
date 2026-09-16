@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { Socket } from "socket.io-client";
 
@@ -71,6 +71,7 @@ import { CheckPrompt } from "../components/game/CheckPrompt";
 import { InitiativePrompt } from "../components/game/InitiativePrompt";
 import { TurnClock } from "../components/game/TurnClock";
 import { DiceRollOverlay, diceFromChatRoll } from "../components/game/DiceRollOverlay";
+import { ActionLoadingOverlay } from "../components/game/ActionLoadingOverlay";
 import { PapyrusOverlay } from "../components/game/PapyrusOverlay";
 import { ShopPlayerModal } from "../components/game/ShopPlayerModal";
 import { listPapiros, publishPapyrus } from "../services/papiros.service";
@@ -114,6 +115,7 @@ export function GameRoom() {
     dice?: Array<{ sides: number; value: number }>;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [openCharacter, setOpenCharacter] =
     useState<CampaignCharacterLite | null>(null);
@@ -248,14 +250,14 @@ export function GameRoom() {
             y: number;
             commit?: boolean;
           }) => {
+            // Ignora posição intermediária do arraste — só aplica o teleporte final.
+            if (payload.commit === false) return;
             if (draggingTokenIdsRef.current.has(payload.tokenId)) return;
             const settling = settlingTokensRef.current.get(payload.tokenId);
             if (settling && settling.until > performance.now()) {
-              // Só aceita o commit final (ou posição igual); ignora live atrasado.
-              if (payload.commit === false) return;
               if (
-                payload.commit !== true &&
-                (payload.x !== settling.x || payload.y !== settling.y)
+                payload.x !== settling.x ||
+                payload.y !== settling.y
               ) {
                 return;
               }
@@ -483,14 +485,9 @@ export function GameRoom() {
       });
     }
     if (!socket || !sessionId) return;
-    if (!commit) {
-      // throttle leve: só envia a cada ~80ms no movimento livre
-      const now = performance.now();
-      const last = (handleTokenMove as { _t?: number })._t ?? 0;
-      if (now - last < 80) return;
-      (handleTokenMove as { _t?: number })._t = now;
-    }
-    await emitTokenMove(socket, sessionId, tokenId, nextX, nextY, { commit });
+    // Só envia no drop — evita arraste “ao vivo” para os outros clientes.
+    if (!commit) return;
+    await emitTokenMove(socket, sessionId, tokenId, nextX, nextY, { commit: true });
   }
 
   async function handleTokensMove(
@@ -522,19 +519,26 @@ export function GameRoom() {
       }
     }
     if (!socket || !sessionId) return;
-    if (!commit) {
-      const now = performance.now();
-      const last = (handleTokensMove as { _t?: number })._t ?? 0;
-      if (now - last < 80) return;
-      (handleTokensMove as { _t?: number })._t = now;
-    }
+    if (!commit) return;
     await Promise.all(
       next.map((move) =>
         emitTokenMove(socket, sessionId, move.tokenId, move.x, move.y, {
-          commit,
+          commit: true,
         })
       )
     );
+  }
+
+  async function withActionBusy<T>(
+    label: string,
+    work: () => Promise<T>
+  ): Promise<T> {
+    setActionBusy(label);
+    try {
+      return await work();
+    } finally {
+      setActionBusy(null);
+    }
   }
 
   async function openCharacterFromToken(token: BoardToken) {
@@ -557,25 +561,27 @@ export function GameRoom() {
   }
 
   async function openCharacterSheet(characterId: number, readOnly: boolean) {
-    const full = await getCharacterById(characterId);
-    const lite: CampaignCharacterLite = {
-      id: full.id,
-      name: full.name,
-      className: full.className,
-      race: full.race,
-      level: full.level,
-      avatar: full.avatar,
-      sheet: full.sheet,
-      playerId: full.playerId,
-      player: full.player,
-    };
-    setCharacters((previous) =>
-      previous.map((character) =>
-        character.id === lite.id ? { ...character, ...lite } : character
-      )
-    );
-    setOpenCharacter(lite);
-    setSheetReadOnly(readOnly);
+    await withActionBusy("Abrindo ficha…", async () => {
+      const full = await getCharacterById(characterId);
+      const lite: CampaignCharacterLite = {
+        id: full.id,
+        name: full.name,
+        className: full.className,
+        race: full.race,
+        level: full.level,
+        avatar: full.avatar,
+        sheet: full.sheet,
+        playerId: full.playerId,
+        player: full.player,
+      };
+      setCharacters((previous) =>
+        previous.map((character) =>
+          character.id === lite.id ? { ...character, ...lite } : character
+        )
+      );
+      setOpenCharacter(lite);
+      setSheetReadOnly(readOnly);
+    });
   }
 
   function applyCharacterUpdate(updated: {
@@ -612,38 +618,44 @@ export function GameRoom() {
 
   async function handleUpdateWallet(wallet: CharacterWallet) {
     if (!openCharacter) return;
-    setInventoryBusy(true);
-    try {
-      const updated = await updateCharacterWallet(openCharacter.id, wallet);
-      applyCharacterUpdate(updated);
-    } finally {
-      setInventoryBusy(false);
-    }
+    await withActionBusy("Salvando moedas…", async () => {
+      setInventoryBusy(true);
+      try {
+        const updated = await updateCharacterWallet(openCharacter.id, wallet);
+        applyCharacterUpdate(updated);
+      } finally {
+        setInventoryBusy(false);
+      }
+    });
   }
 
   async function handleDiscardItem(payload: InventoryItemAction) {
     if (!openCharacter) return;
-    setInventoryBusy(true);
-    try {
-      const updated = await discardCharacterItem(openCharacter.id, payload);
-      applyCharacterUpdate(updated);
-    } finally {
-      setInventoryBusy(false);
-    }
+    await withActionBusy("Descartando item…", async () => {
+      setInventoryBusy(true);
+      try {
+        const updated = await discardCharacterItem(openCharacter.id, payload);
+        applyCharacterUpdate(updated);
+      } finally {
+        setInventoryBusy(false);
+      }
+    });
   }
 
   async function handleTransferItem(
     payload: InventoryItemAction & { targetCharacterId: number }
   ) {
     if (!openCharacter) return;
-    setInventoryBusy(true);
-    try {
-      const result = await transferCharacterItem(openCharacter.id, payload);
-      applyCharacterUpdate(result.from);
-      applyCharacterUpdate(result.to);
-    } finally {
-      setInventoryBusy(false);
-    }
+    await withActionBusy("Transferindo item…", async () => {
+      setInventoryBusy(true);
+      try {
+        const result = await transferCharacterItem(openCharacter.id, payload);
+        applyCharacterUpdate(result.from);
+        applyCharacterUpdate(result.to);
+      } finally {
+        setInventoryBusy(false);
+      }
+    });
   }
 
   async function handleRuler(
@@ -678,7 +690,11 @@ export function GameRoom() {
 
   async function handleSendChat(text: string) {
     if (!socket || !sessionId || !user) return;
-    const result = await emitChatMessage(socket, sessionId, text, user.name);
+    const looksLikeRoll = /^\s*\/(r|roll)\b/i.test(text);
+    const send = () => emitChatMessage(socket, sessionId, text, user.name);
+    const result = looksLikeRoll
+      ? await withActionBusy("Rolando…", send)
+      : await send();
     if (!result.ok) {
       alert(result.error || "Falha ao enviar");
     }
@@ -690,30 +706,34 @@ export function GameRoom() {
     options?: { advantage?: boolean }
   ) {
     if (!socket || !sessionId || !user || !openCharacter) return;
-    const result = await emitSheetRoll(socket, sessionId, {
-      characterId: openCharacter.id,
-      type,
-      key,
-      userName: user.name,
-      advantage: Boolean(options?.advantage),
+    await withActionBusy("Rolando…", async () => {
+      const result = await emitSheetRoll(socket, sessionId, {
+        characterId: openCharacter.id,
+        type,
+        key,
+        userName: user.name,
+        advantage: Boolean(options?.advantage),
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha na rolagem");
+      }
     });
-    if (!result.ok) {
-      alert(result.error || "Falha na rolagem");
-    }
   }
 
   async function handleUseFeature(name: string, description: string) {
     if (!socket || !sessionId || !user || !openCharacter) return;
-    const action = buildFeatureAction(name, description);
-    const result = await emitCharacterAction(socket, sessionId, {
-      characterId: openCharacter.id,
-      characterName: openCharacter.name,
-      ...action,
-      userName: user.name,
+    await withActionBusy("Enviando ação…", async () => {
+      const action = buildFeatureAction(name, description);
+      const result = await emitCharacterAction(socket, sessionId, {
+        characterId: openCharacter.id,
+        characterName: openCharacter.name,
+        ...action,
+        userName: user.name,
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha ao enviar habilidade");
+      }
     });
-    if (!result.ok) {
-      alert(result.error || "Falha ao enviar habilidade");
-    }
   }
 
   async function handleCastSpell(
@@ -729,17 +749,19 @@ export function GameRoom() {
       alert("Ficha incompleta para conjurar magia.");
       return;
     }
-    const action = buildSpellAction(sheet, spell);
-    const result = await emitCharacterAction(socket, sessionId, {
-      characterId: openCharacter.id,
-      characterName: openCharacter.name,
-      ...action,
-      userName: user.name,
-      advantage: Boolean(options?.advantage),
+    await withActionBusy("Conjurando…", async () => {
+      const action = buildSpellAction(sheet, spell);
+      const result = await emitCharacterAction(socket, sessionId, {
+        characterId: openCharacter.id,
+        characterName: openCharacter.name,
+        ...action,
+        userName: user.name,
+        advantage: Boolean(options?.advantage),
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha ao conjurar magia");
+      }
     });
-    if (!result.ok) {
-      alert(result.error || "Falha ao conjurar magia");
-    }
   }
 
   async function handleRequestCheck(payload: {
@@ -782,40 +804,42 @@ export function GameRoom() {
   async function handleRollTokenInitiative(tokens: BoardToken[]) {
     if (!socket || !sessionId || !user || !isMaster) return;
 
-    const characters = tokens.filter((token) => token.characterId);
-    const npcOnly = tokens.filter((token) => !token.characterId);
+    await withActionBusy("Rolando iniciativa…", async () => {
+      const characters = tokens.filter((token) => token.characterId);
+      const npcOnly = tokens.filter((token) => !token.characterId);
 
-    for (const token of characters) {
-      if (!token.characterId) continue;
-      const result = await emitInitiativeRoll(socket, sessionId, {
-        characterId: token.characterId,
-        userName: user.name,
-      });
-      if (!result.ok) {
-        alert(result.error || `Falha na iniciativa de ${token.name}`);
-        return;
+      for (const token of characters) {
+        if (!token.characterId) continue;
+        const result = await emitInitiativeRoll(socket, sessionId, {
+          characterId: token.characterId,
+          userName: user.name,
+        });
+        if (!result.ok) {
+          alert(result.error || `Falha na iniciativa de ${token.name}`);
+          return;
+        }
       }
-    }
 
-    if (npcOnly.length > 0) {
-      const entries = npcOnly.map((token) => {
-        const monster = token.monsterId
-          ? getMonsterById(token.monsterId)
-          : undefined;
-        return {
-          tokenId: token.id,
-          name: token.name || monster?.name || "NPC",
-          dexterity: monster?.abilities.dexterity ?? 10,
-        };
-      });
-      const result = await emitCombatRollNpcs(socket, sessionId, {
-        entries,
-        userName: user.name,
-      });
-      if (!result.ok) {
-        alert(result.error || "Falha ao rolar iniciativa dos NPCs");
+      if (npcOnly.length > 0) {
+        const entries = npcOnly.map((token) => {
+          const monster = token.monsterId
+            ? getMonsterById(token.monsterId)
+            : undefined;
+          return {
+            tokenId: token.id,
+            name: token.name || monster?.name || "NPC",
+            dexterity: monster?.abilities.dexterity ?? 10,
+          };
+        });
+        const result = await emitCombatRollNpcs(socket, sessionId, {
+          entries,
+          userName: user.name,
+        });
+        if (!result.ok) {
+          alert(result.error || "Falha ao rolar iniciativa dos NPCs");
+        }
       }
-    }
+    });
   }
 
   async function handleCombatStart() {
@@ -916,12 +940,14 @@ export function GameRoom() {
     }
 
     if (!socket || !sessionId || !user) return;
-    await emitInitiativeRoll(socket, sessionId, {
-      characterId: target.id,
-      userName: user.name,
-      advantage: Boolean(options?.advantage),
+    await withActionBusy("Rolando iniciativa…", async () => {
+      await emitInitiativeRoll(socket, sessionId, {
+        characterId: target.id,
+        userName: user.name,
+        advantage: Boolean(options?.advantage),
+      });
+      setPendingInitiative(null);
     });
-    setPendingInitiative(null);
   }
 
   async function handleMonsterAction(payload: {
@@ -934,14 +960,16 @@ export function GameRoom() {
     abilityLabel?: string | null;
   }) {
     if (!socket || !sessionId || !user || !isMaster) return;
-    const result = await emitMonsterAction(socket, sessionId, {
-      ...payload,
-      tokenId: monsterTokenId,
-      userName: user.name,
+    await withActionBusy("Rolando ação…", async () => {
+      const result = await emitMonsterAction(socket, sessionId, {
+        ...payload,
+        tokenId: monsterTokenId,
+        userName: user.name,
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha ao enviar ação da criatura");
+      }
     });
-    if (!result.ok) {
-      alert(result.error || "Falha ao enviar ação da criatura");
-    }
   }
 
   async function handlePendingCheckRoll(options?: { advantage?: boolean }) {
@@ -963,14 +991,16 @@ export function GameRoom() {
     }
 
     if (!socket || !sessionId || !user) return;
-    await emitSheetRoll(socket, sessionId, {
-      characterId: target.id,
-      type: pendingCheck.type,
-      key: pendingCheck.key,
-      userName: user.name,
-      advantage: Boolean(options?.advantage),
+    await withActionBusy("Rolando teste…", async () => {
+      await emitSheetRoll(socket, sessionId, {
+        characterId: target.id,
+        type: pendingCheck.type,
+        key: pendingCheck.key,
+        userName: user.name,
+        advantage: Boolean(options?.advantage),
+      });
+      setPendingCheck(null);
     });
-    setPendingCheck(null);
   }
 
   async function handleCloseSession() {
@@ -1314,6 +1344,8 @@ export function GameRoom() {
         dice={diceFx?.dice}
         onDone={() => setDiceFx(null)}
       />
+
+      {actionBusy ? <ActionLoadingOverlay label={actionBusy} /> : null}
 
       {openCharacter && (
         <PlayableSheetDrawer

@@ -492,20 +492,22 @@ export function attachGameSocket(httpServer: HttpServer) {
             return;
           }
 
+          const commit = payload.commit !== false;
+          if (!commit) {
+            // Arraste ao vivo não é mais retransmitido — só o drop.
+            ack?.({ ok: true });
+            return;
+          }
+
           token.x = payload.x;
           token.y = payload.y;
-
-          const commit = payload.commit !== false;
-          // Só persiste no drop final — evita gravar cada frame do arraste.
-          if (commit) {
-            schedulePersist(Number(payload.sessionId), state);
-          }
+          schedulePersist(Number(payload.sessionId), state);
           // Não ecoa para o remetente (evita rollback no cliente que arrasta).
           socket.to(room).emit("token:moved", {
             tokenId: token.id,
             x: token.x,
             y: token.y,
-            commit,
+            commit: true,
           });
           ack?.({ ok: true });
         } catch (error) {

@@ -1742,7 +1742,6 @@ export function GameBoard({
             const live = liveDragRef.current[token.id];
             const renderX = dragging && live ? live.x : token.x;
             const renderY = dragging && live ? live.y : token.y;
-            const span = size / gridSize;
 
             const inset = Math.max(1, Math.round(gridSize * 0.04));
             const body = Math.max(8, size - inset * 2);
@@ -2084,13 +2083,13 @@ export function GameBoard({
                     if (token.monsterId) onOpenMonsterSheet?.(token);
                     else if (token.characterId) onOpenCharacterSheet?.(token);
                   }}
-                  className="absolute flex items-center justify-center overflow-hidden font-semibold text-[var(--color-ink-inverse)]"
+                  className="absolute flex items-center justify-center overflow-hidden rounded-full font-semibold text-[var(--color-ink-inverse)]"
                   style={{
                     left: inset,
                     top: inset,
                     width: body,
                     height: body,
-                    borderRadius: span <= 2 ? "9999px" : "10%",
+                    borderRadius: "9999px",
                     backgroundColor: token.color,
                     borderStyle: "solid",
                     borderWidth: 1,
