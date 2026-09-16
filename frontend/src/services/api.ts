@@ -1,8 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-  // API local — altere se estiver usando um túnel (Cloudflare etc.)
-  baseURL: "http://localhost:3000",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000",
 });
 
 api.interceptors.request.use((config) => {
