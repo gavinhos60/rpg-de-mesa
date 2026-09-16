@@ -407,7 +407,7 @@ export function attachGameSocket(httpServer: HttpServer) {
           schedulePersist(Number(payload.sessionId), state);
           io.to(room).emit("board:state", state.board);
           if (synced.changed) {
-            emitCombatState(Number(payload.sessionId), room, state.combat);
+            emitCombatState(Number(payload.sessionId), room, state.combat ?? null);
           }
           ack?.({ ok: true });
         } catch (error) {

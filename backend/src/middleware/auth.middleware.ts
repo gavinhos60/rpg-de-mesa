@@ -7,6 +7,8 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET não configurado");
 }
 
+const AUTH_JWT_SECRET: string = JWT_SECRET;
+
 interface JwtPayload {
   userId: number;
   email: string;
@@ -38,7 +40,7 @@ export function authMiddleware(
       return;
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const decoded = jwt.verify(token, AUTH_JWT_SECRET) as JwtPayload;
 
     req.user = decoded;
 

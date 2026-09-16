@@ -5,11 +5,6 @@ import {
   getAuthenticatedUser,
 } from "../services/auth.service";
 
-import {
-  registerUser,
-  loginUser,
-} from "../services/auth.service";
-
 export async function registerController(
   req: Request,
   res: Response

@@ -8,6 +8,8 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET não configurado");
 }
 
+const AUTH_JWT_SECRET: string = JWT_SECRET;
+
 export async function registerUser(data: {
   name: string;
   email: string;
@@ -67,7 +69,7 @@ export async function loginUser(data: {
       userId: user.id,
       email: user.email,
     },
-    JWT_SECRET,
+    AUTH_JWT_SECRET,
     {
       expiresIn: "1d",
     }
