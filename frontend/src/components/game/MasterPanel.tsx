@@ -77,11 +77,6 @@ interface MasterPanelProps {
   onRequestInitiative?: (payload: {
     targetCharacterId?: number | null;
   }) => void;
-  onCombatAdd?: (payload: {
-    name: string;
-    initiative: number;
-    kind?: "monster" | "other";
-  }) => void;
   onCombatStart?: () => void;
   onCombatNext?: () => void;
   onCombatEnd?: () => void;
@@ -160,7 +155,6 @@ export function MasterPanel({
   onRequestCheck,
   combat,
   onRequestInitiative,
-  onCombatAdd,
   onCombatStart,
   onCombatNext,
   onCombatEnd,

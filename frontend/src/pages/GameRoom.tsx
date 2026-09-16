@@ -22,7 +22,6 @@ import {
   emitCharacterAction,
   emitCharacterUpdated,
   emitCheckRequest,
-  emitCombatAdd,
   emitCombatEnd,
   emitCombatNext,
   emitCombatReorder,
@@ -700,7 +699,7 @@ export function GameRoom() {
       const rule = resolveFeatureSpend(abilityId, name, description, sheet);
       if (rule) {
         const spent = spendFeatureOnSheet(sheet, abilityId, name, description);
-        if (!spent.ok) {
+        if (spent.ok === false) {
           alert(spent.error);
           return;
         }
@@ -735,7 +734,7 @@ export function GameRoom() {
     }
     await withActionBusy("Conjurando…", async () => {
       const spent = spendSpellSlot(sheet, spell.level);
-      if (!spent.ok) {
+      if (spent.ok === false) {
         alert(spent.error);
         return;
       }
@@ -957,21 +956,6 @@ export function GameRoom() {
       ...payload,
       userName: user.name,
     });
-  }
-
-  async function handleCombatAdd(payload: {
-    name: string;
-    initiative: number;
-    kind?: "monster" | "other";
-  }) {
-    if (!socket || !sessionId || !user || !isMaster) return;
-    const result = await emitCombatAdd(socket, sessionId, {
-      ...payload,
-      userName: user.name,
-    });
-    if (!result.ok) {
-      alert(result.error || "Falha ao adicionar ao relógio");
-    }
   }
 
   async function handleRollTokenInitiative(tokens: BoardToken[]) {
@@ -1354,7 +1338,6 @@ export function GameRoom() {
                       onRequestCheck={handleRequestCheck}
                       combat={combat}
                       onRequestInitiative={handleRequestInitiative}
-                      onCombatAdd={handleCombatAdd}
                       onCombatStart={handleCombatStart}
                       onCombatNext={handleCombatNext}
                       onCombatEnd={handleCombatEnd}
