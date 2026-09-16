@@ -681,7 +681,9 @@ export function MasterPanel({
       mapHeight: squares.rows,
       gridSize: board.gridSize,
       metersPerSquare: metersPerSquareOf(board),
-      gridType: board.gridType === "hex" ? "hex" : "square",
+      gridType: (board.gridType === "hex" ? "hex" : "square") as
+        | "square"
+        | "hex",
     };
     onBoardChange({
       ...board,

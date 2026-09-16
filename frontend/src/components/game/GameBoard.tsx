@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  BoardEffect,
   BoardState,
   BoardToken,
   MeasureShape,

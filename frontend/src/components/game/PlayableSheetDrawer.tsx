@@ -93,9 +93,7 @@ export function PlayableSheetDrawer({
   }
 
   const proficiency = getProficiencyBonus(
-    sheet.classes?.reduce((sum, item) => sum + (item.level || 0), 0) ||
-      sheet.level ||
-      1
+    sheet.classes?.reduce((sum, item) => sum + (item.level || 0), 0) || 1
   );
   const proficient = getProficientSkills(sheet);
 

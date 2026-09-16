@@ -24,7 +24,7 @@ function characterLevel(data: CharacterFormData): number {
     (sum, item) => sum + (item.level || 0),
     0
   );
-  return Math.max(1, fromClasses || data.level || 1);
+  return Math.max(1, fromClasses || 1);
 }
 
 /** Escala truques com base no texto de níveis superiores do PHB. */

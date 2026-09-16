@@ -88,7 +88,7 @@ export function DeliverItemModal({
   return (
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(20, 12, 8, and 0.65)".replace(" and ", "") }}
+      style={{ backgroundColor: "rgba(20, 12, 8, 0.65)" }}
       role="dialog"
       aria-modal
     >
@@ -107,7 +107,11 @@ export function DeliverItemModal({
         </h3>
         <p className="mb-3 text-xs text-[var(--color-ink-soft)]">
           {shop.name} · {item.name} ({item.price})
-          {soldOut ? " · ESGOTADO" : item.unlimitedStock ? " · estoque ∞" : ` · estoque ${item.quantity ?? 0}`}
+          {soldOut
+            ? " · ESGOTADO"
+            : item.unlimitedStock
+              ? " · estoque ∞"
+              : ` · estoque ${item.quantity ?? 0}`}
         </p>
 
         <label className="mb-2 block text-xs text-[var(--color-ink-muted)]">

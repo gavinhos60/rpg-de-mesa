@@ -599,12 +599,12 @@ export function MercadoMasterModal({
           item={deliverTarget.item}
           characters={characters}
           onClose={() => setDeliverTarget(null)}
-          onDelivered={async () => {
+          onDelivered={async (result) => {
             setDeliverTarget(null);
+            onCharacterUpdated?.(result.character);
             await onRefresh();
             onMessage?.("Item entregue ao personagem.");
           }}
-          onCharacterUpdated={onCharacterUpdated}
         />
       ) : null}
     </>
