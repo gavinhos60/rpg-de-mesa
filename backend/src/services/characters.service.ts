@@ -332,6 +332,12 @@ export async function grantCustomItemToCharacter(
     description?: string;
     quantity?: number;
     weight?: number;
+    category?: string;
+    imageUrl?: string;
+  },
+  options?: {
+    /** Skip MASTER check when caller already validated (e.g. shop delivery). */
+    skipMasterCheck?: boolean;
   }
 ) {
   const character = await prisma.character.findUnique({
@@ -346,17 +352,19 @@ export async function grantCustomItemToCharacter(
     throw new Error("CHARACTER_NOT_IN_CAMPAIGN");
   }
 
-  const membership = await prisma.campaignMember.findUnique({
-    where: {
-      userId_campaignId: {
-        userId: authenticatedUserId,
-        campaignId: character.campaignId,
+  if (!options?.skipMasterCheck) {
+    const membership = await prisma.campaignMember.findUnique({
+      where: {
+        userId_campaignId: {
+          userId: authenticatedUserId,
+          campaignId: character.campaignId,
+        },
       },
-    },
-  });
+    });
 
-  if (membership?.role !== "MASTER") {
-    throw new Error("MASTER_REQUIRED");
+    if (membership?.role !== "MASTER") {
+      throw new Error("MASTER_REQUIRED");
+    }
   }
 
   const name = String(item.name ?? "").trim();
@@ -366,6 +374,8 @@ export async function grantCustomItemToCharacter(
 
   const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
   const description = String(item.description ?? "").trim() || undefined;
+  const category = String(item.category ?? "").trim() || undefined;
+  const imageUrl = String(item.imageUrl ?? "").trim() || undefined;
   const weightRaw = item.weight != null ? Number(item.weight) : undefined;
   const weight =
     weightRaw != null && Number.isFinite(weightRaw) && weightRaw >= 0
@@ -401,16 +411,47 @@ export async function grantCustomItemToCharacter(
     ? (equipment.customItems as Array<Record<string, unknown>>)
     : [];
 
-  const customItem: Record<string, unknown> = {
-    id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-    name,
-    quantity,
-  };
-  if (description) customItem.description = description;
-  if (weight != null) customItem.weight = weight;
-  if (master?.name) customItem.grantedByName = master.name;
+  const nameKey = name.toLowerCase();
+  const categoryKey = (category ?? "").toLowerCase();
+  const mergeIndex = existingCustom.findIndex((entry) => {
+    const entryName = String(entry.name ?? "")
+      .trim()
+      .toLowerCase();
+    const entryCategory = String(entry.category ?? "")
+      .trim()
+      .toLowerCase();
+    return entryName === nameKey && entryCategory === categoryKey;
+  });
 
-  equipment.customItems = [...existingCustom, customItem];
+  if (mergeIndex >= 0) {
+    const previous = existingCustom[mergeIndex];
+    const prevQty = Math.max(0, Math.floor(Number(previous.quantity) || 0));
+    const merged: Record<string, unknown> = {
+      ...previous,
+      quantity: prevQty + quantity,
+    };
+    if (description) merged.description = description;
+    if (weight != null) merged.weight = weight;
+    if (category) merged.category = category;
+    if (imageUrl) merged.imageUrl = imageUrl;
+    if (master?.name) merged.grantedByName = master.name;
+    const nextCustom = [...existingCustom];
+    nextCustom[mergeIndex] = merged;
+    equipment.customItems = nextCustom;
+  } else {
+    const customItem: Record<string, unknown> = {
+      id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      name,
+      quantity,
+    };
+    if (description) customItem.description = description;
+    if (weight != null) customItem.weight = weight;
+    if (category) customItem.category = category;
+    if (imageUrl) customItem.imageUrl = imageUrl;
+    if (master?.name) customItem.grantedByName = master.name;
+    equipment.customItems = [...existingCustom, customItem];
+  }
+
   sheetRoot.equipment = equipment;
 
   return prisma.character.update({

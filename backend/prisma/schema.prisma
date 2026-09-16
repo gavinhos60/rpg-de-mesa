@@ -25,14 +25,21 @@ model User {
   characters      Character[]
   campaigns       CampaignMember[]
   startedSessions GameSession[]    @relation("SessionStarter")
+  createdPapyri   Papyrus[]        @relation("PapyrusCreator")
+  shopDeliveries  ShopDelivery[]   @relation("ShopDeliveryMaster")
+  playerNotes     PlayerNote[]
 }
 
 model Campaign {
-  id         Int              @id @default(autoincrement())
-  name       String
-  characters Character[]
-  members    CampaignMember[]
-  sessions   GameSession[]
+  id           Int              @id @default(autoincrement())
+  name         String
+  characters   Character[]
+  members      CampaignMember[]
+  sessions     GameSession[]
+  papyri       Papyrus[]
+  shops        Shop[]
+  shopDeliveries ShopDelivery[]
+  playerNotes  PlayerNote[]
 }
 
 model CampaignMember {
@@ -77,4 +84,94 @@ model GameSession {
   updatedAt   DateTime          @updatedAt
 
   @@index([campaignId, status])
+}
+
+model Papyrus {
+  id          Int      @id @default(autoincrement())
+  campaignId  Int
+  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  title       String
+  body        String   @db.Text
+  imageUrl    String?
+  published   Boolean  @default(false)
+  createdById Int
+  createdBy   User     @relation("PapyrusCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([campaignId, published])
+}
+
+model Shop {
+  id          Int            @id @default(autoincrement())
+  campaignId  Int
+  campaign    Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  imageUrl    String?
+  isOpen      Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  items       ShopItem[]
+  deliveries  ShopDelivery[]
+
+  @@index([campaignId, isOpen])
+}
+
+model ShopItem {
+  id             Int            @id @default(autoincrement())
+  shopId         Int
+  shop           Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  imageUrl       String?
+  price          String
+  quantity       Int?
+  unlimitedStock Boolean        @default(false)
+  category       String
+  extraInfo      String?
+  available      Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deliveries     ShopDelivery[]
+
+  @@index([shopId, available])
+}
+
+model ShopDelivery {
+  id             Int      @id @default(autoincrement())
+  campaignId     Int
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  shopId         Int
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopItemId     Int
+  shopItem       ShopItem @relation(fields: [shopItemId], references: [id], onDelete: Cascade)
+  shopItemName   String
+  shopName       String
+  characterId    Int
+  characterName  String
+  playerId       Int?
+  playerName     String?
+  quantity       Int
+  deliveredById  Int
+  deliveredBy    User     @relation("ShopDeliveryMaster", fields: [deliveredById], references: [id], onDelete: Cascade)
+  deliveredByName String
+  createdAt      DateTime @default(now())
+
+  @@index([campaignId, createdAt])
+  @@index([shopId, createdAt])
+}
+
+model PlayerNote {
+  id         Int      @id @default(autoincrement())
+  campaignId Int
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String   @default("")
+  body       String   @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([campaignId, userId])
 }

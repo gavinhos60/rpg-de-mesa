@@ -284,6 +284,8 @@ export async function grantCustomItemController(req: Request, res: Response) {
         quantity:
           req.body.quantity != null ? Number(req.body.quantity) : undefined,
         weight: req.body.weight != null ? Number(req.body.weight) : undefined,
+        category: req.body.category,
+        imageUrl: req.body.imageUrl,
       }
     );
 

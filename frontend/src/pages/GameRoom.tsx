@@ -47,7 +47,7 @@ import type {
   InitiativeRequest,
   SessionRuntimeState,
 } from "../types/game";
-import { emptyBoardState, playerIsOnFrozenScene, snapToGrid } from "../types/game";
+import { emptyBoardState, playerIsOnFrozenScene, snapToGrid, clearOwnAnnotations } from "../types/game";
 import type {
   Ability,
   CharacterFormData,
@@ -71,6 +71,12 @@ import { CheckPrompt } from "../components/game/CheckPrompt";
 import { InitiativePrompt } from "../components/game/InitiativePrompt";
 import { TurnClock } from "../components/game/TurnClock";
 import { DiceRollOverlay, diceFromChatRoll } from "../components/game/DiceRollOverlay";
+import { PapyrusOverlay } from "../components/game/PapyrusOverlay";
+import { ShopPlayerModal } from "../components/game/ShopPlayerModal";
+import { listPapiros, publishPapyrus } from "../services/papiros.service";
+import { listShops } from "../services/mercado.service";
+import type { Papyrus } from "../types/papiros";
+import type { Shop } from "../types/mercado";
 
 export function GameRoom() {
   const { id } = useParams();
@@ -127,6 +133,17 @@ export function GameRoom() {
     current?: number;
     max?: number;
   }>({});
+  const [publishedPapyri, setPublishedPapyri] = useState<Papyrus[]>([]);
+  const [previewPapyrus, setPreviewPapyrus] = useState<Papyrus | null>(null);
+  const [dismissedPapyrusIds, setDismissedPapyrusIds] = useState<number[]>([]);
+  const [openShops, setOpenShops] = useState<Shop[]>([]);
+  const [playerShopOpen, setPlayerShopOpen] = useState(false);
+  const [localAnnotationResetKey, setLocalAnnotationResetKey] = useState(0);
+  const [playerShopFocusId, setPlayerShopFocusId] = useState<number | null>(
+    null
+  );
+  const openShopsRef = useRef<Shop[]>([]);
+  openShopsRef.current = openShops;
 
   const isMaster = role === "MASTER";
   const myCharacters = useMemo(
@@ -194,7 +211,10 @@ export function GameRoom() {
             const nowFrozen =
               Boolean(nextBoard.playerMapView) ||
               Object.keys(nextBoard.playerViewsByUserId ?? {}).length > 0;
-            if (!nowFrozen) {
+            const masterMapChanged =
+              (previous.mapUrl || "") !== (nextBoard.mapUrl || "");
+            if (!nowFrozen || masterMapChanged) {
+              // Sai da inspeção do mapa congelado quando o mestre muda de cenário.
               queueMicrotask(() => setWatchPlayerScene(false));
             } else if (!wasFrozen && nowFrozen) {
               queueMicrotask(() => setWatchPlayerScene(true));
@@ -300,6 +320,27 @@ export function GameRoom() {
           setCombat(next);
         });
 
+        currentSocket.on("papyrus:state", (items: Papyrus[]) => {
+          setPublishedPapyri(Array.isArray(items) ? items : []);
+          setDismissedPapyrusIds([]);
+        });
+
+        currentSocket.on("mercado:shops", (items: Shop[]) => {
+          const next = Array.isArray(items) ? items : [];
+          const prevIds = new Set(openShopsRef.current.map((s) => s.id));
+          const newlyOpened = next.filter((s) => !prevIds.has(s.id));
+          setOpenShops(next);
+          if (roleRef.current !== "MASTER") {
+            if (next.length === 0) {
+              setPlayerShopOpen(false);
+              setPlayerShopFocusId(null);
+            } else if (newlyOpened.length > 0 || prevIds.size === 0) {
+              setPlayerShopFocusId(newlyOpened[0]?.id ?? next[0]?.id ?? null);
+              setPlayerShopOpen(true);
+            }
+          }
+        });
+
         await new Promise<void>((resolve, reject) => {
           currentSocket!.once("connect", () => resolve());
           currentSocket!.once("connect_error", (err) => reject(err));
@@ -318,6 +359,23 @@ export function GameRoom() {
         setCharacters(joined.characters ?? []);
         setMembers(joined.members ?? []);
         applyState(joined.state);
+
+        try {
+          const [papyri, shops] = await Promise.all([
+            listPapiros(campaignId),
+            listShops(campaignId),
+          ]);
+          if (!active) return;
+          setPublishedPapyri(papyri.filter((p) => p.published));
+          const visibleShops = shops.filter((s) => s.isOpen);
+          setOpenShops(visibleShops);
+          if ((joined.role ?? "PLAYER") !== "MASTER" && visibleShops.length > 0) {
+            setPlayerShopFocusId(visibleShops[0].id);
+            setPlayerShopOpen(true);
+          }
+        } catch (err) {
+          console.error(err);
+        }
 
         if ((joined.role ?? "PLAYER") === "MASTER") {
           try {
@@ -368,7 +426,9 @@ export function GameRoom() {
       const prevFrozen =
         Boolean(previous.playerMapView) ||
         Object.keys(previous.playerViewsByUserId ?? {}).length > 0;
-      if (!nextFrozen) {
+      const masterMapChanged =
+        (previous.mapUrl || "") !== (next.mapUrl || "");
+      if (!nextFrozen || masterMapChanged) {
         queueMicrotask(() => setWatchPlayerScene(false));
       } else if (!prevFrozen && nextFrozen) {
         queueMicrotask(() => setWatchPlayerScene(true));
@@ -1063,6 +1123,10 @@ export function GameRoom() {
                       characters={characters}
                       masterCharacters={masterCharacters}
                       members={members}
+                      campaignId={campaignId}
+                      onPreviewPapyrus={(papyrus) => {
+                        setPreviewPapyrus(papyrus);
+                      }}
                       onToolChange={setTool}
                       onBoardChange={handleBoardChange}
                       placeOnSecretLayer={placeOnSecretLayer}
@@ -1109,8 +1173,14 @@ export function GameRoom() {
                     />
                   ) : (
                     <PlayerPanel
+                      campaignId={campaignId}
                       tool={tool}
                       myCharacters={myCharacters}
+                      shops={openShops}
+                      onOpenShops={() => {
+                        setPlayerShopFocusId(openShops[0]?.id ?? null);
+                        setPlayerShopOpen(true);
+                      }}
                       onToolChange={setTool}
                       onOpenSheet={(character) => {
                         void openCharacterSheet(character.id, false).catch((err) => {
@@ -1118,20 +1188,11 @@ export function GameRoom() {
                           alert("Não foi possível abrir a ficha.");
                         });
                       }}
-                      onClearMyAnnotations={() =>
-                        handleBoardChange({
-                          ...board,
-                          drawings: board.drawings.filter(
-                            (item) => item.byUserId !== user?.id
-                          ),
-                          effects: board.effects.filter(
-                            (item) => item.byUserId !== user?.id
-                          ),
-                          rulers: board.rulers.filter(
-                            (item) => item.byUserId !== user?.id
-                          ),
-                        })
-                      }
+                      onClearMyAnnotations={() => {
+                        if (!user?.id) return;
+                        setLocalAnnotationResetKey((n) => n + 1);
+                        handleBoardChange(clearOwnAnnotations(board, user.id));
+                      }}
                     />
                   )}
                 </div>
@@ -1148,6 +1209,7 @@ export function GameRoom() {
               isMaster={isMaster}
               placeOnSecretLayer={placeOnSecretLayer}
               watchPlayerScene={isMaster && watchPlayerScene}
+              localAnnotationResetKey={localAnnotationResetKey}
               onMoveToken={handleTokenMove}
               onMoveTokens={handleTokensMove}
               draggingTokenIdsRef={draggingTokenIdsRef}
@@ -1325,6 +1387,66 @@ export function GameRoom() {
           onDismiss={() => setPendingInitiative(null)}
         />
       )}
+
+      {playerShopOpen && !isMaster && openShops.some((s) => s.isOpen) ? (
+        <ShopPlayerModal
+          shops={openShops}
+          initialShopId={playerShopFocusId}
+          onClose={() => setPlayerShopOpen(false)}
+        />
+      ) : null}
+
+      {previewPapyrus && (
+        <PapyrusOverlay
+          papyrus={previewPapyrus}
+          isMaster={isMaster}
+          onClose={() => setPreviewPapyrus(null)}
+          onUnpublish={
+            isMaster
+              ? () => {
+                  void publishPapyrus(campaignId, previewPapyrus.id, false)
+                    .then((updated) => {
+                      setPublishedPapyri((prev) =>
+                        prev.filter((p) => p.id !== updated.id)
+                      );
+                      setPreviewPapyrus(null);
+                    })
+                    .catch((err) => console.error(err));
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {!previewPapyrus &&
+        publishedPapyri
+          .filter((p) => !dismissedPapyrusIds.includes(p.id))
+          .slice(0, 1)
+          .map((papyrus) => (
+            <PapyrusOverlay
+              key={papyrus.id}
+              papyrus={papyrus}
+              isMaster={isMaster}
+              onClose={() =>
+                setDismissedPapyrusIds((prev) =>
+                  prev.includes(papyrus.id) ? prev : [...prev, papyrus.id]
+                )
+              }
+              onUnpublish={
+                isMaster
+                  ? () => {
+                      void publishPapyrus(campaignId, papyrus.id, false)
+                        .then((updated) => {
+                          setPublishedPapyri((prev) =>
+                            prev.filter((p) => p.id !== updated.id)
+                          );
+                        })
+                        .catch((err) => console.error(err));
+                    }
+                  : undefined
+              }
+            />
+          ))}
     </div>
   );
 }

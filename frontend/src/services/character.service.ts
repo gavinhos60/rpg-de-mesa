@@ -167,6 +167,8 @@ export async function grantCustomItem(
     description?: string;
     quantity?: number;
     weight?: number;
+    category?: string;
+    imageUrl?: string;
   }
 ): Promise<SavedCharacter> {
   const response = await api.post<SavedCharacter>(

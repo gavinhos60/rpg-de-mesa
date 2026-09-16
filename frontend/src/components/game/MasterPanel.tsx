@@ -27,6 +27,8 @@ import { hitPointsFromSheet } from "../../utils/characterCombat";
 import { grantCustomItem } from "../../services/character.service";
 import type { BoardTool } from "./GameBoard";
 import { RibbonButton } from "../icons/MedievalIcons";
+import { PapirosMasterSection } from "./PapirosMasterSection";
+import type { Papyrus } from "../../types/papiros";
 
 /** Nome legível do mapa: preparado, arquivo da URL ou fallback curto. */
 function mapDisplayName(
@@ -88,6 +90,8 @@ interface MasterPanelProps {
   onPlaceOnSecretLayerChange: (enabled: boolean) => void;
   watchPlayerScene?: boolean;
   onWatchPlayerSceneChange?: (enabled: boolean) => void;
+  campaignId?: number;
+  onPreviewPapyrus?: (papyrus: Papyrus) => void;
 }
 
 function uid(prefix: string) {
@@ -125,13 +129,14 @@ function readImageAsDataUrl(file: File, maxSize = 256): Promise<string> {
 }
 
 type NpcSource = "monster" | "sheet" | "custom";
-type MasterTab = "mapa" | "visao" | "tokens" | "grupo";
+type MasterTab = "mapa" | "visao" | "tokens" | "grupo" | "papiros";
 
 const MASTER_TABS: Array<{ id: MasterTab; label: string; hint: string }> = [
   { id: "mapa", label: "Mapa", hint: "Imagem, tamanho e mapas salvos" },
   { id: "visao", label: "Visão", hint: "Escuridão e camadas" },
   { id: "tokens", label: "Tokens", hint: "NPCs e monstros" },
   { id: "grupo", label: "Grupo", hint: "Fichas, itens, testes e turnos" },
+  { id: "papiros", label: "Papiros", hint: "Documentos e mercado" },
 ];
 
 const fieldStyle = {
@@ -162,6 +167,8 @@ export function MasterPanel({
   onPlaceOnSecretLayerChange,
   watchPlayerScene = false,
   onWatchPlayerSceneChange,
+  campaignId,
+  onPreviewPapyrus,
 }: MasterPanelProps) {
   const [mapUrl, setMapUrl] = useState(board.mapUrl || "");
   const [mapWidthDraft, setMapWidthDraft] = useState(() =>
@@ -181,6 +188,7 @@ export function MasterPanel({
     mapHeight?: number;
     gridSize?: number;
     metersPerSquare?: number;
+    gridType?: "square" | "hex";
     widthDraft?: string;
     heightDraft?: string;
   } | null>(null);
@@ -339,6 +347,7 @@ export function MasterPanel({
     mapHeight?: number;
     gridSize?: number;
     metersPerSquare?: number;
+    gridType?: "square" | "hex";
     widthDraft?: string;
     heightDraft?: string;
   }) {
@@ -357,6 +366,7 @@ export function MasterPanel({
       ...(next.metersPerSquare != null
         ? { metersPerSquare: next.metersPerSquare }
         : {}),
+      ...(next.gridType != null ? { gridType: next.gridType } : {}),
     });
     setMapUrl(next.mapUrl);
     if (next.widthDraft != null) setMapWidthDraft(next.widthDraft);
@@ -370,6 +380,7 @@ export function MasterPanel({
       mapHeight?: number;
       gridSize?: number;
       metersPerSquare?: number;
+      gridType?: "square" | "hex";
       widthDraft?: string;
       heightDraft?: string;
     },
@@ -388,52 +399,26 @@ export function MasterPanel({
     const movingEveryone =
       allPlayerIds.size === 0 || leavingIds.length === 0;
     const movingNobody = bring.size === 0;
-    // Parcial: só os jogadores escolhidos mudam de mapa — o mestre permanece.
-    const masterStays = !movingEveryone && !movingNobody;
 
     const leavingSnapshot = snapshotPlayerMapView(board);
     const prevViews = { ...(board.playerViewsByUserId ?? {}) };
 
-    const destinationView: PlayerMapView = {
-      mapUrl: next.mapUrl,
-      mapWidth: next.mapWidth ?? board.mapWidth,
-      mapHeight: next.mapHeight ?? board.mapHeight,
-      gridSize: next.gridSize ?? board.gridSize,
-      metersPerSquare:
-        next.metersPerSquare ?? metersPerSquareOf(board),
-      drawings: [],
-      effects: [],
-      rulers: [],
-    };
+    // O mestre sempre vai para o mapa clicado.
+    const nextMapUrl = next.mapUrl;
+    const nextMapWidth = next.mapWidth ?? board.mapWidth;
+    const nextMapHeight = next.mapHeight ?? board.mapHeight;
+    const nextGridSize = next.gridSize ?? board.gridSize;
+    const nextMeters =
+      next.metersPerSquare ?? metersPerSquareOf(board);
+    const nextGridType = next.gridType ?? board.gridType;
 
     let nextViews: Record<string, PlayerMapView> = {};
-    let nextMapUrl = board.mapUrl;
-    let nextMapWidth = board.mapWidth;
-    let nextMapHeight = board.mapHeight;
-    let nextGridSize = board.gridSize;
-    let nextMeters = metersPerSquareOf(board);
-    let clearMasterAnnotations = false;
 
-    if (masterStays) {
-      // Mestre fica; jogadores escolhidos vão para o novo mapa (sem tokens).
-      nextViews = { ...prevViews };
-      for (const userId of bring) {
-        nextViews[String(userId)] = destinationView;
-      }
-      // Quem não foi: se já tinha view, mantém; se estava com o mestre, continua no ativo.
-      for (const userId of leavingIds) {
-        const key = String(userId);
-        if (prevViews[key]) nextViews[key] = prevViews[key];
-        else delete nextViews[key];
-      }
+    if (movingEveryone) {
+      // Todos acompanham o mestre — sem mapa congelado.
+      nextViews = {};
     } else if (movingNobody) {
-      // Só o mestre muda de mapa; todos os jogadores ficam no mapa atual.
-      nextMapUrl = next.mapUrl;
-      if (next.mapWidth != null) nextMapWidth = next.mapWidth;
-      if (next.mapHeight != null) nextMapHeight = next.mapHeight;
-      if (next.gridSize != null) nextGridSize = next.gridSize;
-      if (next.metersPerSquare != null) nextMeters = next.metersPerSquare;
-      clearMasterAnnotations = true;
+      // Só o mestre muda; todos os jogadores ficam no cenário anterior.
       for (const userId of leavingIds) {
         const key = String(userId);
         nextViews[key] =
@@ -443,14 +428,19 @@ export function MasterPanel({
             : leavingSnapshot);
       }
     } else {
-      // Todos os jogadores vão com o mestre para o novo mapa.
-      nextMapUrl = next.mapUrl;
-      if (next.mapWidth != null) nextMapWidth = next.mapWidth;
-      if (next.mapHeight != null) nextMapHeight = next.mapHeight;
-      if (next.gridSize != null) nextGridSize = next.gridSize;
-      if (next.metersPerSquare != null) nextMeters = next.metersPerSquare;
-      clearMasterAnnotations = true;
-      nextViews = {};
+      // Parcial: escolhidos vão com o mestre; os demais ficam congelados.
+      for (const userId of leavingIds) {
+        const key = String(userId);
+        nextViews[key] =
+          prevViews[key] ??
+          (board.playerMapView && Object.keys(prevViews).length === 0
+            ? board.playerMapView
+            : leavingSnapshot);
+      }
+      // Quem veio junto deixa de ter view congelada.
+      for (const userId of bring) {
+        delete nextViews[String(userId)];
+      }
     }
 
     // Tokens dos jogadores que mudam de mapa são removidos (recolocam no novo).
@@ -464,8 +454,7 @@ export function MasterPanel({
       .map((token) => {
         const owner =
           token.ownerUserId != null ? Number(token.ownerUserId) : null;
-        if (owner != null && leave.has(owner) && !masterStays) {
-          // Jogadores deixados para trás quando o mestre muda de mapa.
+        if (owner != null && leave.has(owner)) {
           return { ...token, onPlayerScene: true as const };
         }
         if (owner != null && nextViews[String(owner)]) {
@@ -483,24 +472,21 @@ export function MasterPanel({
       ...(nextMapHeight != null ? { mapHeight: nextMapHeight } : {}),
       ...(nextGridSize != null ? { gridSize: nextGridSize } : {}),
       metersPerSquare: nextMeters,
+      ...(nextGridType != null ? { gridType: nextGridType } : {}),
       tokens,
-      drawings: clearMasterAnnotations ? [] : board.drawings,
-      effects: clearMasterAnnotations ? [] : board.effects,
-      rulers: clearMasterAnnotations ? [] : board.rulers,
+      drawings: [],
+      effects: [],
+      rulers: [],
       playerMapView: hasFrozen
         ? Object.values(nextViews)[0] ?? leavingSnapshot
         : null,
       playerViewsByUserId: hasFrozen ? nextViews : {},
     });
 
-    // Input do painel: só muda se o mestre de fato trocou de mapa.
-    if (!masterStays) {
-      setMapUrl(next.mapUrl);
-      if (next.widthDraft != null) setMapWidthDraft(next.widthDraft);
-      if (next.heightDraft != null) setMapHeightDraft(next.heightDraft);
-    } else {
-      setMapUrl(board.mapUrl || "");
-    }
+    onWatchPlayerSceneChange?.(false);
+    setMapUrl(next.mapUrl);
+    if (next.widthDraft != null) setMapWidthDraft(next.widthDraft);
+    if (next.heightDraft != null) setMapHeightDraft(next.heightDraft);
     setPendingScene(null);
     setMovePlayerIds([]);
   }
@@ -695,6 +681,7 @@ export function MasterPanel({
       mapHeight: squares.rows,
       gridSize: board.gridSize,
       metersPerSquare: metersPerSquareOf(board),
+      gridType: board.gridType === "hex" ? "hex" : "square",
     };
     onBoardChange({
       ...board,
@@ -711,12 +698,14 @@ export function MasterPanel({
     mapHeight?: number;
     gridSize?: number;
     metersPerSquare?: number;
+    gridType?: "square" | "hex";
   }) {
     const gridSize = entry.gridSize || board.gridSize || DEFAULT_GRID_SIZE;
     const meters =
       entry.metersPerSquare ??
       metersPerSquareOf(board) ??
       DEFAULT_METERS_PER_SQUARE;
+    const gridType = entry.gridType ?? board.gridType ?? "square";
     const squares = mapSquaresOf({
       ...board,
       mapWidth: entry.mapWidth,
@@ -729,6 +718,7 @@ export function MasterPanel({
       mapHeight: squares.rows,
       gridSize,
       metersPerSquare: meters,
+      gridType,
       widthDraft: String(squares.cols),
       heightDraft: String(squares.rows),
     });
@@ -836,11 +826,7 @@ export function MasterPanel({
       widthDraft: String(squares.cols),
       heightDraft: String(squares.rows),
     };
-    if (next.mapUrl === (board.mapUrl || "")) {
-      setPendingScene(null);
-      setMovePlayerIds([]);
-      return;
-    }
+    // Mesmo URL do mapa ativo ainda pode mover jogadores / atualizar views.
     commitSceneChange(next, movePlayerIds);
   }
 
@@ -988,7 +974,7 @@ export function MasterPanel({
       </header>
 
       <nav
-        className="grid shrink-0 grid-cols-4 border-b"
+        className="grid shrink-0 grid-cols-5 border-b"
         style={{ borderColor: "var(--color-border)" }}
         aria-label="Seções do painel"
       >
@@ -1090,6 +1076,34 @@ export function MasterPanel({
               </div>
               <p className="mb-2 text-[10px] leading-snug text-[var(--color-ink-soft)]">
                 Em quadrados (ex.: 30×40).
+              </p>
+              <label className="mb-2 block text-[10px] text-[var(--color-ink-soft)]">
+                Formato do grid
+                <select
+                  value={board.gridType === "hex" ? "hex" : "square"}
+                  onChange={(event) => {
+                    const nextType =
+                      event.target.value === "hex" ? "hex" : "square";
+                    onBoardChange({
+                      ...board,
+                      gridType: nextType,
+                      metersPerSquare:
+                        nextType === "hex"
+                          ? 10_000
+                          : board.metersPerSquare === 10_000
+                            ? 1.5
+                            : board.metersPerSquare || 1.5,
+                    });
+                  }}
+                  className="mt-0.5 w-full border px-1.5 py-1.5 text-sm outline-none"
+                  style={fieldStyle}
+                >
+                  <option value="square">Quadrado</option>
+                  <option value="hex">Hexagonal</option>
+                </select>
+              </label>
+              <p className="mb-2 text-[10px] leading-snug text-[var(--color-ink-soft)]">
+                Hexágono: cada célula = 10 km na régua.
               </p>
               <RibbonButton
                 type="button"
@@ -1936,6 +1950,20 @@ export function MasterPanel({
             </section>
           </div>
         )}
+
+        {activeTab === "papiros" && campaignId != null && (
+          <PapirosMasterSection
+            campaignId={campaignId}
+            characters={characters}
+            onCharacterUpdated={onCharacterUpdated}
+            onPreviewPapyrus={onPreviewPapyrus}
+          />
+        )}
+        {activeTab === "papiros" && campaignId == null && (
+          <p className="text-xs text-[var(--color-ink-soft)]">
+            Campanha inválida para papiros.
+          </p>
+        )}
       </div>
 
       {onCloseSession && (
@@ -2160,7 +2188,7 @@ export function MasterPanel({
                   ? "Só o mestre vai para o mapa clicado. Jogadores ficam onde estão (com tokens)."
                   : movePlayerIds.length === fogPlayers.length
                     ? "Mestre e todos os jogadores vão ao mapa clicado. Tokens dos jogadores são removidos."
-                    : "Só o(s) jogador(es) marcado(s) vão ao mapa clicado. O mestre permanece se a ida for parcial."}
+                    : "Mestre vai ao mapa clicado com o(s) jogador(es) marcado(s). Os demais ficam no cenário anterior."}
               </p>
               <button
                 type="button"

@@ -9,6 +9,9 @@ import usersRoutes from "./routes/users.routes";
 import campaignsRoutes from "./routes/campaigns.routes";
 import campaignMembersRoutes from "./routes/campaign-members.routes";
 import sessionsRoutes from "./routes/sessions.routes";
+import papirosRoutes from "./routes/papiros.routes";
+import mercadoRoutes from "./routes/mercado.routes";
+import notesRoutes from "./routes/notes.routes";
 
 import { authMiddleware } from "./middleware/auth.middleware";
 import { attachGameSocket } from "./socket/game.gateway";
@@ -17,7 +20,7 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "12mb" }));
 
 app.get("/", (_req, res) => {
   res.json({
@@ -34,6 +37,21 @@ app.use(
   "/campaigns/:campaignId/sessions",
   authMiddleware,
   sessionsRoutes
+);
+app.use(
+  "/campaigns/:campaignId/papiros",
+  authMiddleware,
+  papirosRoutes
+);
+app.use(
+  "/campaigns/:campaignId/mercado",
+  authMiddleware,
+  mercadoRoutes
+);
+app.use(
+  "/campaigns/:campaignId/notes",
+  authMiddleware,
+  notesRoutes
 );
 
 attachGameSocket(server);

@@ -94,6 +94,7 @@ export type PreparedMap = {
   mapHeight?: number;
   gridSize?: number;
   metersPerSquare?: number;
+  gridType?: "square" | "hex";
 };
 
 export type PlayerMapView = {
@@ -102,6 +103,7 @@ export type PlayerMapView = {
   mapHeight?: number;
   gridSize?: number;
   metersPerSquare?: number;
+  gridType?: "square" | "hex";
   drawings?: BoardDrawing[];
   effects?: BoardEffect[];
   rulers?: BoardRuler[];
@@ -114,6 +116,7 @@ export type BoardState = {
   /** Altura do mapa em quadrados (não pixels). */
   mapHeight?: number;
   gridSize: number;
+  gridType?: "square" | "hex";
   metersPerSquare: number;
   feetPerSquare?: number;
   tokens: BoardToken[];
@@ -154,13 +157,19 @@ export type ChatMessage = {
 };
 
 export const DEFAULT_METERS_PER_SQUARE = 1.5;
+export const DEFAULT_HEX_METERS = 10_000;
 export const DEFAULT_GRID_SIZE = 50;
 export const DEFAULT_VISION_RADIUS_SQUARES = 3;
+
+export function gridTypeOf(board: { gridType?: string | null }): "square" | "hex" {
+  return board.gridType === "hex" ? "hex" : "square";
+}
 
 export function emptyBoardState(): BoardState {
   return {
     mapUrl: "",
     gridSize: DEFAULT_GRID_SIZE,
+    gridType: "square",
     metersPerSquare: DEFAULT_METERS_PER_SQUARE,
     tokens: [],
     drawings: [],
@@ -402,4 +411,59 @@ export function syncCombatantSecrets(
     changed,
   };
 }
+
+/** Anotações de outros (ou sem dono) — o jogador não pode apagá-las via board:update. */
+export function mergeOwnedAnnotations<
+  T extends { id: string; byUserId?: number },
+>(existing: T[], incoming: T[] | undefined, userId: number): T[] {
+  if (!incoming) return existing;
+  const uid = Number(userId);
+  const others = existing.filter((item) => Number(item.byUserId) !== uid);
+  const ownIncoming = incoming.filter((item) => Number(item.byUserId) === uid);
+  return [...others, ...ownIncoming];
+}
+
+export function playerFrozenView(
+  board: BoardState,
+  userId: number
+): PlayerMapView | null {
+  const views = board.playerViewsByUserId ?? {};
+  const mine = views[String(userId)];
+  if (mine) return mine;
+  if (
+    board.playerMapView &&
+    (!board.playerViewsByUserId ||
+      Object.keys(board.playerViewsByUserId).length === 0)
+  ) {
+    return board.playerMapView;
+  }
+  return null;
+}
+
+export function withPlayerViewAnnotations(
+  board: BoardState,
+  userId: number,
+  patch: Partial<
+    Pick<PlayerMapView, "drawings" | "effects" | "rulers">
+  >
+): BoardState {
+  const key = String(userId);
+  const current =
+    board.playerViewsByUserId?.[key] ?? board.playerMapView ?? null;
+  if (!current) return board;
+  const nextView: PlayerMapView = {
+    ...current,
+    ...(patch.drawings ? { drawings: patch.drawings } : {}),
+    ...(patch.effects ? { effects: patch.effects } : {}),
+    ...(patch.rulers ? { rulers: patch.rulers } : {}),
+  };
+  return {
+    ...board,
+    playerViewsByUserId: {
+      ...(board.playerViewsByUserId ?? {}),
+      [key]: nextView,
+    },
+  };
+}
+
 

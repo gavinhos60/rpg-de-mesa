@@ -264,7 +264,8 @@ export interface CustomInventoryItem {
     description?: string;
     quantity: number;
     weight?: number;
-    category?: EquipmentCategory;
+    category?: EquipmentCategory | string;
+    imageUrl?: string;
     /** Quem concedeu o item (opcional). */
     grantedByName?: string;
 }

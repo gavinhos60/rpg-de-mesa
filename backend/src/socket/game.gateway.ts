@@ -9,6 +9,7 @@ import {
   saveSessionState,
 } from "../services/sessions.service";
 import { prisma } from "../lib/prisma";
+import { setGameIo } from "./io";
 import { rollDice, rollD20WithModifier, rollCompoundDice, isCriticalHit, applyCriticalDamage } from "../lib/dice";
 import {
   getAbilityLabel,
@@ -29,12 +30,15 @@ import {
   distanceMeters,
   distanceSquares5e,
   emptyCombatState,
+  mergeOwnedAnnotations,
   metersPerSquareOf,
   monsterIsOnSecretLayer,
+  playerFrozenView,
   publicCombatState,
   sortCombatOrder,
   syncCombatantSecrets,
   tokenIsOnSecretLayer,
+  withPlayerViewAnnotations,
 } from "../lib/gameTypes";
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -60,6 +64,8 @@ export function attachGameSocket(httpServer: HttpServer) {
       methods: ["GET", "POST"],
     },
   });
+
+  setGameIo(io);
 
   const persistTimers: PersistTimers = new Map();
   const runtime = new Map<number, SessionRuntimeState>();
@@ -350,10 +356,47 @@ export function attachGameSocket(httpServer: HttpServer) {
             state.board = {
               ...state.board,
               tokens: mergedTokens,
-              drawings: incoming.drawings ?? state.board.drawings,
-              rulers: incoming.rulers ?? state.board.rulers,
-              effects: incoming.effects ?? state.board.effects,
+              drawings: mergeOwnedAnnotations(
+                state.board.drawings,
+                incoming.drawings,
+                userId
+              ),
+              rulers: mergeOwnedAnnotations(
+                state.board.rulers,
+                incoming.rulers,
+                userId
+              ),
+              effects: mergeOwnedAnnotations(
+                state.board.effects,
+                incoming.effects,
+                userId
+              ),
             };
+
+            // Se o jogador estiver em mapa congelado, aplica anotações na view dele.
+            const frozen = playerFrozenView(state.board, userId);
+            const incomingViews = incoming.playerViewsByUserId;
+            const incomingOwnView =
+              incomingViews?.[String(userId)] ?? undefined;
+            if (frozen && incomingOwnView) {
+              state.board = withPlayerViewAnnotations(state.board, userId, {
+                drawings: mergeOwnedAnnotations(
+                  frozen.drawings ?? [],
+                  incomingOwnView.drawings,
+                  userId
+                ),
+                effects: mergeOwnedAnnotations(
+                  frozen.effects ?? [],
+                  incomingOwnView.effects,
+                  userId
+                ),
+                rulers: mergeOwnedAnnotations(
+                  frozen.rulers ?? [],
+                  incomingOwnView.rulers,
+                  userId
+                ),
+              });
+            }
           }
 
           const synced = syncCombatantSecrets(state.board, state.combat);
@@ -1025,14 +1068,31 @@ export function attachGameSocket(httpServer: HttpServer) {
         ack?
       ) => {
         try {
-          const { state, room } = await loadContext(Number(payload.sessionId));
+          const { membership, state, room } = await loadContext(
+            Number(payload.sessionId)
+          );
           const userId = socket.data.userId as number;
           const rulers = Array.isArray(state.board.rulers)
             ? [...state.board.rulers]
             : [];
 
           if (payload.clearAll) {
-            state.board.rulers = [];
+            // Mestre limpa todas; jogador só as próprias.
+            if (membership.role === "MASTER") {
+              state.board.rulers = [];
+            } else {
+              state.board.rulers = rulers.filter(
+                (item) => Number(item.byUserId) !== userId
+              );
+              const frozen = playerFrozenView(state.board, userId);
+              if (frozen) {
+                state.board = withPlayerViewAnnotations(state.board, userId, {
+                  rulers: (frozen.rulers ?? []).filter(
+                    (item) => Number(item.byUserId) !== userId
+                  ),
+                });
+              }
+            }
             schedulePersist(Number(payload.sessionId), state);
             io.to(room).emit("board:state", state.board);
             ack?.({ ok: true });
@@ -1044,6 +1104,14 @@ export function attachGameSocket(httpServer: HttpServer) {
             state.board.rulers = rulers.filter(
               (item) => !(item.live && item.byUserId === userId)
             );
+            const frozen = playerFrozenView(state.board, userId);
+            if (frozen) {
+              state.board = withPlayerViewAnnotations(state.board, userId, {
+                rulers: (frozen.rulers ?? []).filter(
+                  (item) => !(item.live && Number(item.byUserId) === userId)
+                ),
+              });
+            }
             io.to(room).emit("board:state", state.board);
             ack?.({ ok: true });
             return;
@@ -1084,6 +1152,47 @@ export function attachGameSocket(httpServer: HttpServer) {
             live: live || undefined,
           };
 
+          const frozen = playerFrozenView(state.board, userId);
+          if (frozen) {
+            const viewRulers = Array.isArray(frozen.rulers)
+              ? [...frozen.rulers]
+              : [];
+            const withoutOwnLive = viewRulers.filter(
+              (item) => !(item.live && Number(item.byUserId) === userId)
+            );
+            const nextViewRulers = live
+              ? [...withoutOwnLive, nextRuler]
+              : [...withoutOwnLive, { ...nextRuler, live: undefined }];
+            state.board = withPlayerViewAnnotations(state.board, userId, {
+              rulers: nextViewRulers,
+            });
+            // Também propaga para outros jogadores no mesmo mapa congelado.
+            if (!live && sticky) {
+              const views = { ...(state.board.playerViewsByUserId ?? {}) };
+              for (const [otherId, view] of Object.entries(views)) {
+                if (Number(otherId) === userId) continue;
+                if ((view.mapUrl || "") !== (frozen.mapUrl || "")) continue;
+                const otherRulers = Array.isArray(view.rulers)
+                  ? [...view.rulers]
+                  : [];
+                views[otherId] = {
+                  ...view,
+                  rulers: [
+                    ...otherRulers,
+                    { ...nextRuler, live: undefined },
+                  ],
+                };
+              }
+              state.board.playerViewsByUserId = views;
+            }
+            if (!live) {
+              schedulePersist(Number(payload.sessionId), state);
+            }
+            io.to(room).emit("board:state", state.board);
+            ack?.({ ok: true, ruler: nextRuler });
+            return;
+          }
+
           // Tira prévia ao vivo anterior deste usuário.
           const withoutOwnLive = rulers.filter(
             (item) => !(item.live && item.byUserId === userId)
@@ -1096,8 +1205,11 @@ export function attachGameSocket(httpServer: HttpServer) {
             return;
           }
 
-          // Commit (Permanecer): acumula marcações fixas.
-          state.board.rulers = [...withoutOwnLive, { ...nextRuler, live: undefined }];
+          // Commit (Permanecer): acumula marcações fixas no mapa ativo.
+          state.board.rulers = [
+            ...withoutOwnLive,
+            { ...nextRuler, live: undefined },
+          ];
           schedulePersist(Number(payload.sessionId), state);
           io.to(room).emit("board:state", state.board);
           ack?.({ ok: true, ruler: nextRuler });

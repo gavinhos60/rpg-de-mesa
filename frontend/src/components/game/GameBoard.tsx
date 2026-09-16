@@ -10,6 +10,7 @@ import {
   formatMeasureLabel,
   formatMeters,
   boardMapForViewer,
+  gridTypeOf,
   isTokenVisibleThroughFog,
   lightSourcesForViewer,
   loadMapImageSize,
@@ -20,8 +21,16 @@ import {
   tokenFootprintPx,
   tokensForViewer,
   viewerIgnoresFog,
+  withAnnotationsOnViewerScene,
   worldSizeOf,
 } from "../../types/game";
+import {
+  distanceHexes,
+  hexCentersInBounds,
+  hexPolygonPoints,
+  snapToHexCenter,
+  snapTokenToHex,
+} from "../../utils/hexGrid";
 import {
   DND_CONDITIONS,
   getCondition,
@@ -106,6 +115,8 @@ interface GameBoardProps {
   placeOnSecretLayer?: boolean;
   /** Mestre inspeciona o mapa congelado dos jogadores. */
   watchPlayerScene?: boolean;
+  /** Incrementa para limpar marcações locais (não transmitidas). */
+  localAnnotationResetKey?: number;
   /** Remoção explícita (socket token:remove) — evita race no board:update. */
   onRemoveTokens?: (tokenIds: string[]) => void;
   /** Mestre: rolar iniciativa dos tokens selecionados (NPCs e fichas) e colocar no relógio. */
@@ -119,8 +130,11 @@ interface GameBoardProps {
 function applyMeasureSnap(
   point: { x: number; y: number },
   gridSize: number,
-  snap: MeasureSettings["snap"]
+  snap: MeasureSettings["snap"],
+  hex = false
 ) {
+  if (snap === "none") return point;
+  if (hex) return snapToHexCenter(point.x, point.y, gridSize);
   if (snap === "center") return snapToCellCenter(point.x, point.y, gridSize);
   if (snap === "corner") return snapToCellCorner(point.x, point.y, gridSize);
   return point;
@@ -167,6 +181,9 @@ function MeasureShapeGraphic({
   label,
   byUserName,
   color,
+  selected = false,
+  interactive = false,
+  onSelect,
 }: {
   shape: MeasureShape;
   from: { x: number; y: number };
@@ -175,12 +192,30 @@ function MeasureShapeGraphic({
   label: string;
   byUserName?: string;
   color?: string;
+  selected?: boolean;
+  interactive?: boolean;
+  onSelect?: () => void;
 }) {
   const midX = (from.x + to.x) / 2;
   const midY = (from.y + to.y) / 2;
   const radius = Math.hypot(to.x - from.x, to.y - from.y);
   const badgeText = byUserName ? `${byUserName}: ${label}` : label;
   const palette = measureColors(color);
+  const stroke = selected ? "#C09A5A" : palette.stroke;
+  const strokeWidth = selected ? 4 : 2.5;
+
+  function handlePointerDown(event: React.PointerEvent) {
+    if (!interactive || !onSelect) return;
+    event.stopPropagation();
+    onSelect();
+  }
+
+  const hitProps = interactive
+    ? {
+        style: { cursor: "pointer" as const },
+        onPointerDown: handlePointerDown,
+      }
+    : {};
 
   if (shape === "square") {
     const x = Math.min(from.x, to.x);
@@ -188,21 +223,34 @@ function MeasureShapeGraphic({
     const w = Math.max(4, Math.abs(to.x - from.x));
     const h = Math.max(4, Math.abs(to.y - from.y));
     return (
-      <g className="pointer-events-none">
+      <g className={interactive ? undefined : "pointer-events-none"}>
+        {interactive ? (
+          <rect
+            x={x}
+            y={y}
+            width={w}
+            height={h}
+            fill="transparent"
+            stroke="transparent"
+            strokeWidth={14}
+            {...hitProps}
+          />
+        ) : null}
         <rect
           x={x}
           y={y}
           width={w}
           height={h}
           fill={palette.fill}
-          stroke={palette.stroke}
-          strokeWidth={2.5}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          className={interactive ? "pointer-events-none" : undefined}
         />
         <MeasureBadge
           x={x + w / 2}
           y={y - 14}
           text={badgeText}
-          color={palette.stroke}
+          color={stroke}
         />
       </g>
     );
@@ -210,28 +258,41 @@ function MeasureShapeGraphic({
 
   if (shape === "circle") {
     return (
-      <g className="pointer-events-none">
+      <g className={interactive ? undefined : "pointer-events-none"}>
+        {interactive ? (
+          <circle
+            cx={from.x}
+            cy={from.y}
+            r={Math.max(4, radius)}
+            fill="transparent"
+            stroke="transparent"
+            strokeWidth={14}
+            {...hitProps}
+          />
+        ) : null}
         <circle
           cx={from.x}
           cy={from.y}
           r={Math.max(4, radius)}
           fill={palette.fill}
-          stroke={palette.stroke}
-          strokeWidth={2.5}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          className={interactive ? "pointer-events-none" : undefined}
         />
         <circle
           cx={from.x}
           cy={from.y}
           r={3.5}
-          fill={palette.stroke}
+          fill={stroke}
           stroke="#FFFFFF"
           strokeWidth={1.5}
+          className="pointer-events-none"
         />
         <MeasureBadge
           x={from.x}
           y={from.y - Math.max(4, radius) - 14}
           text={badgeText}
-          color={palette.stroke}
+          color={stroke}
         />
       </g>
     );
@@ -239,18 +300,28 @@ function MeasureShapeGraphic({
 
   if (shape === "cone") {
     return (
-      <g className="pointer-events-none">
+      <g className={interactive ? undefined : "pointer-events-none"}>
+        {interactive ? (
+          <path
+            d={conePath(from, to)}
+            fill="transparent"
+            stroke="transparent"
+            strokeWidth={14}
+            {...hitProps}
+          />
+        ) : null}
         <path
           d={conePath(from, to)}
           fill={palette.fill}
-          stroke={palette.stroke}
-          strokeWidth={2.5}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          className={interactive ? "pointer-events-none" : undefined}
         />
         <MeasureBadge
           x={midX}
           y={midY - 16}
           text={badgeText}
-          color={palette.stroke}
+          color={stroke}
         />
       </g>
     );
@@ -258,55 +329,80 @@ function MeasureShapeGraphic({
 
   if (shape === "beam") {
     return (
-      <g className="pointer-events-none">
+      <g className={interactive ? undefined : "pointer-events-none"}>
+        {interactive ? (
+          <polygon
+            points={beamPolygon(from, to, gridSize)}
+            fill="transparent"
+            stroke="transparent"
+            strokeWidth={14}
+            {...hitProps}
+          />
+        ) : null}
         <polygon
           points={beamPolygon(from, to, gridSize)}
           fill={palette.fill}
-          stroke={palette.stroke}
-          strokeWidth={2}
+          stroke={stroke}
+          strokeWidth={selected ? 3.5 : 2}
+          className={interactive ? "pointer-events-none" : undefined}
         />
         <MeasureBadge
           x={midX}
           y={midY - 16}
           text={badgeText}
-          color={palette.stroke}
+          color={stroke}
         />
       </g>
     );
   }
 
   return (
-    <g className="pointer-events-none">
+    <g className={interactive ? undefined : "pointer-events-none"}>
+      {interactive ? (
+        <line
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          stroke="transparent"
+          strokeWidth={16}
+          strokeLinecap="round"
+          {...hitProps}
+        />
+      ) : null}
       <line
         x1={from.x}
         y1={from.y}
         x2={to.x}
         y2={to.y}
-        stroke={palette.stroke}
-        strokeWidth={3}
+        stroke={stroke}
+        strokeWidth={selected ? 4.5 : 3}
         strokeLinecap="round"
+        className={interactive ? "pointer-events-none" : undefined}
       />
       <circle
         cx={from.x}
         cy={from.y}
         r={5}
         fill="#FFFFFF"
-        stroke={palette.stroke}
+        stroke={stroke}
         strokeWidth={2}
+        className="pointer-events-none"
       />
       <circle
         cx={to.x}
         cy={to.y}
         r={5}
         fill="#FFFFFF"
-        stroke={palette.stroke}
+        stroke={stroke}
         strokeWidth={2}
+        className="pointer-events-none"
       />
       <MeasureBadge
         x={midX}
         y={midY - 16}
         text={badgeText}
-        color={palette.stroke}
+        color={stroke}
       />
     </g>
   );
@@ -406,6 +502,7 @@ export function GameBoard({
   onDropCharacter,
   placeOnSecretLayer = false,
   watchPlayerScene = false,
+  localAnnotationResetKey = 0,
   onRemoveTokens,
   onRollTokenInitiative,
   highlightedTokenIds = [],
@@ -414,7 +511,7 @@ export function GameBoard({
   const viewportRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedAnnotation, setSelectedAnnotation] = useState<{
-    kind: "drawing" | "effect";
+    kind: "drawing" | "effect" | "ruler" | "local-measure";
     id: string;
   } | null>(null);
   const [conditionMenuOpen, setConditionMenuOpen] = useState(false);
@@ -459,6 +556,13 @@ export function GameBoard({
       color: string;
     }>
   >([]);
+
+  useEffect(() => {
+    if (localAnnotationResetKey > 0) {
+      setLocalStickyMeasures([]);
+    }
+  }, [localAnnotationResetKey]);
+
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [viewportSize, setViewportSize] = useState({ w: 1, h: 1 });
@@ -502,8 +606,34 @@ export function GameBoard({
     [mapBoard, viewTokens]
   );
   const gridSize = mapBoard.gridSize || 50;
+  const gridType = gridTypeOf(mapBoard);
+  const isHex = gridType === "hex";
   const mPerSquare = metersPerSquareOf(mapBoard);
   const world = worldSizeOf(mapBoard);
+  const hexCells = useMemo(
+    () =>
+      isHex ? hexCentersInBounds(world.width, world.height, gridSize) : [],
+    [isHex, world.width, world.height, gridSize]
+  );
+
+  function snapBoardPoint(x: number, y: number, footprintPx = gridSize) {
+    if (isHex) {
+      return snapTokenToHex(x, y, footprintPx, gridSize);
+    }
+    return { x: snapToGrid(x, gridSize), y: snapToGrid(y, gridSize) };
+  }
+
+  function measureCells(
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ) {
+    if (isHex) return distanceHexes(from, to, gridSize);
+    return distanceSquares5e(from, to, gridSize);
+  }
+
+  function measureLabel(cells: number) {
+    return formatMeasureLabel(cells, mPerSquare, { hex: isHex });
+  }
   const fitScale = Math.min(
     viewportSize.w / Math.max(1, world.width),
     viewportSize.h / Math.max(1, world.height)
@@ -620,7 +750,7 @@ export function GameBoard({
   }
 
   function canDeleteAnnotation(byUserId?: number) {
-    return isMaster || byUserId === currentUserId;
+    return isMaster || Number(byUserId) === Number(currentUserId);
   }
 
   function updateTokenFields(
@@ -709,19 +839,33 @@ export function GameBoard({
     if (selectedAnnotation) {
       const { kind, id } = selectedAnnotation;
       if (kind === "drawing") {
-        const drawing = board.drawings.find((item) => item.id === id);
+        const drawing = mapBoard.drawings.find((item) => item.id === id);
         if (!drawing || !canDeleteAnnotation(drawing.byUserId)) return;
-        onChangeBoard({
-          ...board,
-          drawings: board.drawings.filter((item) => item.id !== id),
-        });
-      } else {
-        const effect = board.effects.find((item) => item.id === id);
+        onChangeBoard(
+          withAnnotationsOnViewerScene(board, currentUserId, {
+            drawings: mapBoard.drawings.filter((item) => item.id !== id),
+          })
+        );
+      } else if (kind === "effect") {
+        const effect = mapBoard.effects.find((item) => item.id === id);
         if (!effect || !canDeleteAnnotation(effect.byUserId)) return;
-        onChangeBoard({
-          ...board,
-          effects: board.effects.filter((item) => item.id !== id),
-        });
+        onChangeBoard(
+          withAnnotationsOnViewerScene(board, currentUserId, {
+            effects: mapBoard.effects.filter((item) => item.id !== id),
+          })
+        );
+      } else if (kind === "ruler") {
+        const ruler = mapBoard.rulers.find((item) => item.id === id);
+        if (!ruler || !canDeleteAnnotation(ruler.byUserId)) return;
+        onChangeBoard(
+          withAnnotationsOnViewerScene(board, currentUserId, {
+            rulers: mapBoard.rulers.filter((item) => item.id !== id),
+          })
+        );
+      } else if (kind === "local-measure") {
+        setLocalStickyMeasures((prev) =>
+          prev.filter((item) => item.id !== id)
+        );
       }
       setSelectedAnnotation(null);
       return;
@@ -917,9 +1061,13 @@ export function GameBoard({
         event.preventDefault();
         const step = gridSize;
         const moves = movable.map((token) => {
-          const nextX = snapToGrid(token.x + delta.dx * step, step);
-          const nextY = snapToGrid(token.y + delta.dy * step, step);
-          return { tokenId: token.id, x: nextX, y: nextY };
+          const footprint = tokenFootprintPx(token, step);
+          const snapped = snapBoardPoint(
+            token.x + delta.dx * step,
+            token.y + delta.dy * step,
+            footprint
+          );
+          return { tokenId: token.id, x: snapped.x, y: snapped.y };
         });
         if (moves.length === 1) {
           onMoveToken(moves[0].tokenId, moves[0].x, moves[0].y, {
@@ -953,6 +1101,7 @@ export function GameBoard({
   const marqueeRef = useRef(marquee);
   const toolRef = useRef(tool);
   const gridSizeRef = useRef(gridSize);
+  const isHexRef = useRef(isHex);
   const onMoveTokenRef = useRef(onMoveToken);
   const onMoveTokensRef = useRef(onMoveTokens);
   dragTokenIdsRef.current = dragTokenIds;
@@ -964,6 +1113,7 @@ export function GameBoard({
   marqueeRef.current = marquee;
   toolRef.current = tool;
   gridSizeRef.current = gridSize;
+  isHexRef.current = isHex;
   onMoveTokenRef.current = onMoveToken;
   onMoveTokensRef.current = onMoveTokens;
 
@@ -1022,12 +1172,22 @@ export function GameBoard({
       const activeDragIds = dragTokenIdsRef.current;
       if (activeDragIds.length > 0) {
         const g = gridSizeRef.current;
+        const hex = isHexRef.current;
         const moves = activeDragIds.map((id) => {
           const live = liveDragRef.current[id];
           const token = boardTokensRef.current.find((item) => item.id === id);
-          const x = snapToGrid(live?.x ?? token?.x ?? 0, g);
-          const y = snapToGrid(live?.y ?? token?.y ?? 0, g);
-          return { tokenId: id, x, y };
+          const footprint = token ? tokenFootprintPx(token, g) : g;
+          const rawX = live?.x ?? token?.x ?? 0;
+          const rawY = live?.y ?? token?.y ?? 0;
+          if (hex) {
+            const snapped = snapTokenToHex(rawX, rawY, footprint, g);
+            return { tokenId: id, x: snapped.x, y: snapped.y };
+          }
+          return {
+            tokenId: id,
+            x: snapToGrid(rawX, g),
+            y: snapToGrid(rawY, g),
+          };
         });
         liveDragRef.current = {};
         const moveMany = onMoveTokensRef.current;
@@ -1119,13 +1279,12 @@ export function GameBoard({
               (token) => token.kind === "pc" && !token.secret
             );
       if (movers.length === 0) return;
-      const snappedX = snapToGrid(point.x, gridSize);
-      const snappedY = snapToGrid(point.y, gridSize);
+      const snapped = snapBoardPoint(point.x, point.y);
       onChangeBoard({
         ...board,
         tokens: board.tokens.map((token) => {
           if (!movers.some((item) => item.id === token.id)) return token;
-          return { ...token, x: snappedX, y: snappedY };
+          return { ...token, x: snapped.x, y: snapped.y };
         }),
       });
       return;
@@ -1146,7 +1305,7 @@ export function GameBoard({
     }
 
     if (tool === "ruler") {
-      const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap);
+      const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
       setRulerStart(snapped);
       setRulerPreview(snapped);
       return;
@@ -1160,27 +1319,28 @@ export function GameBoard({
     }
     if (tool === "ruler" && rulerStart) {
       // Só preview local — evita “replay” de ecos do socket a cada frame.
-      const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap);
+      const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
       setRulerPreview(snapped);
     }
   }
 
   function handleBoardPointerUp(event?: React.PointerEvent) {
     if (tool === "draw" && drawPoints.length > 1 && canAnnotate) {
-      onChangeBoard({
-        ...board,
-        drawings: [
-          ...board.drawings,
-          {
-            id: uid("draw"),
-            points: drawPoints,
-            color: "var(--color-crimson)",
-            width: 3,
-            byUserId: currentUserId,
-            secret: placeOnSecretLayer && isMaster ? true : undefined,
-          },
-        ],
-      });
+      onChangeBoard(
+        withAnnotationsOnViewerScene(board, currentUserId, {
+          drawings: [
+            ...mapBoard.drawings,
+            {
+              id: uid("draw"),
+              points: drawPoints,
+              color: "var(--color-crimson)",
+              width: 3,
+              byUserId: currentUserId,
+              secret: placeOnSecretLayer && isMaster ? true : undefined,
+            },
+          ],
+        })
+      );
     }
     setDrawPoints([]);
 
@@ -1227,12 +1387,10 @@ export function GameBoard({
 
   const previewSquares =
     rulerStart && rulerPreview
-      ? distanceSquares5e(rulerStart, rulerPreview, gridSize)
+      ? measureCells(rulerStart, rulerPreview)
       : null;
   const previewLabel =
-    previewSquares != null
-      ? formatMeasureLabel(previewSquares, mPerSquare)
-      : null;
+    previewSquares != null ? measureLabel(previewSquares) : null;
   const activeMeasure =
     rulerStart && rulerPreview
       ? {
@@ -1340,11 +1498,8 @@ export function GameBoard({
           const characterId = Number(raw);
           if (!characterId) return;
           const point = localPoint(event);
-          onDropCharacter(
-            characterId,
-            snapToGrid(point.x, gridSize),
-            snapToGrid(point.y, gridSize)
-          );
+          const snapped = snapBoardPoint(point.x, point.y);
+          onDropCharacter(characterId, snapped.x, snapped.y);
         }}
       >
         <div
@@ -1362,16 +1517,34 @@ export function GameBoard({
             backgroundColor: "#1A140F",
           }}
         >
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage: `
+          {isHex ? (
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full overflow-hidden"
+              width={world.width}
+              height={world.height}
+            >
+              {hexCells.map((cell) => (
+                <polygon
+                  key={`${cell.q},${cell.r}`}
+                  points={hexPolygonPoints(cell.x, cell.y, gridSize)}
+                  fill="none"
+                  stroke="rgba(235,223,196,0.28)"
+                  strokeWidth={1}
+                />
+              ))}
+            </svg>
+          ) : (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage: `
               linear-gradient(rgba(235,223,196,0.22) 1px, transparent 1px),
               linear-gradient(90deg, rgba(235,223,196,0.22) 1px, transparent 1px)
             `,
-              backgroundSize: `${gridSize}px ${gridSize}px`,
-            }}
-          />
+                backgroundSize: `${gridSize}px ${gridSize}px`,
+              }}
+            />
+          )}
 
           <svg className="absolute inset-0 h-full w-full overflow-visible">
             {mapBoard.effects
@@ -1385,7 +1558,7 @@ export function GameBoard({
                   ? Math.max(1, Math.round(effect.meters / mPerSquare))
                   : Math.max(1, Math.round(effect.radius / gridSize));
               const label =
-                effect.label || formatMeasureLabel(squares, mPerSquare);
+                effect.label || measureLabel(squares);
               const palette = measureColors(effect.color);
               return (
               <g key={effect.id}>
@@ -1419,23 +1592,40 @@ export function GameBoard({
               const selected =
                 selectedAnnotation?.kind === "drawing" &&
                 selectedAnnotation.id === drawing.id;
+              const points = drawing.points
+                .map((p) => `${p.x},${p.y}`)
+                .join(" ");
               return (
-              <polyline
-                key={drawing.id}
-                points={drawing.points.map((p) => `${p.x},${p.y}`).join(" ")}
-                fill="none"
-                stroke={selected ? "#C09A5A" : drawing.color}
-                strokeWidth={selected ? drawing.width + 2 : drawing.width}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                style={{ cursor: tool === "select" ? "pointer" : "default" }}
-                onPointerDown={(event) => {
-                  if (tool !== "select") return;
-                  event.stopPropagation();
-                  setSelection([]);
-                  setSelectedAnnotation({ kind: "drawing", id: drawing.id });
-                }}
-              />
+              <g key={drawing.id}>
+                {tool === "select" ? (
+                  <polyline
+                    points={points}
+                    fill="none"
+                    stroke="transparent"
+                    strokeWidth={Math.max(14, drawing.width + 10)}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{ cursor: "pointer" }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      setSelection([]);
+                      setSelectedAnnotation({
+                        kind: "drawing",
+                        id: drawing.id,
+                      });
+                    }}
+                  />
+                ) : null}
+                <polyline
+                  points={points}
+                  fill="none"
+                  stroke={selected ? "#C09A5A" : drawing.color}
+                  strokeWidth={selected ? drawing.width + 2 : drawing.width}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="pointer-events-none"
+                />
+              </g>
             );
             })}
             {drawPoints.length > 1 && (
@@ -1453,9 +1643,12 @@ export function GameBoard({
               const squares =
                 typeof ruler.squares === "number"
                   ? ruler.squares
-                  : distanceSquares5e(ruler.from, ruler.to, gridSize);
-              const label = formatMeasureLabel(squares, mPerSquare);
+                  : measureCells(ruler.from, ruler.to);
+              const label = measureLabel(squares);
               const shape = (ruler.shape ?? "line") as MeasureShape;
+              const selected =
+                selectedAnnotation?.kind === "ruler" &&
+                selectedAnnotation.id === ruler.id;
               return (
                 <MeasureShapeGraphic
                   key={ruler.id}
@@ -1466,23 +1659,40 @@ export function GameBoard({
                   label={label}
                   byUserName={ruler.byUserName}
                   color={ruler.color}
+                  selected={selected}
+                  interactive={tool === "select"}
+                  onSelect={() => {
+                    setSelection([]);
+                    setSelectedAnnotation({ kind: "ruler", id: ruler.id });
+                  }}
                 />
               );
             })}
-            {localStickyMeasures.map((mark) => (
-              <MeasureShapeGraphic
-                key={mark.id}
-                shape={mark.shape}
-                from={mark.from}
-                to={mark.to}
-                gridSize={gridSize}
-                label={formatMeasureLabel(
-                  distanceSquares5e(mark.from, mark.to, gridSize),
-                  mPerSquare
-                )}
-                color={mark.color}
-              />
-            ))}
+            {localStickyMeasures.map((mark) => {
+              const selected =
+                selectedAnnotation?.kind === "local-measure" &&
+                selectedAnnotation.id === mark.id;
+              return (
+                <MeasureShapeGraphic
+                  key={mark.id}
+                  shape={mark.shape}
+                  from={mark.from}
+                  to={mark.to}
+                  gridSize={gridSize}
+                  label={measureLabel(measureCells(mark.from, mark.to))}
+                  color={mark.color}
+                  selected={selected}
+                  interactive={tool === "select"}
+                  onSelect={() => {
+                    setSelection([]);
+                    setSelectedAnnotation({
+                      kind: "local-measure",
+                      id: mark.id,
+                    });
+                  }}
+                />
+              );
+            })}
             {activeMeasure ? (
               <MeasureShapeGraphic
                 shape={activeMeasure.shape}
@@ -1881,7 +2091,7 @@ export function GameBoard({
                     top: inset,
                     width: body,
                     height: body,
-                    borderRadius: span <= 1 ? "9999px" : "10%",
+                    borderRadius: span <= 2 ? "9999px" : "10%",
                     backgroundColor: token.color,
                     borderStyle: "solid",
                     borderWidth: 1,
@@ -2248,8 +2458,12 @@ export function GameBoard({
           <div className="flex flex-wrap items-center gap-2">
             {selectedAnnotation ? (
               <span>
-                {selectedAnnotation.kind === "effect" ? "Marcação" : "Desenho"}{" "}
-                selecionado
+                {selectedAnnotation.kind === "effect"
+                  ? "Marcação"
+                  : selectedAnnotation.kind === "drawing"
+                    ? "Desenho"
+                    : "Medida"}{" "}
+                selecionada
               </span>
             ) : selectedIds.length > 1 ? (
               <span>{selectedIds.length} tokens selecionados</span>

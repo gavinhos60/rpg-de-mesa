@@ -93,6 +93,7 @@ export type PreparedMap = {
   mapHeight?: number;
   gridSize?: number;
   metersPerSquare?: number;
+  gridType?: "square" | "hex";
 };
 
 /**
@@ -105,6 +106,7 @@ export type PlayerMapView = {
   mapHeight?: number;
   gridSize?: number;
   metersPerSquare?: number;
+  gridType?: "square" | "hex";
   drawings?: BoardDrawing[];
   effects?: BoardEffect[];
   rulers?: BoardRuler[];
@@ -124,7 +126,9 @@ export type BoardState = {
   mapHeight?: number;
   /** Tamanho do quadrado da grade em pixels (só para render). */
   gridSize: number;
-  /** Metros por quadrado (padrão D&D 5e = 1,5 m). */
+  /** Formato da grade: quadrado (padrão) ou hexagonal. */
+  gridType?: "square" | "hex";
+  /** Metros por quadrado (padrão D&D 5e = 1,5 m; hex = 10 km). */
   metersPerSquare: number;
   /** @deprecated mantido para sessões antigas; migrado para metersPerSquare. */
   feetPerSquare?: number;
@@ -270,8 +274,14 @@ export const DEFAULT_WORLD_WIDTH = DEFAULT_MAP_COLS * 50;
 export const DEFAULT_WORLD_HEIGHT = DEFAULT_MAP_ROWS * 50;
 /** Padrão D&D 5e: 1 quadrado = 5 ft ≈ 1,5 m. */
 export const DEFAULT_METERS_PER_SQUARE = 1.5;
+/** Hexágono: 1 célula = 10 km. */
+export const DEFAULT_HEX_METERS = 10_000;
 export const DEFAULT_GRID_SIZE = 50;
 export const DEFAULT_VISION_RADIUS_SQUARES = 3;
+
+export function gridTypeOf(board: { gridType?: string | null }): "square" | "hex" {
+  return board.gridType === "hex" ? "hex" : "square";
+}
 
 /**
  * Converte valor legado (pixels) para quadrados quando necessário.
@@ -317,6 +327,7 @@ export function snapshotPlayerMapView(board: BoardState): PlayerMapView {
     mapHeight: board.mapHeight,
     gridSize: board.gridSize,
     metersPerSquare: metersPerSquareOf(board),
+    gridType: gridTypeOf(board),
     drawings: board.drawings,
     effects: board.effects,
     rulers: board.rulers,
@@ -353,6 +364,7 @@ function applyPlayerMapView(
     mapHeight: view.mapHeight,
     gridSize: view.gridSize ?? board.gridSize,
     metersPerSquare: view.metersPerSquare ?? board.metersPerSquare,
+    gridType: view.gridType ?? board.gridType,
     drawings: view.drawings ?? [],
     effects: view.effects ?? [],
     rulers: view.rulers ?? [],
@@ -391,6 +403,102 @@ export function boardMapForViewer(
     return applyPlayerMapView(board, board.playerMapView);
   }
   return board;
+}
+
+/** Grava anotações no cenário que o jogador está vendo (ativo ou congelado). */
+export function withAnnotationsOnViewerScene(
+  board: BoardState,
+  userId: number,
+  patch: {
+    drawings?: BoardState["drawings"];
+    effects?: BoardState["effects"];
+    rulers?: BoardState["rulers"];
+  }
+): BoardState {
+  if (!playerIsOnFrozenScene(board, userId)) {
+    return {
+      ...board,
+      ...(patch.drawings ? { drawings: patch.drawings } : {}),
+      ...(patch.effects ? { effects: patch.effects } : {}),
+      ...(patch.rulers ? { rulers: patch.rulers } : {}),
+    };
+  }
+
+  const key = String(userId);
+  const views = board.playerViewsByUserId ?? {};
+  const current =
+    views[key] ??
+    (board.playerMapView && Object.keys(views).length === 0
+      ? board.playerMapView
+      : null);
+  if (!current) {
+    return {
+      ...board,
+      ...(patch.drawings ? { drawings: patch.drawings } : {}),
+      ...(patch.effects ? { effects: patch.effects } : {}),
+      ...(patch.rulers ? { rulers: patch.rulers } : {}),
+    };
+  }
+
+  const nextView: PlayerMapView = {
+    ...current,
+    ...(patch.drawings ? { drawings: patch.drawings } : {}),
+    ...(patch.effects ? { effects: patch.effects } : {}),
+    ...(patch.rulers ? { rulers: patch.rulers } : {}),
+  };
+
+  return {
+    ...board,
+    playerViewsByUserId: {
+      ...views,
+      [key]: nextView,
+    },
+  };
+}
+
+/** Remove só as anotações do userId no mapa ativo e na view congelada dele. */
+export function clearOwnAnnotations(
+  board: BoardState,
+  userId: number
+): BoardState {
+  const uid = Number(userId);
+  const keep = <T extends { byUserId?: number }>(items: T[]) =>
+    items.filter((item) => Number(item.byUserId) !== uid);
+
+  let next: BoardState = {
+    ...board,
+    drawings: keep(board.drawings),
+    effects: keep(board.effects),
+    rulers: keep(board.rulers),
+  };
+
+  const key = String(uid);
+  const views = { ...(next.playerViewsByUserId ?? {}) };
+  const mine = views[key];
+  if (mine) {
+    views[key] = {
+      ...mine,
+      drawings: keep(mine.drawings ?? []),
+      effects: keep(mine.effects ?? []),
+      rulers: keep(mine.rulers ?? []),
+    };
+    next = { ...next, playerViewsByUserId: views };
+  } else if (
+    next.playerMapView &&
+    Object.keys(views).length === 0
+  ) {
+    next = {
+      ...next,
+      playerMapView: {
+        ...next.playerMapView,
+        drawings: keep(next.playerMapView.drawings ?? []),
+        effects: keep(next.playerMapView.effects ?? []),
+        rulers: keep(next.playerMapView.rulers ?? []),
+      },
+    };
+  }
+
+  return next;
 }
 
 /** Tokens visíveis no cenário atual do espectador. */
@@ -455,6 +563,7 @@ export function emptyBoardState(): BoardState {
     mapWidth: DEFAULT_MAP_COLS,
     mapHeight: DEFAULT_MAP_ROWS,
     gridSize: DEFAULT_GRID_SIZE,
+    gridType: "square",
     metersPerSquare: DEFAULT_METERS_PER_SQUARE,
     tokens: [],
     drawings: [],
@@ -470,6 +579,7 @@ export function metersPerSquareOf(board: BoardState): number {
   if (typeof board.metersPerSquare === "number" && board.metersPerSquare > 0) {
     return board.metersPerSquare;
   }
+  if (gridTypeOf(board) === "hex") return DEFAULT_HEX_METERS;
   // Sessões antigas usavam feetPerSquare (5 ft ≈ 1,5 m).
   if (typeof board.feetPerSquare === "number" && board.feetPerSquare > 0) {
     return Math.round(board.feetPerSquare * 0.3 * 100) / 100;
@@ -478,6 +588,10 @@ export function metersPerSquareOf(board: BoardState): number {
 }
 
 export function formatMeters(value: number): string {
+  if (value >= 1000) {
+    const km = Math.round((value / 1000) * 10) / 10;
+    return Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`;
+  }
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? `${rounded} m` : `${rounded.toFixed(1)} m`;
 }
@@ -536,10 +650,12 @@ export function distanceSquares5e(
 
 export function formatMeasureLabel(
   squares: number,
-  metersPerSquare: number
+  metersPerSquare: number,
+  options?: { hex?: boolean }
 ): string {
   const meters = Math.round(squares * metersPerSquare * 10) / 10;
-  return `${formatMeters(meters)} (${squares}□)`;
+  const cellMark = options?.hex ? "⬡" : "□";
+  return `${formatMeters(meters)} (${squares}${cellMark})`;
 }
 
 export function snapToGrid(value: number, gridSize: number): number {
