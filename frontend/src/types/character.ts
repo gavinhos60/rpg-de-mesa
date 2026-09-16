@@ -327,6 +327,18 @@ export interface CharacterLoreDetails {
     flaws: string;
 }
 
+export type RestKind = "short" | "long";
+
+/** Estado persistido de recursos de combate na ficha (JSON). */
+export interface CharacterResourcesState {
+  /** Pontos/usos restantes por id de recurso (ex.: monk-ki). */
+  pools: Record<string, number>;
+  /** Quantidade gasta de espaços por círculo (índice 0 = 1º). */
+  spellSlotsSpent: number[];
+  /** Espaços de Magia de Pacto (bruxo) já gastos. */
+  pactSlotsSpent: number;
+}
+
 export interface CharacterFormData {
     name: string;
     /** Foto do personagem (data URL ou URL). */
@@ -356,6 +368,8 @@ export interface CharacterFormData {
     hitPoints: number | null;
     asiSelections: Record<string, AsiSelection>;
     featureChoices: Record<string, string[]>;
+    /** Recursos de combate: ki, fúrias, espaços gastos etc. */
+    resources?: CharacterResourcesState;
 
     skillProficiencies?: {
         class?: Skill[];

@@ -19,9 +19,15 @@ interface PlayableSheetDrawerProps {
   onClose: () => void;
   onRollSkill: (skill: Skill, options?: { advantage?: boolean }) => void;
   onRollAbility: (ability: Ability, options?: { advantage?: boolean }) => void;
-  onUseFeature: (name: string, description: string) => void;
+  onUseFeature: (
+    name: string,
+    description: string,
+    abilityId?: string
+  ) => void;
   onCastSpell: (spell: Spell, options?: { advantage?: boolean }) => void;
   readOnly?: boolean;
+  /** Mestre pode gerenciar inventário mesmo em ficha “somente leitura”. */
+  allowInventoryEdit?: boolean;
   inventoryRecipients?: Array<{ id: number; name: string }>;
   inventoryBusy?: boolean;
   onUpdateWallet?: (wallet: CharacterWallet) => Promise<void>;
@@ -48,6 +54,7 @@ export function PlayableSheetDrawer({
   onUseFeature,
   onCastSpell,
   readOnly = false,
+  allowInventoryEdit = false,
   inventoryRecipients = [],
   inventoryBusy = false,
   onUpdateWallet,
@@ -200,7 +207,10 @@ export function PlayableSheetDrawer({
             onUseFeature={onUseFeature}
             onCastSpell={onCastSpell}
             inventoryManage={
-              !readOnly && onUpdateWallet && onDiscardItem && onTransferItem
+              (!readOnly || allowInventoryEdit) &&
+              onUpdateWallet &&
+              onDiscardItem &&
+              onTransferItem
                 ? {
                     recipients: inventoryRecipients,
                     busy: inventoryBusy,

@@ -10,6 +10,7 @@ import {
 import { getMyCharacters, getCharacterById } from "../services/character.service";
 import {
   updateCharacterWallet,
+  updateCharacterResources,
   discardCharacterItem,
   transferCharacterItem,
   type InventoryItemAction,
@@ -19,6 +20,7 @@ import {
   emitBoardUpdate,
   emitChatMessage,
   emitCharacterAction,
+  emitCharacterUpdated,
   emitCheckRequest,
   emitCombatAdd,
   emitCombatEnd,
@@ -52,9 +54,18 @@ import type {
   Ability,
   CharacterFormData,
   CharacterWallet,
+  RestKind,
   Skill,
   Spell,
 } from "../types/character";
+import {
+  applyRestToSheet,
+  ensureResourcesSynced,
+  normalizeResourcesState,
+  resolveFeatureSpend,
+  spendFeatureOnSheet,
+  spendSpellSlot,
+} from "../utils/characterResources";
 import {
   buildFeatureAction,
   buildSpellAction,
@@ -78,6 +89,21 @@ import { listPapiros, publishPapyrus } from "../services/papiros.service";
 import { listShops } from "../services/mercado.service";
 import type { Papyrus } from "../types/papiros";
 import type { Shop } from "../types/mercado";
+
+function apiErrorMessage(err: unknown, fallback: string): string {
+  if (
+    err &&
+    typeof err === "object" &&
+    "response" in err &&
+    (err as { response?: { data?: { error?: string } } }).response?.data?.error
+  ) {
+    return String(
+      (err as { response: { data: { error: string } } }).response.data.error
+    );
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
+}
 
 export function GameRoom() {
   const { id } = useParams();
@@ -116,6 +142,7 @@ export function GameRoom() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [restBusy, setRestBusy] = useState(false);
   const [error, setError] = useState("");
   const [openCharacter, setOpenCharacter] =
     useState<CampaignCharacterLite | null>(null);
@@ -286,6 +313,14 @@ export function GameRoom() {
             });
           }
         });
+
+        currentSocket.on(
+          "character:updated",
+          (payload: { character: CampaignCharacterLite }) => {
+            if (!payload?.character?.id) return;
+            applyCharacterUpdate(payload.character);
+          }
+        );
 
         currentSocket.on("check:request", (request: CheckRequest) => {
           const mine = myCharactersRef.current;
@@ -611,9 +646,176 @@ export function GameRoom() {
         character.id === updated.id ? { ...character, ...patch } : character
       )
     );
+    setMasterCharacters((previous) =>
+      previous.map((character) =>
+        character.id === updated.id ? { ...character, ...patch } : character
+      )
+    );
     setOpenCharacter((current) =>
       current?.id === updated.id ? { ...current, ...patch } : current
     );
+  }
+
+  async function persistSheetResources(
+    characterId: number,
+    sheet: CharacterFormData
+  ): Promise<CampaignCharacterLite | null> {
+    const synced = ensureResourcesSynced(sheet);
+    const resources = normalizeResourcesState(synced.resources);
+    const saved = await updateCharacterResources(characterId, resources);
+    const lite: CampaignCharacterLite = {
+      id: saved.id,
+      name: saved.name,
+      className: saved.className,
+      race: saved.race,
+      level: saved.level,
+      avatar: saved.avatar,
+      sheet: saved.sheet,
+      playerId: saved.playerId,
+      player: saved.player,
+    };
+    applyCharacterUpdate(lite);
+    if (socket && sessionId) {
+      await emitCharacterUpdated(socket, sessionId, lite);
+    }
+    return lite;
+  }
+
+  async function handleUseFeature(
+    name: string,
+    description: string,
+    abilityId?: string
+  ) {
+    if (!socket || !sessionId || !user || !openCharacter) return;
+    await withActionBusy("Enviando ação…", async () => {
+      const sheet =
+        openCharacter.sheet && typeof openCharacter.sheet === "object"
+          ? (openCharacter.sheet as CharacterFormData)
+          : null;
+      if (!sheet) {
+        alert("Ficha incompleta.");
+        return;
+      }
+
+      const rule = resolveFeatureSpend(abilityId, name, description, sheet);
+      if (rule) {
+        const spent = spendFeatureOnSheet(sheet, abilityId, name, description);
+        if (!spent.ok) {
+          alert(spent.error);
+          return;
+        }
+        await persistSheetResources(openCharacter.id, spent.sheet);
+      }
+
+      const action = buildFeatureAction(name, description);
+      const result = await emitCharacterAction(socket, sessionId, {
+        characterId: openCharacter.id,
+        characterName: openCharacter.name,
+        ...action,
+        userName: user.name,
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha ao enviar habilidade");
+      }
+    });
+  }
+
+  async function handleCastSpell(
+    spell: Spell,
+    options?: { advantage?: boolean }
+  ) {
+    if (!socket || !sessionId || !user || !openCharacter) return;
+    const sheet =
+      openCharacter.sheet && typeof openCharacter.sheet === "object"
+        ? (openCharacter.sheet as CharacterFormData)
+        : null;
+    if (!sheet) {
+      alert("Ficha incompleta para conjurar magia.");
+      return;
+    }
+    await withActionBusy("Conjurando…", async () => {
+      const spent = spendSpellSlot(sheet, spell.level);
+      if (!spent.ok) {
+        alert(spent.error);
+        return;
+      }
+      if (spell.level > 0) {
+        await persistSheetResources(openCharacter.id, spent.sheet);
+      }
+
+      const action = buildSpellAction(spent.sheet, spell);
+      const result = await emitCharacterAction(socket, sessionId, {
+        characterId: openCharacter.id,
+        characterName: openCharacter.name,
+        ...action,
+        userName: user.name,
+        advantage: Boolean(options?.advantage),
+      });
+      if (!result.ok) {
+        alert(result.error || "Falha ao conjurar magia");
+      }
+    });
+  }
+
+  async function handlePartyRest(kind: RestKind) {
+    if (!isMaster) return;
+    const targets = [
+      ...characters,
+      ...masterCharacters.filter(
+        (mine) => !characters.some((character) => character.id === mine.id)
+      ),
+    ];
+    if (targets.length === 0) {
+      alert("Nenhum personagem na mesa para descansar.");
+      return;
+    }
+    const label = kind === "short" ? "Descanso curto" : "Descanso longo";
+    if (
+      !window.confirm(
+        `${label} para ${targets.length} personagem(ns)? Recursos serão recuperados conforme as regras.`
+      )
+    ) {
+      return;
+    }
+
+    setRestBusy(true);
+    setActionBusy(`${label}…`);
+    try {
+      for (const character of targets) {
+        let sheet =
+          character.sheet && typeof character.sheet === "object"
+            ? (character.sheet as CharacterFormData)
+            : null;
+        if (!sheet) {
+          try {
+            const full = await getCharacterById(character.id);
+            sheet =
+              full.sheet && typeof full.sheet === "object"
+                ? (full.sheet as CharacterFormData)
+                : null;
+          } catch {
+            continue;
+          }
+        }
+        if (!sheet) continue;
+        const rested = applyRestToSheet(sheet, kind);
+        await persistSheetResources(character.id, rested);
+      }
+      if (socket && sessionId && user) {
+        await emitChatMessage(
+          socket,
+          sessionId,
+          `✦ ${label} — o grupo recupera forças.`,
+          user.name
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Falha ao aplicar o descanso.");
+    } finally {
+      setRestBusy(false);
+      setActionBusy(null);
+    }
   }
 
   async function handleUpdateWallet(wallet: CharacterWallet) {
@@ -636,6 +838,10 @@ export function GameRoom() {
       try {
         const updated = await discardCharacterItem(openCharacter.id, payload);
         applyCharacterUpdate(updated);
+      } catch (err) {
+        console.error(err);
+        alert(apiErrorMessage(err, "Não foi possível remover o item."));
+        throw err;
       } finally {
         setInventoryBusy(false);
       }
@@ -646,12 +852,23 @@ export function GameRoom() {
     payload: InventoryItemAction & { targetCharacterId: number }
   ) {
     if (!openCharacter) return;
+    if (
+      !Number.isFinite(payload.targetCharacterId) ||
+      payload.targetCharacterId <= 0
+    ) {
+      alert("Escolha um personagem destinatário.");
+      return;
+    }
     await withActionBusy("Transferindo item…", async () => {
       setInventoryBusy(true);
       try {
         const result = await transferCharacterItem(openCharacter.id, payload);
         applyCharacterUpdate(result.from);
         applyCharacterUpdate(result.to);
+      } catch (err) {
+        console.error(err);
+        alert(apiErrorMessage(err, "Não foi possível enviar o item."));
+        throw err;
       } finally {
         setInventoryBusy(false);
       }
@@ -716,50 +933,6 @@ export function GameRoom() {
       });
       if (!result.ok) {
         alert(result.error || "Falha na rolagem");
-      }
-    });
-  }
-
-  async function handleUseFeature(name: string, description: string) {
-    if (!socket || !sessionId || !user || !openCharacter) return;
-    await withActionBusy("Enviando ação…", async () => {
-      const action = buildFeatureAction(name, description);
-      const result = await emitCharacterAction(socket, sessionId, {
-        characterId: openCharacter.id,
-        characterName: openCharacter.name,
-        ...action,
-        userName: user.name,
-      });
-      if (!result.ok) {
-        alert(result.error || "Falha ao enviar habilidade");
-      }
-    });
-  }
-
-  async function handleCastSpell(
-    spell: Spell,
-    options?: { advantage?: boolean }
-  ) {
-    if (!socket || !sessionId || !user || !openCharacter) return;
-    const sheet =
-      openCharacter.sheet && typeof openCharacter.sheet === "object"
-        ? (openCharacter.sheet as CharacterFormData)
-        : null;
-    if (!sheet) {
-      alert("Ficha incompleta para conjurar magia.");
-      return;
-    }
-    await withActionBusy("Conjurando…", async () => {
-      const action = buildSpellAction(sheet, spell);
-      const result = await emitCharacterAction(socket, sessionId, {
-        characterId: openCharacter.id,
-        characterName: openCharacter.name,
-        ...action,
-        userName: user.name,
-        advantage: Boolean(options?.advantage),
-      });
-      if (!result.ok) {
-        alert(result.error || "Falha ao conjurar magia");
       }
     });
   }
@@ -1200,6 +1373,8 @@ export function GameRoom() {
                             : current
                         );
                       }}
+                      onRest={handlePartyRest}
+                      restBusy={restBusy}
                     />
                   ) : (
                     <PlayerPanel
@@ -1351,6 +1526,7 @@ export function GameRoom() {
         <PlayableSheetDrawer
           character={openCharacter}
           readOnly={sheetReadOnly}
+          allowInventoryEdit={isMaster}
           onClose={() => setOpenCharacter(null)}
           onRollSkill={(skill: Skill, options) =>
             handleSheetRoll("skill", skill, options)
@@ -1360,8 +1536,15 @@ export function GameRoom() {
           }
           onUseFeature={handleUseFeature}
           onCastSpell={handleCastSpell}
-          inventoryRecipients={characters
-            .filter((character) => character.id !== openCharacter.id)
+          inventoryRecipients={[
+            ...characters,
+            ...masterCharacters,
+          ]
+            .filter(
+              (character, index, all) =>
+                character.id !== openCharacter.id &&
+                all.findIndex((item) => item.id === character.id) === index
+            )
             .map((character) => ({
               id: character.id,
               name: character.name,

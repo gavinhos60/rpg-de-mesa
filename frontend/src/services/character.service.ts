@@ -1,5 +1,9 @@
 import { api } from "./api";
-import type { CharacterFormData, CharacterWallet } from "../types/character";
+import type {
+  CharacterFormData,
+  CharacterResourcesState,
+  CharacterWallet,
+} from "../types/character";
 import { DND_CLASSES } from "../data/dnd/classes";
 import { getRaceDisplayName } from "../data/dnd/raceResolution";
 import { resolveCharacterWallet } from "../utils/wallet";
@@ -185,6 +189,17 @@ export async function updateCharacterWallet(
   const response = await api.patch<SavedCharacter>(
     `/characters/${characterId}/wallet`,
     wallet
+  );
+  return response.data;
+}
+
+export async function updateCharacterResources(
+  characterId: number,
+  resources: CharacterResourcesState
+): Promise<SavedCharacter> {
+  const response = await api.patch<SavedCharacter>(
+    `/characters/${characterId}/resources`,
+    resources
   );
   return response.data;
 }

@@ -17,6 +17,7 @@ import {
     getUnlockedClassAbilities,
     type ClassAbility,
 } from "../../data/dnd/classAbilities";
+import { listResourcePools } from "../../utils/characterResources";
 import {
     FOUR_ELEMENTS_DISCIPLINE_KEY,
     getChoosableElementalDisciplines,
@@ -36,7 +37,7 @@ interface AbilityTabsProps {
     /** Visual denser for the final sheet parchment look */
     variant?: "wizard" | "sheet";
     /** Clique em traço/habilidade (ficha em jogo). */
-    onUseFeature?: (name: string, description: string) => void;
+    onUseFeature?: (name: string, description: string, abilityId?: string) => void;
 }
 
 export function CharacterAbilityTabs({
@@ -175,7 +176,7 @@ function RaceAbilitiesPanel({
     race: CharacterRace | undefined;
     subraceName?: string;
     card: { borderColor: string; backgroundColor: string };
-    onUseFeature?: (name: string, description: string) => void;
+    onUseFeature?: (name: string, description: string, abilityId?: string) => void;
 }) {
     if (!race) {
         return (
@@ -284,7 +285,7 @@ function ClassAbilitiesPanel({
     subclassName?: string;
     card: { borderColor: string; backgroundColor: string };
     variant: "wizard" | "sheet";
-    onUseFeature?: (name: string, description: string) => void;
+    onUseFeature?: (name: string, description: string, abilityId?: string) => void;
 }) {
     const abilities = getUnlockedClassAbilities(classId, subclassId, level)
         .filter((ability) => !ability.id.includes("-asi-"))
@@ -295,14 +296,41 @@ function ClassAbilitiesPanel({
                 : Number(Boolean(a.subclassId)) - Number(Boolean(b.subclassId))
         );
 
-    const resources = getClassResourceSummaries(classId, level);
+    const trackedPools = listResourcePools(data).filter(
+        (pool) => pool.classId === classId
+    );
+    const trackedNames = new Set(trackedPools.map((pool) => pool.name));
+    const resources = getClassResourceSummaries(classId, level).filter(
+        (resource) => !trackedNames.has(resource.name)
+    );
     const showFourElements =
         classId === "monk" && subclassId === "way-of-four-elements" && level >= 3;
 
     return (
         <div>
-            {resources.length > 0 && (
+            {(trackedPools.length > 0 || resources.length > 0) && (
                 <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {trackedPools.map((pool) => (
+                        <div key={pool.id} className="border p-4" style={card}>
+                            <p className="text-xs text-[var(--color-ink-soft)]">{className}</p>
+                            <p className="mt-1 text-[var(--color-ink)]" style={cinzel}>
+                                {pool.name}
+                            </p>
+                            <p
+                                className="mt-2 text-2xl text-[var(--color-crimson)]"
+                                style={{ ...cinzel, fontWeight: 600 }}
+                            >
+                                {pool.current}
+                                <span className="text-base text-[var(--color-ink-soft)]">
+                                    /{pool.max}
+                                </span>
+                            </p>
+                            <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
+                                Recupera em descanso{" "}
+                                {pool.recovery === "short" ? "curto (ou longo)" : "longo"}
+                            </p>
+                        </div>
+                    ))}
                     {resources.map((resource) => (
                         <div key={resource.name} className="border p-4" style={card}>
                             <p className="text-xs text-[var(--color-ink-soft)]">{className}</p>
@@ -522,7 +550,7 @@ function AbilityCard({
     className: string;
     subclassName?: string;
     card: { borderColor: string; backgroundColor: string };
-    onUseFeature?: (name: string, description: string) => void;
+    onUseFeature?: (name: string, description: string, abilityId?: string) => void;
 }) {
     const body = (
         <>
@@ -551,7 +579,7 @@ function AbilityCard({
             <p className="text-sm leading-6 text-[var(--color-ink-muted)]">{ability.description}</p>
             {onUseFeature && (
                 <p className="mt-2 text-[10px] uppercase tracking-wide text-[var(--color-crimson)]">
-                    Clique para enviar ao chat
+                    Clique para usar (gasta recurso se aplicável)
                 </p>
             )}
         </>
@@ -561,7 +589,7 @@ function AbilityCard({
         return (
             <button
                 type="button"
-                onClick={() => onUseFeature(ability.name, ability.description)}
+                onClick={() => onUseFeature(ability.name, ability.description, ability.id)}
                 className="block w-full border p-4 text-left transition hover:border-[var(--color-crimson)]"
                 style={card}
             >

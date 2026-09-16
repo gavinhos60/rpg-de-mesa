@@ -685,6 +685,37 @@ async function requireOwnedCharacter(characterId: number, userId: number) {
   return character;
 }
 
+/** Dono da ficha ou mestre da campanha do personagem. */
+async function requireOwnedOrCampaignMaster(
+  characterId: number,
+  userId: number
+) {
+  const character = await prisma.character.findUnique({
+    where: { id: characterId },
+  });
+  if (!character) throw new Error("CHARACTER_NOT_FOUND");
+  if (character.playerId === userId) return character;
+
+  if (character.campaignId == null) {
+    throw new Error("CHARACTER_FORBIDDEN");
+  }
+
+  const membership = await prisma.campaignMember.findUnique({
+    where: {
+      userId_campaignId: {
+        userId,
+        campaignId: character.campaignId,
+      },
+    },
+  });
+
+  if (membership?.role !== "MASTER") {
+    throw new Error("CHARACTER_FORBIDDEN");
+  }
+
+  return character;
+}
+
 export async function updateCharacterWallet(
   characterId: number,
   authenticatedUserId: number,
@@ -694,12 +725,92 @@ export async function updateCharacterWallet(
     pp?: number;
   }
 ) {
-  const character = await requireOwnedCharacter(
+  const character = await requireOwnedOrCampaignMaster(
     characterId,
     authenticatedUserId
   );
   const sheetRoot = asSheetRoot(character.sheet);
   sheetRoot.wallet = normalizeWalletInput(walletInput);
+
+  return prisma.character.update({
+    where: { id: characterId },
+    data: { sheet: sheetRoot as Prisma.InputJsonValue },
+    include: characterInclude,
+  });
+}
+
+/** Dono ou mestre da campanha pode atualizar recursos (descanso / gasto). */
+export async function updateCharacterResources(
+  characterId: number,
+  authenticatedUserId: number,
+  resources: {
+    pools?: Record<string, number>;
+    spellSlotsSpent?: number[];
+    pactSlotsSpent?: number;
+  }
+) {
+  const character = await prisma.character.findUnique({
+    where: { id: characterId },
+  });
+  if (!character) throw new Error("CHARACTER_NOT_FOUND");
+
+  const isOwner = character.playerId === authenticatedUserId;
+  let isMaster = false;
+  if (character.campaignId != null) {
+    const membership = await prisma.campaignMember.findUnique({
+      where: {
+        userId_campaignId: {
+          userId: authenticatedUserId,
+          campaignId: character.campaignId,
+        },
+      },
+    });
+    isMaster = membership?.role === "MASTER";
+  }
+
+  if (!isOwner && !isMaster) {
+    throw new Error("CHARACTER_FORBIDDEN");
+  }
+
+  const sheetRoot = asSheetRoot(character.sheet);
+  const prev =
+    sheetRoot.resources &&
+    typeof sheetRoot.resources === "object" &&
+    !Array.isArray(sheetRoot.resources)
+      ? (sheetRoot.resources as Record<string, unknown>)
+      : {};
+
+  const poolsRaw =
+    resources.pools && typeof resources.pools === "object"
+      ? resources.pools
+      : (prev.pools as Record<string, number> | undefined) ?? {};
+
+  const pools: Record<string, number> = {};
+  for (const [key, value] of Object.entries(poolsRaw)) {
+    pools[key] = Math.max(0, Math.floor(Number(value) || 0));
+  }
+
+  const spentSrc = Array.isArray(resources.spellSlotsSpent)
+    ? resources.spellSlotsSpent
+    : Array.isArray(prev.spellSlotsSpent)
+      ? (prev.spellSlotsSpent as unknown[])
+      : [];
+  const spellSlotsSpent = Array.from({ length: 9 }, (_, index) =>
+    Math.max(0, Math.floor(Number(spentSrc[index]) || 0))
+  );
+
+  const pactSlotsSpent = Math.max(
+    0,
+    Math.floor(
+      Number(
+        resources.pactSlotsSpent != null
+          ? resources.pactSlotsSpent
+          : prev.pactSlotsSpent
+      ) || 0
+    )
+  );
+
+  sheetRoot.resources = { pools, spellSlotsSpent, pactSlotsSpent };
 
   return prisma.character.update({
     where: { id: characterId },
@@ -718,7 +829,7 @@ export async function discardCharacterItem(
     quantity?: number;
   }
 ) {
-  const character = await requireOwnedCharacter(
+  const character = await requireOwnedOrCampaignMaster(
     characterId,
     authenticatedUserId
   );
@@ -759,7 +870,10 @@ export async function transferCharacterItem(
     targetCharacterId: number;
   }
 ) {
-  const source = await requireOwnedCharacter(characterId, authenticatedUserId);
+  const source = await requireOwnedOrCampaignMaster(
+    characterId,
+    authenticatedUserId
+  );
   if (source.campaignId == null) {
     throw new Error("CHARACTER_NOT_IN_CAMPAIGN");
   }

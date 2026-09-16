@@ -24,6 +24,7 @@ import {
 } from "../../data/dnd/monsters";
 import { monsterPortraitUrl } from "../../data/dnd/monsterPortrait";
 import { hitPointsFromSheet } from "../../utils/characterCombat";
+import { kilogramsToPounds } from "../../data/dnd/equipment";
 import { grantCustomItem } from "../../services/character.service";
 import type { BoardTool } from "./GameBoard";
 import { RibbonButton } from "../icons/MedievalIcons";
@@ -86,6 +87,8 @@ interface MasterPanelProps {
   onCombatEnd?: () => void;
   onCloseSession?: () => void;
   onCharacterUpdated?: (character: CampaignCharacterLite) => void;
+  onRest?: (kind: "short" | "long") => void | Promise<void>;
+  restBusy?: boolean;
   placeOnSecretLayer: boolean;
   onPlaceOnSecretLayerChange: (enabled: boolean) => void;
   watchPlayerScene?: boolean;
@@ -163,6 +166,8 @@ export function MasterPanel({
   onCombatEnd,
   onCloseSession,
   onCharacterUpdated,
+  onRest,
+  restBusy = false,
   placeOnSecretLayer,
   onPlaceOnSecretLayerChange,
   watchPlayerScene = false,
@@ -232,8 +237,6 @@ export function MasterPanel({
   const [checkKey, setCheckKey] = useState<string>("perception");
   const [targetCharacterId, setTargetCharacterId] = useState<string>("");
   const [initiativeTargetId, setInitiativeTargetId] = useState<string>("");
-  const [clockNpcName, setClockNpcName] = useState("");
-  const [clockNpcInit, setClockNpcInit] = useState("10");
   const [itemTargetId, setItemTargetId] = useState<string>("");
   const [itemName, setItemName] = useState("");
   const [itemDescription, setItemDescription] = useState("");
@@ -599,9 +602,10 @@ export function MasterPanel({
 
     const quantity = Math.max(1, Math.floor(Number(itemQuantity) || 1));
     const weightParsed = Number(String(itemWeight).replace(",", "."));
+    // UI pede kg; a ficha guarda peso em libras (padrão D&D).
     const weight =
       itemWeight.trim() !== "" && Number.isFinite(weightParsed) && weightParsed >= 0
-        ? weightParsed
+        ? kilogramsToPounds(weightParsed)
         : undefined;
     setGrantingItem(true);
     setGrantItemMessage("");
@@ -1662,6 +1666,43 @@ export function MasterPanel({
               }}
             >
               <h4
+                className="mb-2 text-xs tracking-wide text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+              >
+                Descanso
+              </h4>
+              <p className="mb-2 text-[10px] text-[var(--color-ink-soft)]">
+                Recupera recursos de todos os personagens da mesa (ki, fúrias,
+                espaços de magia etc.), conforme descanso curto ou longo.
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <RibbonButton
+                  type="button"
+                  className="w-full"
+                  disabled={restBusy || !onRest}
+                  onClick={() => void onRest?.("short")}
+                >
+                  {restBusy ? "…" : "Descanso curto"}
+                </RibbonButton>
+                <RibbonButton
+                  type="button"
+                  className="w-full"
+                  disabled={restBusy || !onRest}
+                  onClick={() => void onRest?.("long")}
+                >
+                  {restBusy ? "…" : "Descanso longo"}
+                </RibbonButton>
+              </div>
+            </section>
+
+            <section
+              className="rounded border p-2.5"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "var(--color-parchment-soft)",
+              }}
+            >
+              <h4
                 className="mb-1 text-xs tracking-wide text-[var(--color-ink)]"
                 style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
               >
@@ -1776,44 +1817,6 @@ export function MasterPanel({
               >
                 Pedir iniciativa
               </RibbonButton>
-
-              <div className="mb-2 grid grid-cols-[1fr_4.5rem] gap-1.5">
-                <input
-                  value={clockNpcName}
-                  onChange={(event) => setClockNpcName(event.target.value)}
-                  placeholder="Monstro / NPC"
-                  className="border px-1.5 py-1.5 text-sm"
-                  style={fieldStyle}
-                />
-                <input
-                  value={clockNpcInit}
-                  onChange={(event) => setClockNpcInit(event.target.value)}
-                  placeholder="Init"
-                  type="number"
-                  className="border px-1.5 py-1.5 text-sm"
-                  style={fieldStyle}
-                />
-              </div>
-              <button
-                type="button"
-                className="mb-2 w-full border px-2 py-1.5 text-xs text-[var(--color-ink)]"
-                style={fieldStyle}
-                onClick={() => {
-                  const name = clockNpcName.trim();
-                  if (!name) {
-                    window.alert("Informe o nome do combatente.");
-                    return;
-                  }
-                  onCombatAdd?.({
-                    name,
-                    initiative: Number(clockNpcInit) || 0,
-                    kind: "monster",
-                  });
-                  setClockNpcName("");
-                }}
-              >
-                Adicionar ao relógio
-              </button>
 
               {combat && combat.order.length > 0 ? (
                 <ul className="mb-2 max-h-28 space-y-0.5 overflow-y-auto text-[11px] text-[var(--color-ink-muted)]">

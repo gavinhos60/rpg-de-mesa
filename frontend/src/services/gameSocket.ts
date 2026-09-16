@@ -424,3 +424,19 @@ export function emitRulerClear(
     );
   });
 }
+
+/** Avisa a sala que a ficha/recursos de um personagem mudaram. */
+export function emitCharacterUpdated(
+  socket: Socket,
+  sessionId: number,
+  character: CampaignCharacterLite
+): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "character:updated",
+      { sessionId, character },
+      (response: { ok: boolean; error?: string }) =>
+        resolve(response ?? { ok: true })
+    );
+  });
+}

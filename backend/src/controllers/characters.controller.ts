@@ -9,6 +9,7 @@ import {
   deleteCharacter,
   grantCustomItemToCharacter,
   updateCharacterWallet,
+  updateCharacterResources,
   discardCharacterItem,
   transferCharacterItem,
 } from "../services/characters.service";
@@ -319,6 +320,34 @@ export async function updateWalletController(req: Request, res: Response) {
     console.error(error);
     if (mapCharacterError(error, res, "Erro ao atualizar carteira")) return;
     res.status(500).json({ error: "Erro ao atualizar carteira" });
+  }
+}
+
+export async function updateResourcesController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await updateCharacterResources(
+      Number(req.params.id),
+      req.user.userId,
+      {
+        pools: req.body.pools,
+        spellSlotsSpent: req.body.spellSlotsSpent,
+        pactSlotsSpent:
+          req.body.pactSlotsSpent != null
+            ? Number(req.body.pactSlotsSpent)
+            : undefined,
+      }
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao atualizar recursos")) return;
+    res.status(500).json({ error: "Erro ao atualizar recursos" });
   }
 }
 

@@ -171,6 +171,13 @@ export function getEquipmentItem(itemId: string): EquipmentItem | undefined {
 }
 
 const GRAMS_PER_POUND = 453.59237;
+const KG_PER_POUND = GRAMS_PER_POUND / 1000;
+
+/** Converte kg (UI) → libras (peso interno D&D / ficha). */
+export function kilogramsToPounds(kg: number): number {
+  if (!Number.isFinite(kg) || kg <= 0) return 0;
+  return kg / KG_PER_POUND;
+}
 
 export function formatMetricWeight(pounds: number): string {
     const grams = pounds * GRAMS_PER_POUND;

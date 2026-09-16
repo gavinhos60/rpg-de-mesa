@@ -46,10 +46,14 @@ import { getSpell, SPELL_SCHOOLS } from "../../data/dnd/spells";
 import { getSpellDetail } from "../../data/dnd/spellDetails";
 import {
     getAlwaysPreparedSpells,
-    getCombinedSpellSlots,
     getSpellLimits,
     getSpellcastingAbility,
 } from "../../data/dnd/spellcasting";
+import {
+    getPactSlotAvailability,
+    getSpellSlotAvailability,
+    listResourcePools,
+} from "../../utils/characterResources";
 import { getLanguageOptions } from "../character/CharacterTalentChoices";
 import { AdvantageConfirm } from "../game/AdvantageConfirm";
 import {
@@ -70,7 +74,7 @@ interface CharacterSheetReviewProps {
     backgrounds: CharacterBackground[];
     onRollAbility?: (ability: Ability, options?: { advantage?: boolean }) => void;
     onRollSkill?: (skill: Skill, options?: { advantage?: boolean }) => void;
-    onUseFeature?: (name: string, description: string) => void;
+    onUseFeature?: (name: string, description: string, abilityId?: string) => void;
     onCastSpell?: (spell: Spell, options?: { advantage?: boolean }) => void;
     canRoll?: boolean;
     /** Gerenciar carteira/itens na mesa (ficha do próprio jogador). */
@@ -234,7 +238,9 @@ export function CharacterSheetReview({
     const coinWeight = walletWeightLb(wallet);
     const coinValue = walletValueInPo(wallet);
 
-    const slots = getCombinedSpellSlots(data.classes);
+    const slots = getSpellSlotAvailability(data);
+    const pactSlots = getPactSlotAvailability(data);
+    const resourcePools = listResourcePools(data);
     const spellGroups = collectSpells(data);
     const questLines = (data.quests ?? "")
         .split("\n")
@@ -1016,11 +1022,6 @@ export function CharacterSheetReview({
                                             .then(() => setItemAction(null))
                                             .catch((err) => {
                                                 console.error(err);
-                                                alert(
-                                                    itemAction.mode === "discard"
-                                                        ? "Não foi possível remover o item."
-                                                        : "Não foi possível enviar o item."
-                                                );
                                             });
                                     }}
                                     className="border px-3 py-1.5 text-xs"
@@ -1040,27 +1041,79 @@ export function CharacterSheetReview({
 
             <section className={activeTab === "spells" ? "" : "hidden"}>
                 <RuleTitle>Grimório</RuleTitle>
-                {slots.length > 0 && (
+                {(slots.some((slot) => slot.max > 0) || pactSlots) && (
                     <div className="mb-6">
                         <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--color-border)]" style={cinzel}>
-                            Espaços de magia
+                            Espaços de magia (restantes / máximo)
                         </p>
                         <div className="flex flex-wrap gap-3">
-                            {slots.map((count, index) => (
+                            {slots
+                                .filter((slot) => slot.max > 0)
+                                .map((slot) => (
+                                    <div
+                                        key={slot.level}
+                                        className="flex h-14 min-w-14 flex-col items-center justify-center rounded-full px-2"
+                                        style={{
+                                            ...cinzel,
+                                            background: "radial-gradient(circle at 35% 25%, var(--color-parchment), var(--color-parchment-soft))",
+                                            boxShadow: "0 0 0 1px var(--color-border), inset 0 0 8px rgba(122,37,48,0.18)",
+                                            opacity: slot.remaining <= 0 ? 0.45 : 1,
+                                        }}
+                                        title={`${slot.level}º círculo — recupera em descanso longo`}
+                                    >
+                                        <span className="text-lg leading-none text-[var(--color-crimson)]" style={{ fontWeight: 700 }}>
+                                            {slot.remaining}/{slot.max}
+                                        </span>
+                                        <span className="text-[10px] text-[var(--color-border)]">{slot.level}º</span>
+                                    </div>
+                                ))}
+                            {pactSlots ? (
                                 <div
-                                    key={index}
-                                    className="flex h-14 w-14 flex-col items-center justify-center rounded-full"
+                                    className="flex h-14 min-w-14 flex-col items-center justify-center rounded-full px-2"
                                     style={{
                                         ...cinzel,
                                         background: "radial-gradient(circle at 35% 25%, var(--color-parchment), var(--color-parchment-soft))",
                                         boxShadow: "0 0 0 1px var(--color-border), inset 0 0 8px rgba(122,37,48,0.18)",
+                                        opacity: pactSlots.remaining <= 0 ? 0.45 : 1,
                                     }}
-                                    title={`${index + 1}º círculo`}
+                                    title={`Magia de Pacto ${pactSlots.level}º — recupera em descanso curto`}
                                 >
                                     <span className="text-lg leading-none text-[var(--color-crimson)]" style={{ fontWeight: 700 }}>
-                                        {count}
+                                        {pactSlots.remaining}/{pactSlots.max}
                                     </span>
-                                    <span className="text-[10px] text-[var(--color-border)]">{index + 1}º</span>
+                                    <span className="text-[10px] text-[var(--color-border)]">
+                                        Pacto {pactSlots.level}º
+                                    </span>
+                                </div>
+                            ) : null}
+                        </div>
+                    </div>
+                )}
+
+                {resourcePools.length > 0 && (
+                    <div className="mb-6">
+                        <p className="mb-2 text-xs uppercase tracking-[0.18em] text-[var(--color-border)]" style={cinzel}>
+                            Recursos de classe
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {resourcePools.map((pool) => (
+                                <div
+                                    key={pool.id}
+                                    className="border px-3 py-2"
+                                    style={{
+                                        borderColor: "var(--color-border)",
+                                        backgroundColor: "var(--color-surface)",
+                                    }}
+                                >
+                                    <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
+                                        {pool.name}
+                                    </p>
+                                    <p className="text-lg text-[var(--color-crimson)]" style={{ ...cinzel, fontWeight: 600 }}>
+                                        {pool.current}/{pool.max}
+                                    </p>
+                                    <p className="text-[10px] text-[var(--color-ink-soft)]">
+                                        Descanso {pool.recovery === "short" ? "curto" : "longo"}
+                                    </p>
                                 </div>
                             ))}
                         </div>

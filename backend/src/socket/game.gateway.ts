@@ -1851,6 +1851,44 @@ export function attachGameSocket(httpServer: HttpServer) {
     socket.on("disconnect", () => {
       // presence cleanup is optional for MVP
     });
+
+    socket.on(
+      "character:updated",
+      (
+        payload: {
+          sessionId: number;
+          character: {
+            id: number;
+            name?: string;
+            className?: string;
+            race?: string;
+            level?: number;
+            avatar?: string | null;
+            sheet?: unknown;
+            playerId?: number;
+            player?: { id: number; name: string; email: string };
+          };
+        },
+        ack?: (response: { ok: boolean; error?: string }) => void
+      ) => {
+        void (async () => {
+          try {
+            const { room } = await loadContext(Number(payload.sessionId));
+            if (!payload.character?.id) {
+              ack?.({ ok: false, error: "Personagem inválido" });
+              return;
+            }
+            socket.to(room).emit("character:updated", {
+              character: payload.character,
+            });
+            ack?.({ ok: true });
+          } catch (error) {
+            console.error(error);
+            ack?.({ ok: false, error: "Falha ao sincronizar personagem" });
+          }
+        })();
+      }
+    );
   });
 
   return io;
