@@ -28,6 +28,7 @@ import {
     getFeatSavingThrowAbilities,
 } from "../../data/dnd/classFeatures";
 import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
+import { CharacterWarlockChoices } from "./CharacterWarlockChoices";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
 import {
@@ -68,6 +69,8 @@ import {
 } from "../../utils/wallet";
 import type { CharacterWallet } from "../../types/character";
 import type { InventoryItemAction } from "../../services/character.service";
+import { CharacterXpBar } from "./CharacterXpBar";
+import { CharacterLevelUpModal } from "./CharacterLevelUpModal";
 
 interface CharacterSheetReviewProps {
     data: CharacterFormData;
@@ -86,6 +89,12 @@ interface CharacterSheetReviewProps {
         onTransferItem: (
             payload: InventoryItemAction & { targetCharacterId: number }
         ) => Promise<void>;
+    };
+    /** Editar XP e subir de nível na mesa ou na ficha do jogador. */
+    xpManage?: {
+        busy?: boolean;
+        onUpdateXp: (xp: number) => Promise<void>;
+        onLevelUp: (data: CharacterFormData) => Promise<void>;
     };
 }
 
@@ -139,7 +148,9 @@ export function CharacterSheetReview({
     onCastSpell,
     canRoll = false,
     inventoryManage,
+    xpManage,
 }: CharacterSheetReviewProps) {
+    const [levelUpOpen, setLevelUpOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<
         "summary" | "combat" | "spells" | "inventory" | "story"
     >("summary");
@@ -185,6 +196,8 @@ export function CharacterSheetReview({
     const primaryClass = data.classes[0]
         ? DND_CLASSES.find((item) => item.id === data.classes[0].classId)
         : undefined;
+    const warlockSelection = data.classes.find((item) => item.classId === "warlock");
+    const warlockLevel = warlockSelection?.level ?? 0;
 
     const totalLevel = data.classes.reduce((total, item) => total + item.level, 0) || 1;
     const proficiencyBonus = getProficiencyBonus(totalLevel);
@@ -303,6 +316,13 @@ export function CharacterSheetReview({
                             .filter(Boolean)
                             .join(" · ") || "Origem desconhecida"}
                     </p>
+                    <CharacterXpBar
+                        data={data}
+                        editable={Boolean(xpManage)}
+                        busy={xpManage?.busy}
+                        onUpdateXp={xpManage?.onUpdateXp}
+                        onLevelUp={xpManage ? () => setLevelUpOpen(true) : undefined}
+                    />
                     <div className="mt-3 flex flex-wrap gap-2">
                         {data.alignment && (
                             <Badge>{ALIGNMENT_NAMES[data.alignment]}</Badge>
@@ -582,6 +602,16 @@ export function CharacterSheetReview({
                         </div>
                     </section>
                 </div>
+
+                {warlockLevel > 0 && (
+                    <section className="mb-6">
+                        <CharacterWarlockChoices
+                            data={data}
+                            warlockLevel={warlockLevel}
+                            readOnly
+                        />
+                    </section>
+                )}
 
                 <section>
                     <RuleTitle>Habilidades</RuleTitle>
@@ -1271,6 +1301,19 @@ export function CharacterSheetReview({
                             onRollAbility?.(pendingRoll.key as Ability, { advantage });
                         }
                         setPendingRoll(null);
+                    }}
+                />
+            )}
+
+            {xpManage && (
+                <CharacterLevelUpModal
+                    open={levelUpOpen}
+                    data={data}
+                    busy={xpManage.busy}
+                    onClose={() => setLevelUpOpen(false)}
+                    onConfirm={async (updated) => {
+                        await xpManage.onLevelUp(updated);
+                        setLevelUpOpen(false);
                     }}
                 />
             )}

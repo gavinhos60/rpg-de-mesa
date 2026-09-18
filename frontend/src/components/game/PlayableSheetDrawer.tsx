@@ -35,6 +35,9 @@ interface PlayableSheetDrawerProps {
   onTransferItem?: (
     payload: InventoryItemAction & { targetCharacterId: number }
   ) => Promise<void>;
+  xpBusy?: boolean;
+  onUpdateXp?: (xp: number) => Promise<void>;
+  onLevelUp?: (data: CharacterFormData) => Promise<void>;
 }
 
 function formatMod(value: number) {
@@ -60,6 +63,9 @@ export function PlayableSheetDrawer({
   onUpdateWallet,
   onDiscardItem,
   onTransferItem,
+  xpBusy = false,
+  onUpdateXp,
+  onLevelUp,
 }: PlayableSheetDrawerProps) {
   const sheet = asFormData(character);
   const [pendingRoll, setPendingRoll] = useState<{
@@ -217,6 +223,15 @@ export function PlayableSheetDrawer({
                     onUpdateWallet,
                     onDiscardItem,
                     onTransferItem,
+                  }
+                : undefined
+            }
+            xpManage={
+              (!readOnly || allowInventoryEdit) && onUpdateXp && onLevelUp
+                ? {
+                    busy: xpBusy,
+                    onUpdateXp,
+                    onLevelUp,
                   }
                 : undefined
             }

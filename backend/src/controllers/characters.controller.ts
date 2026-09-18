@@ -10,6 +10,7 @@ import {
   grantCustomItemToCharacter,
   updateCharacterWallet,
   updateCharacterResources,
+  updateCharacterProgress,
   discardCharacterItem,
   transferCharacterItem,
 } from "../services/characters.service";
@@ -348,6 +349,33 @@ export async function updateResourcesController(req: Request, res: Response) {
     console.error(error);
     if (mapCharacterError(error, res, "Erro ao atualizar recursos")) return;
     res.status(500).json({ error: "Erro ao atualizar recursos" });
+  }
+}
+
+export async function updateProgressController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await updateCharacterProgress(
+      Number(req.params.id),
+      req.user.userId,
+      {
+        name: req.body.name,
+        className: req.body.className,
+        race: req.body.race,
+        level: req.body.level != null ? Number(req.body.level) : undefined,
+        sheet: req.body.sheet,
+      }
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao atualizar progressão")) return;
+    res.status(500).json({ error: "Erro ao atualizar progressão" });
   }
 }
 

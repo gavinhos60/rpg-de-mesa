@@ -819,6 +819,33 @@ export async function updateCharacterResources(
   });
 }
 
+/** Dono ou mestre da campanha pode atualizar XP e progressão (level-up). */
+export async function updateCharacterProgress(
+  characterId: number,
+  authenticatedUserId: number,
+  data: {
+    name?: string;
+    className?: string;
+    race?: string;
+    level?: number;
+    sheet?: Prisma.InputJsonValue;
+  }
+) {
+  await requireOwnedOrCampaignMaster(characterId, authenticatedUserId);
+
+  return prisma.character.update({
+    where: { id: characterId },
+    data: {
+      name: data.name,
+      className: data.className,
+      race: data.race,
+      level: data.level,
+      sheet: data.sheet,
+    },
+    include: characterInclude,
+  });
+}
+
 export async function discardCharacterItem(
   characterId: number,
   authenticatedUserId: number,

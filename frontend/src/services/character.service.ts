@@ -204,6 +204,30 @@ export async function updateCharacterResources(
   return response.data;
 }
 
+/** Dono ou mestre da campanha — XP e level-up na mesa. */
+export async function updateCharacterProgressFromForm(
+  id: number,
+  data: CharacterFormData
+): Promise<SavedCharacter> {
+  const summary = buildCharacterSummary(data);
+  const response = await api.patch<SavedCharacter>(`/characters/${id}/progress`, {
+    ...summary,
+    sheet: {
+      ...data,
+      wallet: data.wallet ?? resolveCharacterWallet(data),
+    },
+  });
+  return response.data;
+}
+
+export async function updateCharacterXp(
+  id: number,
+  sheet: CharacterFormData,
+  xp: number
+): Promise<SavedCharacter> {
+  return updateCharacterProgressFromForm(id, { ...sheet, xp });
+}
+
 export async function discardCharacterItem(
   characterId: number,
   payload: InventoryItemAction

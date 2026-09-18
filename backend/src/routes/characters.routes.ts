@@ -12,6 +12,7 @@ import {
   grantCustomItemController,
   updateWalletController,
   updateResourcesController,
+  updateProgressController,
   discardItemController,
   transferItemController,
 } from "../controllers/characters.controller";
@@ -28,6 +29,7 @@ router.post("/:id/remove-campaign", removeCharacterFromCampaignController);
 router.post("/:id/grant-item", grantCustomItemController);
 router.patch("/:id/wallet", updateWalletController);
 router.patch("/:id/resources", updateResourcesController);
+router.patch("/:id/progress", updateProgressController);
 router.post("/:id/discard-item", discardItemController);
 router.post("/:id/transfer-item", transferItemController);
 router.patch("/:id", updateCharacterController);

@@ -22,6 +22,8 @@ import {
     getFourElementsDisciplineLimit,
     getSelectedElementalDisciplines,
 } from "./elementalDisciplines";
+import { getPactBoon } from "./eldritchInvocations";
+import { getAllWarlockChoicesIssues, getWarlockPactExtrasIssues } from "./warlockPact";
 
 function filled(value: string | null | undefined): boolean {
     return Boolean(value?.trim());
@@ -265,6 +267,16 @@ function combatIssues(data: CharacterFormData): string[] {
         }
     });
 
+    data.classes.forEach((selection) => {
+        if (selection.classId !== "warlock") {
+            return;
+        }
+        if (selection.level >= 3 && !getPactBoon(data.featureChoices)) {
+            issues.push("Escolha a Dádiva de Pacto do bruxo.");
+        }
+        issues.push(...getWarlockPactExtrasIssues(data, selection.level));
+    });
+
     return issues;
 }
 
@@ -343,6 +355,10 @@ function spellIssues(data: CharacterFormData): string[] {
                     issues.push(`Escolha o Arcano Místico de ${level}º círculo.`);
                 }
             });
+        }
+
+        if (selection.classId === "warlock" && selection.level >= 2) {
+            issues.push(...getAllWarlockChoicesIssues(data, selection.level));
         }
     });
 

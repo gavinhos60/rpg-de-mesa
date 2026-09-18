@@ -368,6 +368,8 @@ export interface CharacterFormData {
     hitPoints: number | null;
     asiSelections: Record<string, AsiSelection>;
     featureChoices: Record<string, string[]>;
+    /** XP acumulado do personagem. */
+    xp?: number;
     /** Recursos de combate: ki, fúrias, espaços gastos etc. */
     resources?: CharacterResourcesState;
 

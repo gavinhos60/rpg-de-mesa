@@ -125,6 +125,7 @@ const initialData: CharacterFormData = {
         flaws: "",
     },
     hitPoints: null,
+    xp: 0,
     asiSelections: {},
     featureChoices: {},
 };

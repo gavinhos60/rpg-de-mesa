@@ -3019,6 +3019,96 @@ const WARLOCK_ABILITIES: ClassAbility[] = [
     category: "subclass",
     source: PHB,
   },
+  // Celestial
+  {
+    id: "warlock-celestial-bonus-cantrips",
+    name: "Truques Bônus",
+    level: 1,
+    description: "Você aprende os truques Luz e Chama Sagrada. Eles não contam para o limite de truques.",
+    subclassId: "celestial",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-celestial-healing-light",
+    name: "Luz Curativa",
+    level: 1,
+    description:
+      "Você recebe um reservatório de d12s igual ao modificador de Carisma (mín. 1) para curar com uma ação bônus, recuperado em descanso longo.",
+    subclassId: "celestial",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-celestial-radiant-soul",
+    name: "Alma Radiante",
+    level: 6,
+    description:
+      "Você resiste a dano radiante e adiciona seu modificador de Carisma a uma magia de fogo ou radiante por conjuração.",
+    subclassId: "celestial",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-celestial-resilience",
+    name: "Resiliência Celestial",
+    level: 10,
+    description: "Você tem resistência a dano necrótico e pode curar a si mesmo ao fim de um descanso curto ou longo.",
+    subclassId: "celestial",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-celestial-searing-vengeance",
+    name: "Vingança Abrasadora",
+    level: 14,
+    description:
+      "Quando cai a 0 PV, você pode se erguer com metade dos PV, causar dano radiante em criaturas próximas e ficar invisível por 1 turno. Uma vez por descanso longo.",
+    subclassId: "celestial",
+    category: "subclass",
+    source: "XGE",
+  },
+  // Hexblade
+  {
+    id: "warlock-hexblade-hex-warrior",
+    name: "Guerreiro Hexagonal",
+    level: 1,
+    description:
+      "Proficiência em armaduras médias, escudos e armas marciais. Uma arma de uma mão escolhida usa Carisma para ataques e dano.",
+    subclassId: "hexblade",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-hexblade-accursed-specter",
+    name: "Espectro Amaldiçoado",
+    level: 6,
+    description:
+      "Quando reduz um humanoide a 0 PV, pode amaldiçoar a alma para servir como espectro temporário até descanso longo.",
+    subclassId: "hexblade",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-hexblade-armor-of-hexes",
+    name: "Armadura de Hexes",
+    level: 10,
+    description:
+      "Quando a criatura amaldiçoada por Maldição Hexagonal falha em uma salvaguarda, você pode cancelar a maldição para impor desvantagem no próximo ataque dela contra você.",
+    subclassId: "hexblade",
+    category: "subclass",
+    source: "XGE",
+  },
+  {
+    id: "warlock-hexblade-master-of-hexes",
+    name: "Mestre dos Hexes",
+    level: 14,
+    description:
+      "Quando reduz a 0 PV a criatura amaldiçoada por Maldição Hexagonal, pode transferir a maldição para outra criatura visível a até 9 m.",
+    subclassId: "hexblade",
+    category: "subclass",
+    source: "XGE",
+  },
 ];
 
 const WIZARD_ABILITIES: ClassAbility[] = [

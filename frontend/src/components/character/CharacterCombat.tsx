@@ -26,6 +26,7 @@ import { formatMetricWeight } from "../../data/dnd/equipment";
 import { getProficientSkills } from "../../data/dnd/skills";
 import { getFeatSavingThrowAbilities } from "../../data/dnd/classFeatures";
 import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
+import { CharacterWarlockChoices } from "./CharacterWarlockChoices";
 
 interface CharacterCombatProps {
     data: CharacterFormData;
@@ -91,6 +92,9 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
         perceptionProficient,
         proficiencyBonus
     );
+
+    const warlockSelection = data.classes.find((item) => item.classId === "warlock");
+    const warlockLevel = warlockSelection?.level ?? 0;
 
     function formatModifier(value: number): string {
         return value >= 0 ? `+${value}` : `${value}`;
@@ -317,6 +321,14 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                     </div>
                 </div>
             </section>
+
+            {warlockLevel > 0 && (
+                <CharacterWarlockChoices
+                    data={data}
+                    onChange={onChange}
+                    warlockLevel={warlockLevel}
+                />
+            )}
 
             <section className="mt-8">
                 <h3 className="mb-2 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>

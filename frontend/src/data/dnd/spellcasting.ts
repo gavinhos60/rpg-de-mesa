@@ -184,6 +184,16 @@ const SUBCLASS_EXPANDED: Record<string, string[]> = {
         "clairvoyance", "sending", "dominate-beast", "evards-black-tentacles",
         "dominate-person", "telekinesis",
     ],
+    celestial: [
+        "cure-wounds", "guiding-bolt", "flaming-sphere", "lesser-restoration",
+        "daylight", "revivify", "guardian-of-faith", "wall-of-fire",
+        "flame-strike", "greater-restoration",
+    ],
+    hexblade: [
+        "shield", "wrathful-smite", "blur", "branding-smite",
+        "blink", "elemental-weapon", "phantasmal-killer", "staggering-smite",
+        "banishing-smite", "cone-of-cold",
+    ],
 };
 
 const ALWAYS_PREPARED: Record<string, Array<{ minLevel: number; spells: string[] }>> = {

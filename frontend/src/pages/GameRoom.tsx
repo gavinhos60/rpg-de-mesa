@@ -11,6 +11,8 @@ import { getMyCharacters, getCharacterById } from "../services/character.service
 import {
   updateCharacterWallet,
   updateCharacterResources,
+  updateCharacterProgressFromForm,
+  updateCharacterXp,
   discardCharacterItem,
   transferCharacterItem,
   type InventoryItemAction,
@@ -151,6 +153,7 @@ export function GameRoom() {
     useState<CampaignCharacterLite | null>(null);
   const [sheetReadOnly, setSheetReadOnly] = useState(false);
   const [inventoryBusy, setInventoryBusy] = useState(false);
+  const [xpBusy, setXpBusy] = useState(false);
   const [pendingCheck, setPendingCheck] = useState<CheckRequest | null>(null);
   const [pendingInitiative, setPendingInitiative] =
     useState<InitiativeRequest | null>(null);
@@ -900,6 +903,80 @@ export function GameRoom() {
     });
   }
 
+  async function syncCharacterProgress(saved: {
+    id: number;
+    name: string;
+    className: string;
+    race: string;
+    level: number;
+    avatar?: string | null;
+    sheet?: unknown;
+    playerId: number;
+    player?: CampaignCharacterLite["player"];
+  }) {
+    const lite: CampaignCharacterLite = {
+      id: saved.id,
+      name: saved.name,
+      className: saved.className,
+      race: saved.race,
+      level: saved.level,
+      avatar: saved.avatar,
+      sheet: saved.sheet,
+      playerId: saved.playerId,
+      player: saved.player,
+    };
+    applyCharacterUpdate(lite);
+    if (socket && sessionId) {
+      await emitCharacterUpdated(socket, sessionId, lite);
+    }
+  }
+
+  async function handleUpdateXp(xp: number) {
+    if (!openCharacter) return;
+    const sheet =
+      openCharacter.sheet && typeof openCharacter.sheet === "object"
+        ? (openCharacter.sheet as CharacterFormData)
+        : null;
+    if (!sheet) {
+      alert("Ficha incompleta.");
+      return;
+    }
+    await withActionBusy("Salvando XP…", async () => {
+      setXpBusy(true);
+      try {
+        const saved = await updateCharacterXp(openCharacter.id, sheet, xp);
+        await syncCharacterProgress(saved);
+      } catch (err) {
+        console.error(err);
+        alert(apiErrorMessage(err, "Não foi possível salvar o XP."));
+        throw err;
+      } finally {
+        setXpBusy(false);
+      }
+    });
+  }
+
+  async function handleLevelUp(updated: CharacterFormData) {
+    if (!openCharacter) return;
+    await withActionBusy("Subindo de nível…", async () => {
+      setXpBusy(true);
+      try {
+        const synced = ensureResourcesSynced(updated);
+        const saved = await updateCharacterProgressFromForm(
+          openCharacter.id,
+          synced
+        );
+        await syncCharacterProgress(saved);
+      } catch (err) {
+        console.error(err);
+        alert(apiErrorMessage(err, "Não foi possível subir de nível."));
+        throw err;
+      } finally {
+        setXpBusy(false);
+      }
+    });
+  }
+
   async function handleRuler(
     from: { x: number; y: number },
     to: { x: number; y: number },
@@ -1628,6 +1705,9 @@ export function GameRoom() {
           onUpdateWallet={handleUpdateWallet}
           onDiscardItem={handleDiscardItem}
           onTransferItem={handleTransferItem}
+          xpBusy={xpBusy}
+          onUpdateXp={handleUpdateXp}
+          onLevelUp={handleLevelUp}
         />
       )}
 

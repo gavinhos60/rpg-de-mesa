@@ -996,6 +996,16 @@ export const DND_CLASSES: CharacterClass[] = [
                 name: "O Grande Antigo",
                 level: 1,
             },
+            {
+                id: "celestial",
+                name: "O Celestial",
+                level: 1,
+            },
+            {
+                id: "hexblade",
+                name: "O Hexblade",
+                level: 1,
+            },
         ],
     },
 

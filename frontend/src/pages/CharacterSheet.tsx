@@ -6,9 +6,11 @@ import { RibbonButton } from "../components/icons/MedievalIcons";
 import { DND_BACKGROUNDS } from "../data/dnd/backgrounds";
 import {
     getCharacterById,
+    updateCharacterFromForm,
     type SavedCharacter,
 } from "../services/character.service";
 import type { CharacterFormData } from "../types/character";
+import { ensureResourcesSynced } from "../utils/characterResources";
 
 export function CharacterSheet() {
     const { id } = useParams();
@@ -16,6 +18,7 @@ export function CharacterSheet() {
     const [character, setCharacter] = useState<SavedCharacter | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [xpBusy, setXpBusy] = useState(false);
 
     useEffect(() => {
         let active = true;
@@ -145,6 +148,35 @@ export function CharacterSheet() {
                         <CharacterSheetReview
                             data={reviewData}
                             backgrounds={DND_BACKGROUNDS}
+                            xpManage={{
+                                busy: xpBusy,
+                                onUpdateXp: async (xp) => {
+                                    if (!character || !reviewData) return;
+                                    setXpBusy(true);
+                                    try {
+                                        const saved = await updateCharacterFromForm(
+                                            character.id,
+                                            { ...reviewData, xp }
+                                        );
+                                        setCharacter(saved);
+                                    } finally {
+                                        setXpBusy(false);
+                                    }
+                                },
+                                onLevelUp: async (updated) => {
+                                    if (!character) return;
+                                    setXpBusy(true);
+                                    try {
+                                        const saved = await updateCharacterFromForm(
+                                            character.id,
+                                            ensureResourcesSynced(updated)
+                                        );
+                                        setCharacter(saved);
+                                    } finally {
+                                        setXpBusy(false);
+                                    }
+                                },
+                            }}
                         />
                     </div>
                 )}
