@@ -1848,6 +1848,142 @@ export function attachGameSocket(httpServer: HttpServer) {
       }
     );
 
+    socket.on(
+      "effect:ping",
+      async (
+        payload: {
+          sessionId: number;
+          sticky?: boolean;
+          x: number;
+          y: number;
+          toX?: number;
+          toY?: number;
+          radius?: number;
+          color?: string;
+          label?: string;
+          fxKind?: "breathe" | "beam" | "rocket" | "burn" | "glow";
+          fxElement?:
+            | "fire"
+            | "charm"
+            | "acid"
+            | "death"
+            | "holy"
+            | "blood"
+            | "frost"
+            | "slime"
+            | "smoke"
+            | "water"
+            | "magic";
+          byUserName?: string;
+          secret?: boolean;
+          expiresAt?: number;
+        },
+        ack?: (response: {
+          ok: boolean;
+          error?: string;
+          effect?: Record<string, unknown>;
+        }) => void
+      ) => {
+        void (async () => {
+          try {
+            const { membership, state, room } = await loadContext(
+              Number(payload.sessionId)
+            );
+            const userId = socket.data.userId as number;
+            const sticky = Boolean(payload.sticky);
+            const fxKind = payload.fxKind || "glow";
+            const fxElement = payload.fxElement || "magic";
+            const x = Number(payload.x);
+            const y = Number(payload.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) {
+              ack?.({ ok: false, error: "Posição inválida" });
+              return;
+            }
+            const toX =
+              payload.toX != null && Number.isFinite(Number(payload.toX))
+                ? Number(payload.toX)
+                : undefined;
+            const toY =
+              payload.toY != null && Number.isFinite(Number(payload.toY))
+                ? Number(payload.toY)
+                : undefined;
+            const grid = state.board.gridSize || 50;
+            const radius = Math.max(
+              8,
+              Math.floor(Number(payload.radius) || grid * 1.4)
+            );
+            const secret =
+              membership.role === "MASTER" && Boolean(payload.secret)
+                ? true
+                : undefined;
+
+            const effect = {
+              id: `fx-${randomUUID()}`,
+              x,
+              y,
+              toX,
+              toY,
+              radius,
+              color: String(payload.color || "#B388FF"),
+              label: String(payload.label || "").trim() || undefined,
+              byUserId: userId,
+              byUserName: String(payload.byUserName ?? "").trim() || undefined,
+              secret,
+              fxKind,
+              fxElement,
+              expiresAt: sticky
+                ? undefined
+                : Number(payload.expiresAt) || Date.now() + 3800,
+            };
+
+            if (!sticky) {
+              socket.to(room).emit("effect:ping", { effect, sticky: false });
+              ack?.({ ok: true, effect });
+              return;
+            }
+
+            const effects = Array.isArray(state.board.effects)
+              ? [...state.board.effects]
+              : [];
+            const nextEffect = { ...effect, expiresAt: undefined };
+            effects.push(nextEffect);
+
+            const frozen = playerFrozenView(state.board, userId);
+            if (frozen) {
+              const viewEffects = Array.isArray(frozen.effects)
+                ? [...frozen.effects]
+                : [];
+              state.board = withPlayerViewAnnotations(state.board, userId, {
+                effects: [...viewEffects, nextEffect],
+              });
+              const views = { ...(state.board.playerViewsByUserId ?? {}) };
+              for (const [otherId, view] of Object.entries(views)) {
+                if (Number(otherId) === userId) continue;
+                if ((view.mapUrl || "") !== (frozen.mapUrl || "")) continue;
+                const otherEffects = Array.isArray(view.effects)
+                  ? [...view.effects]
+                  : [];
+                views[otherId] = {
+                  ...view,
+                  effects: [...otherEffects, nextEffect],
+                };
+              }
+              state.board.playerViewsByUserId = views;
+            } else {
+              state.board.effects = effects;
+            }
+
+            schedulePersist(Number(payload.sessionId), state);
+            io.to(room).emit("board:state", state.board);
+            ack?.({ ok: true, effect: nextEffect });
+          } catch (error) {
+            console.error(error);
+            ack?.({ ok: false, error: "Falha ao enviar efeito" });
+          }
+        })();
+      }
+    );
+
     socket.on("disconnect", () => {
       // presence cleanup is optional for MVP
     });

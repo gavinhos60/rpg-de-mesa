@@ -79,8 +79,28 @@ export type BoardEffect = {
   color: string;
   label?: string;
   byUserId?: number;
+  byUserName?: string;
   /** Só o mestre vê (camada secreta). */
   secret?: boolean;
+  /** Ping estilo Roll20: respirar / feixe / foguete / queimar / brilho. */
+  fxKind?: "breathe" | "beam" | "rocket" | "burn" | "glow";
+  fxElement?:
+    | "fire"
+    | "charm"
+    | "acid"
+    | "death"
+    | "holy"
+    | "blood"
+    | "frost"
+    | "slime"
+    | "smoke"
+    | "water"
+    | "magic";
+  /** Extremidade do feixe/foguete. */
+  toX?: number;
+  toY?: number;
+  /** Ping transitório (epoch ms) — clientes removem após expirar. */
+  expiresAt?: number;
 };
 
 export type PreparedMap = {

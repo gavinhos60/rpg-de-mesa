@@ -834,6 +834,7 @@ export function MasterPanel({
     { id: "select", label: "Mover" },
     { id: "party-move", label: "Grupo" },
     { id: "ruler", label: "Régua" },
+    { id: "effect", label: "Efeitos" },
     { id: "draw", label: "Desenhar" },
   ];
 

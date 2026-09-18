@@ -54,6 +54,7 @@ export function PlayerPanel({
   const tools: Array<{ id: BoardTool; label: string }> = [
     { id: "select", label: "Mover" },
     { id: "ruler", label: "Régua" },
+    { id: "effect", label: "Efeitos" },
     { id: "draw", label: "Desenhar" },
   ];
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  BoardEffect,
   BoardState,
   BoardToken,
   MeasureShape,
@@ -43,8 +44,23 @@ import {
   MeasurePanel,
   type MeasureSettings,
 } from "./MeasurePanel";
+import { EffectPanel } from "./EffectPanel";
+import {
+  EffectHitAreas,
+  EffectParticleLayer,
+} from "./EffectParticleLayer";
+import {
+  DEFAULT_EFFECT_SETTINGS,
+  FX_INSTANT_MS,
+  fxElementColor,
+  fxElementLabel,
+  fxKindLabel,
+  fxKindNeedsDrag,
+  fxKindScalesWithDrag,
+  type EffectSettings,
+} from "./effectPing";
 
-export type BoardTool = "select" | "draw" | "ruler" | "party-move";
+export type BoardTool = "select" | "draw" | "ruler" | "effect" | "party-move";
 
 /** Visual de medição próximo ao Roll20. */
 const DEFAULT_MEASURE_COLOR = "#3DDCFF";
@@ -106,6 +122,13 @@ interface GameBoardProps {
       color?: string;
     }
   ) => void;
+  onEffectPing?: (payload: {
+    sticky: boolean;
+    broadcast: boolean;
+    effect: Omit<BoardEffect, "id" | "byUserId"> & { id?: string };
+  }) => void;
+  /** Pings instantâneos recebidos via socket (não persistidos). */
+  transientEffects?: BoardEffect[];
   onSelectToken?: (token: BoardToken | null) => void;
   onOpenMonsterSheet?: (token: BoardToken) => void;
   onOpenCharacterSheet?: (token: BoardToken) => void;
@@ -495,6 +518,8 @@ export function GameBoard({
   onMoveTokens,
   onChangeBoard,
   onRuler,
+  onEffectPing,
+  transientEffects = [],
   onSelectToken,
   onOpenMonsterSheet,
   onOpenCharacterSheet,
@@ -546,6 +571,20 @@ export function GameBoard({
     DEFAULT_MEASURE_SETTINGS
   );
   const [measurePanelCollapsed, setMeasurePanelCollapsed] = useState(false);
+  const [effectSettings, setEffectSettings] = useState<EffectSettings>(
+    DEFAULT_EFFECT_SETTINGS
+  );
+  const [effectPanelCollapsed, setEffectPanelCollapsed] = useState(false);
+  const [effectStart, setEffectStart] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const [effectPreview, setEffectPreview] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [localStickyEffects, setLocalStickyEffects] = useState<BoardEffect[]>(
+    []
+  );
   const [localStickyMeasures, setLocalStickyMeasures] = useState<
     Array<{
       id: string;
@@ -559,6 +598,7 @@ export function GameBoard({
   useEffect(() => {
     if (localAnnotationResetKey > 0) {
       setLocalStickyMeasures([]);
+      setLocalStickyEffects([]);
     }
   }, [localAnnotationResetKey]);
 
@@ -846,13 +886,17 @@ export function GameBoard({
           })
         );
       } else if (kind === "effect") {
-        const effect = mapBoard.effects.find((item) => item.id === id);
-        if (!effect || !canDeleteAnnotation(effect.byUserId)) return;
-        onChangeBoard(
-          withAnnotationsOnViewerScene(board, currentUserId, {
-            effects: mapBoard.effects.filter((item) => item.id !== id),
-          })
-        );
+        if (localStickyEffects.some((item) => item.id === id)) {
+          setLocalStickyEffects((prev) => prev.filter((item) => item.id !== id));
+        } else {
+          const effect = mapBoard.effects.find((item) => item.id === id);
+          if (!effect || !canDeleteAnnotation(effect.byUserId)) return;
+          onChangeBoard(
+            withAnnotationsOnViewerScene(board, currentUserId, {
+              effects: mapBoard.effects.filter((item) => item.id !== id),
+            })
+          );
+        }
       } else if (kind === "ruler") {
         const ruler = mapBoard.rulers.find((item) => item.id === id);
         if (!ruler || !canDeleteAnnotation(ruler.byUserId)) return;
@@ -1309,6 +1353,12 @@ export function GameBoard({
       setRulerPreview(snapped);
       return;
     }
+
+    if (tool === "effect" && canAnnotate) {
+      setEffectStart(point);
+      setEffectPreview(point);
+      return;
+    }
   }
 
   function handleBoardPointerMove(event: React.PointerEvent) {
@@ -1320,6 +1370,9 @@ export function GameBoard({
       // Só preview local — evita “replay” de ecos do socket a cada frame.
       const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
       setRulerPreview(snapped);
+    }
+    if (tool === "effect" && effectStart) {
+      setEffectPreview(point);
     }
   }
 
@@ -1371,6 +1424,63 @@ export function GameBoard({
     }
     setRulerStart(null);
     setRulerPreview(null);
+
+    if (tool === "effect" && effectStart && effectPreview && canAnnotate) {
+      const needsDrag = fxKindNeedsDrag(effectSettings.kind);
+      const scalesWithDrag = fxKindScalesWithDrag(effectSettings.kind);
+      const dragDist = Math.hypot(
+        effectPreview.x - effectStart.x,
+        effectPreview.y - effectStart.y
+      );
+      if (needsDrag && dragDist < 8) {
+        setEffectStart(null);
+        setEffectPreview(null);
+        return;
+      }
+      const stay =
+        effectSettings.fade === "stay" || Boolean(event?.shiftKey);
+      const color = fxElementColor(effectSettings.element);
+      const defaultRadius = Math.max(18, Math.round(gridSize * 1.35));
+      const radius = scalesWithDrag
+        ? Math.max(defaultRadius, Math.round(dragDist))
+        : defaultRadius;
+      const toX =
+        needsDrag || scalesWithDrag || dragDist >= 8
+          ? effectPreview.x
+          : effectStart.x;
+      const toY =
+        needsDrag || scalesWithDrag || dragDist >= 8
+          ? effectPreview.y
+          : effectStart.y;
+      const label = `${fxKindLabel(effectSettings.kind)} · ${fxElementLabel(
+        effectSettings.element
+      )}`;
+      const effectPayload: BoardEffect = {
+        id: uid("fx"),
+        x: effectStart.x,
+        y: effectStart.y,
+        toX,
+        toY,
+        radius,
+        color,
+        label,
+        fxKind: effectSettings.kind,
+        fxElement: effectSettings.element,
+        secret: placeOnSecretLayer && isMaster ? true : undefined,
+        expiresAt: stay ? undefined : Date.now() + FX_INSTANT_MS,
+      };
+      if (stay && !effectSettings.broadcast) {
+        setLocalStickyEffects((previous) => [...previous, effectPayload]);
+      } else {
+        onEffectPing?.({
+          sticky: stay,
+          broadcast: effectSettings.broadcast,
+          effect: effectPayload,
+        });
+      }
+    }
+    setEffectStart(null);
+    setEffectPreview(null);
   }
 
   function handleWheel(event: React.WheelEvent) {
@@ -1401,6 +1511,54 @@ export function GameBoard({
         }
       : null;
 
+  const particleEffects = useMemo(() => {
+    const list = [
+      ...mapBoard.effects,
+      ...localStickyEffects,
+      ...transientEffects,
+    ].filter(
+      (effect) => Boolean(effect.fxKind) && (isMaster || !effect.secret)
+    );
+    if (tool === "effect" && effectStart && effectPreview) {
+      const dragDist = Math.hypot(
+        effectPreview.x - effectStart.x,
+        effectPreview.y - effectStart.y
+      );
+      const defaultRadius = Math.max(18, Math.round(gridSize * 1.35));
+      const radius = fxKindScalesWithDrag(effectSettings.kind)
+        ? Math.max(defaultRadius, Math.round(dragDist))
+        : defaultRadius;
+      list.push({
+        id: "fx-preview",
+        x: effectStart.x,
+        y: effectStart.y,
+        toX: effectPreview.x,
+        toY: effectPreview.y,
+        radius,
+        color: fxElementColor(effectSettings.element),
+        fxKind: effectSettings.kind,
+        fxElement: effectSettings.element,
+        label: fxKindLabel(effectSettings.kind),
+        expiresAt: Date.now() + 60_000,
+      });
+    }
+    return list;
+  }, [
+    mapBoard.effects,
+    localStickyEffects,
+    transientEffects,
+    isMaster,
+    tool,
+    effectStart,
+    effectPreview,
+    gridSize,
+    effectSettings.element,
+    effectSettings.kind,
+  ]);
+
+  const selectedFxId =
+    selectedAnnotation?.kind === "effect" ? selectedAnnotation.id : null;
+
   return (
     <div
       className="relative h-full min-h-0 w-full overflow-hidden border"
@@ -1419,6 +1577,19 @@ export function GameBoard({
             collapsed={measurePanelCollapsed}
             onToggleCollapsed={() =>
               setMeasurePanelCollapsed((value) => !value)
+            }
+          />
+        </div>
+      ) : null}
+
+      {tool === "effect" ? (
+        <div className="absolute left-2 top-2 z-40">
+          <EffectPanel
+            settings={effectSettings}
+            onChange={setEffectSettings}
+            collapsed={effectPanelCollapsed}
+            onToggleCollapsed={() =>
+              setEffectPanelCollapsed((value) => !value)
             }
           />
         </div>
@@ -1545,9 +1716,74 @@ export function GameBoard({
             />
           )}
 
+          {particleEffects.length > 0 || selectedFxId ? (
+            <EffectParticleLayer
+              effects={particleEffects}
+              width={world.width}
+              height={world.height}
+              gridSize={gridSize}
+              selectedId={selectedFxId}
+            />
+          ) : null}
+
           <svg className="absolute inset-0 h-full w-full overflow-visible">
+            <EffectHitAreas
+              effects={[...mapBoard.effects, ...localStickyEffects].filter(
+                (effect) =>
+                  Boolean(effect.fxKind) && (isMaster || !effect.secret)
+              )}
+              interactive={tool === "select"}
+              selectedId={selectedFxId}
+              onSelect={(id) => {
+                setSelection([]);
+                setSelectedAnnotation({ kind: "effect", id });
+              }}
+            />
+            {tool === "effect" &&
+            effectSettings.kind === "breathe" &&
+            effectStart &&
+            effectPreview ? (
+              <g className="pointer-events-none">
+                {(() => {
+                  const dragDist = Math.hypot(
+                    effectPreview.x - effectStart.x,
+                    effectPreview.y - effectStart.y
+                  );
+                  const r = Math.max(
+                    Math.round(gridSize * 1.35),
+                    Math.round(dragDist)
+                  );
+                  const color = fxElementColor(effectSettings.element);
+                  return (
+                    <>
+                      <circle
+                        cx={effectStart.x}
+                        cy={effectStart.y}
+                        r={r}
+                        fill={`${color}22`}
+                        stroke={color}
+                        strokeWidth={1.5}
+                        strokeDasharray="5 4"
+                        opacity={0.85}
+                      />
+                      <line
+                        x1={effectStart.x}
+                        y1={effectStart.y}
+                        x2={effectPreview.x}
+                        y2={effectPreview.y}
+                        stroke={color}
+                        strokeWidth={1.5}
+                        opacity={0.7}
+                      />
+                    </>
+                  );
+                })()}
+              </g>
+            ) : null}
             {mapBoard.effects
-              .filter((effect) => isMaster || !effect.secret)
+              .filter(
+                (effect) => !effect.fxKind && (isMaster || !effect.secret)
+              )
               .map((effect) => {
               const selected =
                 selectedAnnotation?.kind === "effect" &&

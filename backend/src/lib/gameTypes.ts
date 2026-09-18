@@ -82,7 +82,24 @@ export type BoardEffect = {
   color: string;
   label?: string;
   byUserId?: number;
+  byUserName?: string;
   secret?: boolean;
+  fxKind?: "breathe" | "beam" | "rocket" | "burn" | "glow";
+  fxElement?:
+    | "fire"
+    | "charm"
+    | "acid"
+    | "death"
+    | "holy"
+    | "blood"
+    | "frost"
+    | "slime"
+    | "smoke"
+    | "water"
+    | "magic";
+  toX?: number;
+  toY?: number;
+  expiresAt?: number;
 };
 
 export type PreparedMap = {

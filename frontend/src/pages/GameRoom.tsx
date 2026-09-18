@@ -36,8 +36,10 @@ import {
   emitTokenRemove,
   joinSession,
   emitRulerClear,
+  emitEffectPing,
 } from "../services/gameSocket";
 import type {
+  BoardEffect,
   BoardState,
   BoardToken,
   CampaignCharacterLite,
@@ -72,6 +74,7 @@ import {
 import { hitPointsFromSheet } from "../utils/characterCombat";
 import { getMonsterById, type Monster } from "../data/dnd/monsters";
 import { GameBoard, type BoardTool } from "../components/game/GameBoard";
+import { FX_INSTANT_MS } from "../components/game/effectPing";
 import { GameChat, naturalD20 } from "../components/game/GameChat";
 import { MasterPanel } from "../components/game/MasterPanel";
 import { PlayerPanel } from "../components/game/PlayerPanel";
@@ -142,6 +145,7 @@ export function GameRoom() {
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [restBusy, setRestBusy] = useState(false);
+  const [transientEffects, setTransientEffects] = useState<BoardEffect[]>([]);
   const [error, setError] = useState("");
   const [openCharacter, setOpenCharacter] =
     useState<CampaignCharacterLite | null>(null);
@@ -318,6 +322,28 @@ export function GameRoom() {
           (payload: { character: CampaignCharacterLite }) => {
             if (!payload?.character?.id) return;
             applyCharacterUpdate(payload.character);
+          }
+        );
+
+        currentSocket.on(
+          "effect:ping",
+          (payload: { effect: BoardEffect; sticky?: boolean }) => {
+            if (!payload?.effect?.id) return;
+            if (payload.sticky) return; // board:state já traz o persistido
+            const effect = payload.effect;
+            setTransientEffects((previous) => {
+              if (previous.some((item) => item.id === effect.id)) return previous;
+              return [...previous, effect];
+            });
+            const ttl = Math.max(
+              400,
+              (effect.expiresAt ?? Date.now() + FX_INSTANT_MS) - Date.now()
+            );
+            window.setTimeout(() => {
+              setTransientEffects((previous) =>
+                previous.filter((item) => item.id !== effect.id)
+              );
+            }, ttl);
           }
         );
 
@@ -904,6 +930,70 @@ export function GameRoom() {
     });
   }
 
+  async function handleEffectPing(payload: {
+    sticky: boolean;
+    broadcast: boolean;
+    effect: Omit<BoardEffect, "id" | "byUserId"> & { id?: string };
+  }) {
+    if (!user) return;
+
+    const pushTransient = (effect: BoardEffect) => {
+      setTransientEffects((previous) => {
+        if (previous.some((item) => item.id === effect.id)) return previous;
+        return [...previous, effect];
+      });
+      const ttl = Math.max(
+        400,
+        (effect.expiresAt ?? Date.now() + FX_INSTANT_MS) - Date.now()
+      );
+      window.setTimeout(() => {
+        setTransientEffects((previous) =>
+          previous.filter((item) => item.id !== effect.id)
+        );
+      }, ttl);
+    };
+
+    // Instantânea local (sem transmitir): só neste cliente.
+    if (!payload.sticky && !payload.broadcast) {
+      pushTransient({
+        ...payload.effect,
+        id: payload.effect.id || `fx-${Date.now()}`,
+        byUserId: user.id,
+        byUserName: user.name,
+        expiresAt: Date.now() + FX_INSTANT_MS,
+      });
+      return;
+    }
+
+    if (!socket || !sessionId) return;
+
+    const result = await emitEffectPing(socket, sessionId, {
+      sticky: payload.sticky,
+      x: payload.effect.x,
+      y: payload.effect.y,
+      toX: payload.effect.toX,
+      toY: payload.effect.toY,
+      radius: payload.effect.radius,
+      color: payload.effect.color,
+      label: payload.effect.label,
+      fxKind: payload.effect.fxKind || "glow",
+      fxElement: payload.effect.fxElement || "magic",
+      byUserName: user.name,
+      secret: payload.effect.secret,
+      expiresAt: payload.sticky
+        ? undefined
+        : payload.effect.expiresAt ?? Date.now() + FX_INSTANT_MS,
+    });
+    if (!result.ok) {
+      alert(result.error || "Falha ao enviar efeito");
+      return;
+    }
+    // Instantânea: servidor não ecoa para o remetente — mostra o efeito do ack.
+    if (!payload.sticky && result.effect) {
+      pushTransient(result.effect);
+    }
+  }
+
   async function handleSendChat(text: string) {
     if (!socket || !sessionId || !user) return;
     const looksLikeRoll = /^\s*\/(r|roll)\b/i.test(text);
@@ -1408,6 +1498,8 @@ export function GameRoom() {
               }
               highlightedTokenIds={initiativeHoverTokenIds}
               onRuler={handleRuler}
+              onEffectPing={handleEffectPing}
+              transientEffects={transientEffects}
               onOpenMonsterSheet={openMonsterFromToken}
               onOpenCharacterSheet={openCharacterFromToken}
               onDropCharacter={(characterId, x, y) => {

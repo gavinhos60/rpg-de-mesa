@@ -425,6 +425,49 @@ export function emitRulerClear(
   });
 }
 
+export function emitEffectPing(
+  socket: Socket,
+  sessionId: number,
+  payload: {
+    sticky: boolean;
+    x: number;
+    y: number;
+    toX?: number;
+    toY?: number;
+    radius: number;
+    color: string;
+    label?: string;
+    fxKind: "breathe" | "beam" | "rocket" | "burn" | "glow";
+    fxElement:
+      | "fire"
+      | "charm"
+      | "acid"
+      | "death"
+      | "holy"
+      | "blood"
+      | "frost"
+      | "slime"
+      | "smoke"
+      | "water"
+      | "magic";
+    byUserName?: string;
+    secret?: boolean;
+    expiresAt?: number;
+  }
+): Promise<{ ok: boolean; error?: string; effect?: import("../types/game").BoardEffect }> {
+  return new Promise((resolve) => {
+    socket.emit(
+      "effect:ping",
+      { sessionId, ...payload },
+      (response: {
+        ok: boolean;
+        error?: string;
+        effect?: import("../types/game").BoardEffect;
+      }) => resolve(response ?? { ok: false, error: "Sem resposta" })
+    );
+  });
+}
+
 /** Avisa a sala que a ficha/recursos de um personagem mudaram. */
 export function emitCharacterUpdated(
   socket: Socket,
