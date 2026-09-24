@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CampaignCharacterLite } from "../../types/game";
 import type { Papyrus } from "../../types/papiros";
 import type { Shop, ShopDelivery } from "../../types/mercado";
@@ -14,6 +14,13 @@ import {
   listDeliveries,
   listShops,
 } from "../../services/mercado.service";
+import {
+  createNote,
+  deleteNote,
+  listNotes,
+  updateNote,
+} from "../../services/notes.service";
+import type { PlayerNote } from "../../types/notes";
 import { MercadoMasterModal } from "./MercadoMasterModal";
 import { RibbonButton } from "../icons/MedievalIcons";
 
@@ -22,7 +29,13 @@ const fieldStyle = {
   borderColor: "var(--color-border)",
 } as const;
 
-type SubSection = "documentos" | "mercado";
+const textAreaClass =
+  "mb-2 w-full min-w-0 resize-y border px-2 py-1.5 text-sm outline-none break-words whitespace-pre-wrap [overflow-wrap:anywhere]";
+
+const textInputClass =
+  "mb-2 w-full min-w-0 border px-2 py-1.5 text-sm outline-none break-all";
+
+type SubSection = "documentos" | "anotacoes" | "mercado";
 
 interface PapirosMasterSectionProps {
   campaignId: number;
@@ -85,15 +98,34 @@ export function PapirosMasterSection({
     null
   );
 
+  const [notes, setNotes] = useState<PlayerNote[]>([]);
+  const [noteEditingId, setNoteEditingId] = useState<number | null>(null);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
+  const [noteImageUrl, setNoteImageUrl] = useState("");
+  const [noteSearch, setNoteSearch] = useState("");
+
+  const filteredNotes = useMemo(() => {
+    const query = noteSearch.trim().toLowerCase();
+    if (!query) return notes;
+    return notes.filter((note) => {
+      const title = (note.title.trim() || "Sem título").toLowerCase();
+      return title.includes(query);
+    });
+  }, [notes, noteSearch]);
+
   const refresh = useCallback(async () => {
-    const [nextPapyri, nextShops, nextDeliveries] = await Promise.all([
-      listPapiros(campaignId),
-      listShops(campaignId),
-      listDeliveries(campaignId).catch(() => [] as ShopDelivery[]),
-    ]);
+    const [nextPapyri, nextShops, nextDeliveries, nextNotes] =
+      await Promise.all([
+        listPapiros(campaignId),
+        listShops(campaignId),
+        listDeliveries(campaignId).catch(() => [] as ShopDelivery[]),
+        listNotes(campaignId),
+      ]);
     setPapyri(nextPapyri);
     setShops(nextShops);
     setDeliveries(nextDeliveries);
+    setNotes(nextNotes);
   }, [campaignId]);
 
   useEffect(() => {
@@ -108,6 +140,59 @@ export function PapirosMasterSection({
     setTitle("");
     setBody("");
     setImageUrl("");
+  }
+
+  function resetNoteForm() {
+    setNoteEditingId(null);
+    setNoteTitle("");
+    setNoteBody("");
+    setNoteImageUrl("");
+  }
+
+  async function handleSaveNote() {
+    if (!noteBody.trim() && !noteImageUrl.trim()) {
+      setMessage("Escreva um texto ou anexe uma imagem.");
+      return;
+    }
+    try {
+      setBusy(true);
+      setMessage("");
+      const payload = {
+        title: noteTitle.trim(),
+        body: noteBody.trim(),
+        imageUrl: noteImageUrl.trim() || null,
+      };
+      if (noteEditingId != null) {
+        await updateNote(campaignId, noteEditingId, payload);
+        setMessage("Anotação atualizada.");
+      } else {
+        await createNote(campaignId, payload);
+        setMessage("Anotação criada.");
+      }
+      resetNoteForm();
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      setMessage("Erro ao salvar anotação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteNote(id: number) {
+    if (!window.confirm("Excluir esta anotação?")) return;
+    try {
+      setBusy(true);
+      await deleteNote(campaignId, id);
+      if (noteEditingId === id) resetNoteForm();
+      await refresh();
+      setMessage("Anotação excluída.");
+    } catch (err) {
+      console.error(err);
+      setMessage("Erro ao excluir anotação.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleSavePapyrus() {
@@ -203,6 +288,7 @@ export function PapirosMasterSection({
         {(
           [
             { id: "documentos", label: "Documentos" },
+            { id: "anotacoes", label: "Anotações" },
             { id: "mercado", label: "Mercado" },
           ] as const
         ).map((tab) => (
@@ -259,16 +345,22 @@ export function PapirosMasterSection({
               onChange={(e) => setBody(e.target.value)}
               placeholder="Texto do documento…"
               rows={5}
-              className="mb-2 w-full border px-2 py-1.5 text-sm outline-none"
+              className={textAreaClass}
               style={fieldStyle}
             />
-            <input
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="URL da imagem (opcional)"
-              className="mb-2 w-full border px-2 py-1.5 text-sm outline-none"
-              style={fieldStyle}
-            />
+            {imageUrl.startsWith("data:") ? (
+              <p className="mb-2 text-[11px] text-[var(--color-ink-soft)]">
+                Imagem anexada (arquivo). Remova abaixo para trocar.
+              </p>
+            ) : (
+              <input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="URL da imagem (opcional)"
+                className={textInputClass}
+                style={fieldStyle}
+              />
+            )}
             <label className="mb-2 block text-[11px] text-[var(--color-ink-soft)]">
               Ou enviar imagem
               <input
@@ -342,7 +434,7 @@ export function PapirosMasterSection({
                     </p>
                   </div>
                 </div>
-                <p className="mb-2 line-clamp-2 text-xs text-[var(--color-ink-muted)]">
+                <p className="mb-2 line-clamp-2 break-words text-xs text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">
                   {papyrus.body}
                 </p>
                 <div className="flex flex-wrap gap-1">
@@ -389,6 +481,208 @@ export function PapirosMasterSection({
                     type="button"
                     disabled={busy}
                     onClick={() => void handleDeletePapyrus(papyrus.id)}
+                    className="border px-2 py-1 text-[10px] text-[var(--color-crimson)]"
+                    style={fieldStyle}
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            ))}
+          </section>
+        </div>
+      )}
+
+      {sub === "anotacoes" && (
+        <div className="min-w-0 space-y-3">
+          <p className="text-[10px] leading-snug text-[var(--color-ink-soft)]">
+            Anotações privadas do mestre nesta campanha (texto, imagens). Só
+            você vê este conteúdo.
+          </p>
+          <section
+            className="rounded border p-2.5"
+            style={{
+              borderColor: "var(--color-border)",
+              backgroundColor: "var(--color-parchment-soft)",
+            }}
+          >
+            <h4
+              className="mb-2 text-xs tracking-wide text-[var(--color-ink)]"
+              style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+            >
+              {noteEditingId != null ? "Editar anotação" : "Nova anotação"}
+            </h4>
+            <input
+              value={noteTitle}
+              onChange={(e) => setNoteTitle(e.target.value)}
+              placeholder="Título (opcional)"
+              className="mb-2 w-full border px-2 py-1.5 text-sm outline-none"
+              style={fieldStyle}
+            />
+            <textarea
+              value={noteBody}
+              onChange={(e) => setNoteBody(e.target.value)}
+              placeholder="Texto, pistas, NPCs, lembretes…"
+              rows={5}
+              className={textAreaClass}
+              style={fieldStyle}
+            />
+            {noteImageUrl.startsWith("data:") ? (
+              <p className="mb-2 text-[11px] text-[var(--color-ink-soft)]">
+                Imagem anexada (arquivo). Remova abaixo para trocar.
+              </p>
+            ) : (
+              <input
+                value={noteImageUrl}
+                onChange={(e) => setNoteImageUrl(e.target.value)}
+                placeholder="URL da imagem (opcional)"
+                className={textInputClass}
+                style={fieldStyle}
+              />
+            )}
+            <label className="mb-2 block text-[11px] text-[var(--color-ink-soft)]">
+              Ou enviar foto / imagem
+              <input
+                type="file"
+                accept="image/*"
+                className="mt-1 block w-full text-xs"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  void readImageAsDataUrl(file, 768)
+                    .then(setNoteImageUrl)
+                    .catch(() => setMessage("Falha ao ler imagem."));
+                }}
+              />
+            </label>
+            {noteImageUrl ? (
+              <div
+                className="mb-2 overflow-hidden rounded border"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <img
+                  src={noteImageUrl}
+                  alt="Prévia"
+                  className="max-h-40 w-full object-contain"
+                  style={{ backgroundColor: "var(--color-parchment)" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setNoteImageUrl("")}
+                  className="w-full border-t px-2 py-1 text-[10px] text-[var(--color-crimson)]"
+                  style={{
+                    borderColor: "var(--color-border)",
+                    backgroundColor: "var(--color-parchment)",
+                  }}
+                >
+                  Remover imagem
+                </button>
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              <RibbonButton
+                type="button"
+                className="flex-1"
+                disabled={busy}
+                onClick={() => void handleSaveNote()}
+              >
+                {noteEditingId != null ? "Salvar" : "Criar"}
+              </RibbonButton>
+              {noteEditingId != null ? (
+                <button
+                  type="button"
+                  onClick={resetNoteForm}
+                  className="border px-2 py-1 text-xs"
+                  style={fieldStyle}
+                >
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="space-y-2">
+            <h4
+              className="text-xs tracking-wide text-[var(--color-ink)]"
+              style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+            >
+              Suas anotações (
+              {noteSearch.trim()
+                ? `${filteredNotes.length} de ${notes.length}`
+                : notes.length}
+              )
+            </h4>
+            <input
+              type="search"
+              value={noteSearch}
+              onChange={(e) => setNoteSearch(e.target.value)}
+              placeholder="Pesquisar por título…"
+              className="w-full min-w-0 border px-2 py-1.5 text-sm outline-none focus:border-[var(--color-crimson)]"
+              style={fieldStyle}
+              aria-label="Pesquisar anotações por título"
+            />
+            {notes.length === 0 && (
+              <p className="text-xs italic text-[var(--color-ink-soft)]">
+                Nenhuma anotação ainda.
+              </p>
+            )}
+            {notes.length > 0 && filteredNotes.length === 0 && (
+              <p className="text-xs italic text-[var(--color-ink-soft)]">
+                Nenhuma anotação com esse título.
+              </p>
+            )}
+            {filteredNotes.map((note) => (
+              <div
+                key={note.id}
+                className="min-w-0 overflow-hidden rounded border p-2"
+                style={{
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-parchment)",
+                }}
+              >
+                <p
+                  className="break-words text-sm text-[var(--color-ink)] [overflow-wrap:anywhere]"
+                  style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+                >
+                  {note.title.trim() || "Sem título"}
+                </p>
+                <p className="text-[10px] text-[var(--color-ink-soft)]">
+                  {new Date(note.updatedAt).toLocaleString("pt-BR")}
+                </p>
+                {note.body.trim() ? (
+                  <p className="mt-1 max-h-40 overflow-y-auto break-words whitespace-pre-wrap text-xs text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">
+                    {note.body}
+                  </p>
+                ) : null}
+                {note.imageUrl ? (
+                  <img
+                    src={note.imageUrl}
+                    alt=""
+                    className="mt-2 max-h-32 w-full rounded border object-contain"
+                    style={{
+                      borderColor: "var(--color-border-subtle)",
+                      backgroundColor: "var(--color-parchment-soft)",
+                    }}
+                  />
+                ) : null}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoteEditingId(note.id);
+                      setNoteTitle(note.title);
+                      setNoteBody(note.body);
+                      setNoteImageUrl(note.imageUrl ?? "");
+                    }}
+                    className="border px-2 py-1 text-[10px]"
+                    style={fieldStyle}
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void handleDeleteNote(note.id)}
                     className="border px-2 py-1 text-[10px] text-[var(--color-crimson)]"
                     style={fieldStyle}
                   >

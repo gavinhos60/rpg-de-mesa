@@ -338,7 +338,7 @@ export function PlayerPanel({
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="Escreva sua anotação da campanha…"
                 rows={6}
-                className="mb-2 w-full resize-y border px-2 py-1.5 text-sm outline-none"
+                className="mb-2 w-full min-w-0 resize-y border px-2 py-1.5 text-sm outline-none break-words whitespace-pre-wrap [overflow-wrap:anywhere]"
                 style={fieldStyle}
               />
               <div className="flex gap-2">

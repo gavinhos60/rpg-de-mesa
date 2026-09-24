@@ -136,7 +136,7 @@ const MASTER_TABS: Array<{ id: MasterTab; label: string; hint: string }> = [
   { id: "visao", label: "Visão", hint: "Escuridão e camadas" },
   { id: "tokens", label: "Tokens", hint: "NPCs e monstros" },
   { id: "grupo", label: "Grupo", hint: "Fichas, itens, testes e turnos" },
-  { id: "papiros", label: "Papiros", hint: "Documentos e mercado" },
+  { id: "papiros", label: "Papiros", hint: "Documentos, anotações e mercado" },
 ];
 
 const fieldStyle = {

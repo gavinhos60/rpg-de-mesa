@@ -29,16 +29,22 @@ export async function listPlayerNotes(
   });
 }
 
+function normalizeNoteContent(data: { body?: string; imageUrl?: string | null }) {
+  const body = String(data.body ?? "").trim();
+  const imageUrl = data.imageUrl?.trim() ? String(data.imageUrl).trim() : null;
+  if (!body && !imageUrl) throw new Error("NOTE_BODY_REQUIRED");
+  return { body, imageUrl };
+}
+
 export async function createPlayerNote(
   campaignId: number,
   authenticatedUserId: number,
-  data: { title?: string; body: string }
+  data: { title?: string; body?: string; imageUrl?: string | null }
 ) {
   await ensureCampaignMember(authenticatedUserId, campaignId);
 
   const title = String(data.title ?? "").trim();
-  const body = String(data.body ?? "").trim();
-  if (!body) throw new Error("NOTE_BODY_REQUIRED");
+  const { body, imageUrl } = normalizeNoteContent(data);
 
   return prisma.playerNote.create({
     data: {
@@ -46,6 +52,7 @@ export async function createPlayerNote(
       userId: authenticatedUserId,
       title,
       body,
+      imageUrl,
     },
   });
 }
@@ -54,7 +61,7 @@ export async function updatePlayerNote(
   campaignId: number,
   noteId: number,
   authenticatedUserId: number,
-  data: { title?: string; body?: string }
+  data: { title?: string; body?: string; imageUrl?: string | null }
 ) {
   await ensureCampaignMember(authenticatedUserId, campaignId);
 
@@ -63,12 +70,17 @@ export async function updatePlayerNote(
   });
   if (!existing) throw new Error("NOTE_NOT_FOUND");
 
-  const update: { title?: string; body?: string } = {};
+  const update: { title?: string; body?: string; imageUrl?: string | null } =
+    {};
   if (data.title != null) update.title = String(data.title).trim();
-  if (data.body != null) {
-    const body = String(data.body).trim();
-    if (!body) throw new Error("NOTE_BODY_REQUIRED");
+  if (data.body != null || data.imageUrl !== undefined) {
+    const { body, imageUrl } = normalizeNoteContent({
+      body: data.body ?? existing.body,
+      imageUrl:
+        data.imageUrl !== undefined ? data.imageUrl : existing.imageUrl,
+    });
     update.body = body;
+    update.imageUrl = imageUrl;
   }
 
   return prisma.playerNote.update({

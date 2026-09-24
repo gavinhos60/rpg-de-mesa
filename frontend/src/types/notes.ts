@@ -4,11 +4,13 @@ export interface PlayerNote {
   userId: number;
   title: string;
   body: string;
+  imageUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface PlayerNoteInput {
   title?: string;
-  body: string;
+  body?: string;
+  imageUrl?: string | null;
 }

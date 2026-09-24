@@ -20,7 +20,9 @@ function mapError(error: unknown, res: Response, fallback: string) {
       res.status(404).json({ error: "Anotação não encontrada" });
       return true;
     case "NOTE_BODY_REQUIRED":
-      res.status(400).json({ error: "Texto da anotação é obrigatório" });
+      res
+        .status(400)
+        .json({ error: "Informe texto ou imagem na anotação" });
       return true;
     default:
       return false;
@@ -59,6 +61,7 @@ export async function createNoteController(req: Request, res: Response) {
       {
         title: req.body.title,
         body: req.body.body,
+        imageUrl: req.body.imageUrl,
       }
     );
     res.status(201).json(item);
@@ -83,6 +86,7 @@ export async function updateNoteController(req: Request, res: Response) {
       {
         title: req.body.title,
         body: req.body.body,
+        imageUrl: req.body.imageUrl,
       }
     );
     res.json(item);
