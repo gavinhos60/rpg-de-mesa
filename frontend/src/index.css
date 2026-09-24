@@ -107,6 +107,26 @@ body {
   }
 }
 
+@keyframes kenku-hero-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.kenku-hero-fade-in {
+  animation: kenku-hero-fade-in 320ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kenku-hero-fade-in {
+    animation: none;
+  }
+}
+
 .kenku-parchment {
   background-color: var(--color-parchment);
   background-image:

@@ -10,7 +10,10 @@ import {
     FeatherIcon,
 } from "../components/icons/MedievalIcons";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { KenkuAtmosphere } from "../components/KenkuAtmosphere";
+import {
+    KenkuAtmosphere,
+    HERO_ART_SLIDES,
+} from "../components/KenkuAtmosphere";
 
 type AuthTab = "login" | "register";
 
@@ -91,7 +94,12 @@ export function Login() {
 
     return (
         <div className="kenku-shell relative flex min-h-screen items-center justify-center px-4 sm:justify-end sm:px-10 lg:px-16">
-            <KenkuAtmosphere density="normal" showArt artFocus="left" />
+            <KenkuAtmosphere
+                density="normal"
+                showArt
+                artFocus="left"
+                artSlides={[...HERO_ART_SLIDES]}
+            />
             <div className="absolute right-4 top-4 z-20">
                 <ThemeToggle />
             </div>

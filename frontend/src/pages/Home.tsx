@@ -7,7 +7,10 @@ import {
     BrokenSealIcon,
     QuillIcon,
 } from "../components/icons/MedievalIcons";
-import { KenkuAtmosphere } from "../components/KenkuAtmosphere";
+import {
+    KenkuAtmosphere,
+    HERO_ART_SLIDES,
+} from "../components/KenkuAtmosphere";
 
 interface HealthResponse {
     status: string;
@@ -38,7 +41,12 @@ export function Home() {
 
     return (
         <main className="kenku-shell relative flex min-h-screen items-end justify-start px-6 pb-16 pt-24 sm:px-12 sm:pb-20">
-            <KenkuAtmosphere density="normal" showArt artFocus="right" />
+            <KenkuAtmosphere
+                density="normal"
+                showArt
+                artFocus="right"
+                artSlides={[...HERO_ART_SLIDES]}
+            />
             <div className="relative z-10 max-w-xl">
                 <CrowMark className="mb-6 h-12 w-12 text-[var(--color-crow-soft)]" />
 
