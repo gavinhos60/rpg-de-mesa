@@ -95,7 +95,8 @@ import type { Papyrus } from "../types/papiros";
 import type { Shop } from "../types/mercado";
 import { usePlayRoomChromeOptional } from "../contexts/PlayRoomChromeContext";
 
-const MASTER_IMMERSIVE_STORAGE_KEY = "rpg-master-immersive";
+const PLAY_IMMERSIVE_STORAGE_KEY = "rpg-play-immersive";
+const LEGACY_IMMERSIVE_STORAGE_KEY = "rpg-master-immersive";
 
 function apiErrorMessage(err: unknown, fallback: string): string {
   if (
@@ -185,7 +186,7 @@ export function GameRoom() {
 
   const isMaster = role === "MASTER";
   const playRoomChrome = usePlayRoomChromeOptional();
-  const immersive = Boolean(isMaster && playRoomChrome?.immersive);
+  const immersive = Boolean(playRoomChrome?.immersive);
   const myCharacters = useMemo(
     () => characters.filter((character) => character.playerId === user?.id),
     [characters, user?.id]
@@ -218,34 +219,32 @@ export function GameRoom() {
   }, []);
 
   useEffect(() => {
-    if (!isMaster || !playRoomChrome) return;
+    if (!playRoomChrome) return;
     if (immersiveAppliedRef.current) return;
     immersiveAppliedRef.current = true;
     try {
-      if (localStorage.getItem(MASTER_IMMERSIVE_STORAGE_KEY) === "1") {
+      const stored =
+        localStorage.getItem(PLAY_IMMERSIVE_STORAGE_KEY) ??
+        localStorage.getItem(LEGACY_IMMERSIVE_STORAGE_KEY);
+      if (stored === "1") {
         playRoomChrome.setImmersive(true);
       }
     } catch {
       /* ignore */
     }
-  }, [isMaster, playRoomChrome]);
+  }, [playRoomChrome]);
 
   useEffect(() => {
     if (!playRoomChrome) return;
-    if (!isMaster) {
-      playRoomChrome.setImmersive(false);
-      immersiveAppliedRef.current = false;
-      return;
-    }
     try {
       localStorage.setItem(
-        MASTER_IMMERSIVE_STORAGE_KEY,
+        PLAY_IMMERSIVE_STORAGE_KEY,
         playRoomChrome.immersive ? "1" : "0"
       );
     } catch {
       /* ignore */
     }
-  }, [isMaster, playRoomChrome, playRoomChrome?.immersive]);
+  }, [playRoomChrome, playRoomChrome?.immersive]);
 
   useEffect(() => {
     if (!immersive || !playRoomChrome) return;
@@ -1432,60 +1431,61 @@ export function GameRoom() {
   }
 
   const masterLayout = isMaster;
-  const layoutScrollClass = masterLayout
+  const widePlayLayout = masterLayout || immersive;
+  const layoutScrollClass = widePlayLayout
     ? "md:overflow-hidden"
     : "lg:overflow-hidden";
-  const panelSideClass = masterLayout
+  const panelSideClass = widePlayLayout
     ? "md:max-h-none md:h-full"
     : "lg:max-h-none lg:h-full";
-  const mapOrderClass = masterLayout
+  const mapOrderClass = widePlayLayout
     ? "min-h-[min(52vh,28rem)] md:min-h-0 md:h-full"
     : "min-h-[min(58vh,32rem)] lg:min-h-0 lg:h-full";
-  const panelStackMaxClass = masterLayout
+  const panelStackMaxClass = widePlayLayout
     ? "max-h-[min(38vh,20rem)] md:max-h-none"
     : "max-h-[min(42vh,22rem)] lg:max-h-none";
-  const chatStackMaxClass = masterLayout
+  const chatStackMaxClass = widePlayLayout
     ? "max-h-[min(32vh,16rem)] md:max-h-none"
     : "max-h-[min(36vh,18rem)] lg:max-h-none";
 
   const gridColumnsClass = (() => {
+    if (immersive) {
+      /** Painel e dados iguais ~18% · mapa ~64% (18fr : 64fr : 18fr) */
+      const sideBoardDice =
+        "md:grid-cols-[minmax(0,18fr)_minmax(0,64fr)_minmax(0,18fr)]";
+      if (leftCollapsed && rightCollapsed) {
+        return "md:grid-cols-[auto_minmax(0,1fr)_auto]";
+      }
+      if (leftCollapsed) {
+        return "md:grid-cols-[auto_minmax(0,64fr)_minmax(0,18fr)]";
+      }
+      if (rightCollapsed) {
+        return "md:grid-cols-[minmax(0,18fr)_minmax(0,64fr)_auto]";
+      }
+      return sideBoardDice;
+    }
     if (!masterLayout) {
       if (leftCollapsed && rightCollapsed) {
         return "lg:grid-cols-[auto_minmax(0,1fr)_auto]";
       }
       if (leftCollapsed) {
-        return "lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,210px)] xl:grid-cols-[auto_minmax(0,1.4fr)_minmax(200px,230px)] 2xl:grid-cols-[auto_minmax(0,1fr)_260px]";
+        return "lg:grid-cols-[auto_minmax(0,1fr)_minmax(228px,272px)] xl:grid-cols-[auto_minmax(0,1.4fr)_minmax(248px,300px)] 2xl:grid-cols-[auto_minmax(0,1fr)_320px]";
       }
       if (rightCollapsed) {
-        return "lg:grid-cols-[minmax(190px,210px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(200px,230px)_minmax(0,1.4fr)_auto] 2xl:grid-cols-[250px_minmax(0,1fr)_auto]";
+        return "lg:grid-cols-[minmax(228px,272px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(248px,300px)_minmax(0,1.4fr)_auto] 2xl:grid-cols-[320px_minmax(0,1fr)_auto]";
       }
-      return "lg:grid-cols-[minmax(190px,210px)_minmax(0,1fr)_minmax(190px,210px)] xl:grid-cols-[minmax(200px,230px)_minmax(0,1.4fr)_minmax(200px,230px)] 2xl:grid-cols-[250px_minmax(0,1fr)_260px]";
-    }
-    if (immersive) {
-      /** Mestre ~23% · mapa ~61% · dados ~15% (23fr : 60fr : 15fr) */
-      const masterBoardDice =
-        "md:grid-cols-[minmax(0,23fr)_minmax(0,60fr)_minmax(0,15fr)]";
-      if (leftCollapsed && rightCollapsed) {
-        return "md:grid-cols-[auto_minmax(0,1fr)_auto]";
-      }
-      if (leftCollapsed) {
-        return "md:grid-cols-[auto_minmax(0,60fr)_minmax(0,15fr)]";
-      }
-      if (rightCollapsed) {
-        return "md:grid-cols-[minmax(0,23fr)_minmax(0,60fr)_auto]";
-      }
-      return masterBoardDice;
+      return "lg:grid-cols-[minmax(228px,272px)_minmax(0,1fr)_minmax(228px,272px)] xl:grid-cols-[minmax(248px,300px)_minmax(0,1.4fr)_minmax(248px,300px)] 2xl:grid-cols-[320px_minmax(0,1fr)_320px]";
     }
     if (leftCollapsed && rightCollapsed) {
       return "md:grid-cols-[auto_minmax(0,1fr)_auto]";
     }
     if (leftCollapsed) {
-      return "md:grid-cols-[auto_minmax(0,1fr)_minmax(168px,188px)] xl:grid-cols-[auto_minmax(0,1.35fr)_minmax(178px,198px)] 2xl:grid-cols-[auto_minmax(0,1fr)_220px]";
+      return "md:grid-cols-[auto_minmax(0,1fr)_minmax(210px,248px)] xl:grid-cols-[auto_minmax(0,1.35fr)_minmax(228px,272px)] 2xl:grid-cols-[auto_minmax(0,1fr)_290px]";
     }
     if (rightCollapsed) {
-      return "md:grid-cols-[minmax(168px,188px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(178px,198px)_minmax(0,1.35fr)_auto] 2xl:grid-cols-[220px_minmax(0,1fr)_auto]";
+      return "md:grid-cols-[minmax(210px,248px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(228px,272px)_minmax(0,1.35fr)_auto] 2xl:grid-cols-[290px_minmax(0,1fr)_auto]";
     }
-    return "md:grid-cols-[minmax(168px,188px)_minmax(0,1fr)_minmax(168px,188px)] xl:grid-cols-[minmax(178px,198px)_minmax(0,1.35fr)_minmax(178px,198px)] 2xl:grid-cols-[240px_minmax(0,1fr)_220px]";
+    return "md:grid-cols-[minmax(210px,248px)_minmax(0,1fr)_minmax(210px,248px)] xl:grid-cols-[minmax(228px,272px)_minmax(0,1.35fr)_minmax(228px,272px)] 2xl:grid-cols-[290px_minmax(0,1fr)_290px]";
   })();
 
   return (
@@ -1525,11 +1525,13 @@ export function GameRoom() {
       <div
         className={[
           "mx-auto flex h-full w-full flex-col",
-          immersive ? "max-w-none px-0.5 py-0.5" : "max-w-[1800px] px-2 py-2 sm:px-3 sm:py-2.5",
+          immersive
+            ? "max-w-none px-0.5 py-0.5"
+            : "max-w-[1800px] px-1.5 py-1.5 sm:px-2 sm:py-2",
         ].join(" ")}
       >
         {!immersive ? (
-          <div className="mb-2 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+          <div className="mb-1.5 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
             <Link
               to={`/campaigns/${campaignId}`}
               className="text-xs text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] sm:text-sm"
@@ -1545,7 +1547,7 @@ export function GameRoom() {
             <p className="text-xs text-[var(--color-ink-soft)] sm:text-sm">
               {isMaster ? "Mestre" : "Jogador"}
             </p>
-            {isMaster && playRoomChrome ? (
+            {playRoomChrome ? (
               <button
                 type="button"
                 onClick={() => playRoomChrome.setImmersive(true)}
@@ -1564,7 +1566,7 @@ export function GameRoom() {
         ) : null}
 
         {combat && (combat.active || combat.collecting || combat.order.length > 0) ? (
-          <div className={immersive ? "mb-0.5 shrink-0" : "mb-2 shrink-0"}>
+          <div className={immersive ? "mb-0.5 shrink-0" : "mb-1.5 shrink-0"}>
             <TurnClock
               combat={combat}
               isMaster={isMaster}

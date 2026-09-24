@@ -1711,7 +1711,7 @@ export function MasterPanel({
                 Recupera recursos de todos os personagens da mesa (ki, fúrias,
                 espaços de magia etc.), conforme descanso curto ou longo.
               </p>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="flex flex-col gap-1.5">
                 <RibbonButton
                   type="button"
                   className="w-full"
