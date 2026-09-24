@@ -93,6 +93,9 @@ import { listPapiros, publishPapyrus } from "../services/papiros.service";
 import { listShops } from "../services/mercado.service";
 import type { Papyrus } from "../types/papiros";
 import type { Shop } from "../types/mercado";
+import { usePlayRoomChromeOptional } from "../contexts/PlayRoomChromeContext";
+
+const MASTER_IMMERSIVE_STORAGE_KEY = "rpg-master-immersive";
 
 function apiErrorMessage(err: unknown, fallback: string): string {
   if (
@@ -181,6 +184,8 @@ export function GameRoom() {
   openShopsRef.current = openShops;
 
   const isMaster = role === "MASTER";
+  const playRoomChrome = usePlayRoomChromeOptional();
+  const immersive = Boolean(isMaster && playRoomChrome?.immersive);
   const myCharacters = useMemo(
     () => characters.filter((character) => character.playerId === user?.id),
     [characters, user?.id]
@@ -193,6 +198,7 @@ export function GameRoom() {
   roleRef.current = role;
   /** Tokens em arraste local — ignora ecos remotos para não teleportar. */
   const draggingTokenIdsRef = useRef<Set<string>>(new Set());
+  const immersiveAppliedRef = useRef(false);
   /** Após o drop: ignora posições intermediárias atrasadas. */
   const settlingTokensRef = useRef<
     Map<string, { x: number; y: number; until: number }>
@@ -209,6 +215,54 @@ export function GameRoom() {
       )
     );
     setCombat(state.combat ?? null);
+  }, []);
+
+  useEffect(() => {
+    if (!isMaster || !playRoomChrome) return;
+    if (immersiveAppliedRef.current) return;
+    immersiveAppliedRef.current = true;
+    try {
+      if (localStorage.getItem(MASTER_IMMERSIVE_STORAGE_KEY) === "1") {
+        playRoomChrome.setImmersive(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [isMaster, playRoomChrome]);
+
+  useEffect(() => {
+    if (!playRoomChrome) return;
+    if (!isMaster) {
+      playRoomChrome.setImmersive(false);
+      immersiveAppliedRef.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(
+        MASTER_IMMERSIVE_STORAGE_KEY,
+        playRoomChrome.immersive ? "1" : "0"
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [isMaster, playRoomChrome, playRoomChrome?.immersive]);
+
+  useEffect(() => {
+    if (!immersive || !playRoomChrome) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") playRoomChrome.setImmersive(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [immersive, playRoomChrome]);
+
+  const setImmersiveRef = useRef(playRoomChrome?.setImmersive);
+  setImmersiveRef.current = playRoomChrome?.setImmersive;
+
+  useEffect(() => {
+    return () => {
+      setImmersiveRef.current?.(false);
+    };
   }, []);
 
   useEffect(() => {
@@ -1377,35 +1431,140 @@ export function GameRoom() {
     );
   }
 
+  const masterLayout = isMaster;
+  const layoutScrollClass = masterLayout
+    ? "md:overflow-hidden"
+    : "lg:overflow-hidden";
+  const panelSideClass = masterLayout
+    ? "md:max-h-none md:h-full"
+    : "lg:max-h-none lg:h-full";
+  const mapOrderClass = masterLayout
+    ? "min-h-[min(52vh,28rem)] md:min-h-0 md:h-full"
+    : "min-h-[min(58vh,32rem)] lg:min-h-0 lg:h-full";
+  const panelStackMaxClass = masterLayout
+    ? "max-h-[min(38vh,20rem)] md:max-h-none"
+    : "max-h-[min(42vh,22rem)] lg:max-h-none";
+  const chatStackMaxClass = masterLayout
+    ? "max-h-[min(32vh,16rem)] md:max-h-none"
+    : "max-h-[min(36vh,18rem)] lg:max-h-none";
+
+  const gridColumnsClass = (() => {
+    if (!masterLayout) {
+      if (leftCollapsed && rightCollapsed) {
+        return "lg:grid-cols-[auto_minmax(0,1fr)_auto]";
+      }
+      if (leftCollapsed) {
+        return "lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,210px)] xl:grid-cols-[auto_minmax(0,1.4fr)_minmax(200px,230px)] 2xl:grid-cols-[auto_minmax(0,1fr)_260px]";
+      }
+      if (rightCollapsed) {
+        return "lg:grid-cols-[minmax(190px,210px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(200px,230px)_minmax(0,1.4fr)_auto] 2xl:grid-cols-[250px_minmax(0,1fr)_auto]";
+      }
+      return "lg:grid-cols-[minmax(190px,210px)_minmax(0,1fr)_minmax(190px,210px)] xl:grid-cols-[minmax(200px,230px)_minmax(0,1.4fr)_minmax(200px,230px)] 2xl:grid-cols-[250px_minmax(0,1fr)_260px]";
+    }
+    if (immersive) {
+      /** Mestre ~23% · mapa ~61% · dados ~15% (23fr : 60fr : 15fr) */
+      const masterBoardDice =
+        "md:grid-cols-[minmax(0,23fr)_minmax(0,60fr)_minmax(0,15fr)]";
+      if (leftCollapsed && rightCollapsed) {
+        return "md:grid-cols-[auto_minmax(0,1fr)_auto]";
+      }
+      if (leftCollapsed) {
+        return "md:grid-cols-[auto_minmax(0,60fr)_minmax(0,15fr)]";
+      }
+      if (rightCollapsed) {
+        return "md:grid-cols-[minmax(0,23fr)_minmax(0,60fr)_auto]";
+      }
+      return masterBoardDice;
+    }
+    if (leftCollapsed && rightCollapsed) {
+      return "md:grid-cols-[auto_minmax(0,1fr)_auto]";
+    }
+    if (leftCollapsed) {
+      return "md:grid-cols-[auto_minmax(0,1fr)_minmax(168px,188px)] xl:grid-cols-[auto_minmax(0,1.35fr)_minmax(178px,198px)] 2xl:grid-cols-[auto_minmax(0,1fr)_220px]";
+    }
+    if (rightCollapsed) {
+      return "md:grid-cols-[minmax(168px,188px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(178px,198px)_minmax(0,1.35fr)_auto] 2xl:grid-cols-[220px_minmax(0,1fr)_auto]";
+    }
+    return "md:grid-cols-[minmax(168px,188px)_minmax(0,1fr)_minmax(168px,188px)] xl:grid-cols-[minmax(178px,198px)_minmax(0,1.35fr)_minmax(178px,198px)] 2xl:grid-cols-[240px_minmax(0,1fr)_220px]";
+  })();
+
   return (
     <div
-      className="flex h-[calc(100vh-3rem)] flex-col overflow-hidden text-[var(--color-ink)]"
+      className={[
+        "flex flex-col overflow-hidden text-[var(--color-ink)]",
+        immersive ? "h-[100dvh]" : "h-[calc(100vh-3rem)]",
+      ].join(" ")}
       style={{
         fontFamily: "'EB Garamond', Georgia, serif",
         backgroundColor: "var(--color-parchment)",
       }}
     >
-      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col px-2 py-2 sm:px-3 sm:py-2.5">
-        <div className="mb-2 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <Link
-            to={`/campaigns/${campaignId}`}
-            className="text-xs text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] sm:text-sm"
-          >
-            ← Campanha
-          </Link>
-          <h1
-            className="truncate text-base text-[var(--color-ink)] sm:text-lg"
-            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-          >
-            {campaignName || "Sala de jogo"}
-          </h1>
-          <p className="text-xs text-[var(--color-ink-soft)] sm:text-sm">
-            {isMaster ? "Mestre" : "Jogador"}
-          </p>
+      {immersive && playRoomChrome ? (
+        <div
+          className="pointer-events-none fixed inset-x-0 top-0 z-40 flex justify-end gap-1 p-1"
+          aria-label="Controles da tela cheia"
+        >
+          <div className="pointer-events-auto">
+            <button
+              type="button"
+              onClick={() => playRoomChrome.setImmersive(false)}
+              className="border px-2 py-0.5 text-[10px] text-[var(--color-ink)]"
+              style={{
+                fontFamily: "'Cinzel', serif",
+                borderColor: "var(--color-crimson)",
+                backgroundColor: "var(--color-parchment-soft)",
+              }}
+              title="Esc ou clique para sair"
+            >
+              Sair da tela cheia
+            </button>
+          </div>
         </div>
+      ) : null}
+
+      <div
+        className={[
+          "mx-auto flex h-full w-full flex-col",
+          immersive ? "max-w-none px-0.5 py-0.5" : "max-w-[1800px] px-2 py-2 sm:px-3 sm:py-2.5",
+        ].join(" ")}
+      >
+        {!immersive ? (
+          <div className="mb-2 flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+            <Link
+              to={`/campaigns/${campaignId}`}
+              className="text-xs text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] sm:text-sm"
+            >
+              ← Campanha
+            </Link>
+            <h1
+              className="truncate text-base text-[var(--color-ink)] sm:text-lg"
+              style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+            >
+              {campaignName || "Sala de jogo"}
+            </h1>
+            <p className="text-xs text-[var(--color-ink-soft)] sm:text-sm">
+              {isMaster ? "Mestre" : "Jogador"}
+            </p>
+            {isMaster && playRoomChrome ? (
+              <button
+                type="button"
+                onClick={() => playRoomChrome.setImmersive(true)}
+                className="ml-auto border px-2 py-0.5 text-[11px] text-[var(--color-ink-muted)]"
+                style={{
+                  fontFamily: "'Cinzel', serif",
+                  borderColor: "var(--color-border-strong)",
+                  backgroundColor: "var(--color-surface)",
+                }}
+                title="Oculta o cabeçalho do site e usa toda a altura da tela"
+              >
+                Tela cheia
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {combat && (combat.active || combat.collecting || combat.order.length > 0) ? (
-          <div className="mb-2 shrink-0">
+          <div className={immersive ? "mb-0.5 shrink-0" : "mb-2 shrink-0"}>
             <TurnClock
               combat={combat}
               isMaster={isMaster}
@@ -1419,25 +1578,22 @@ export function GameRoom() {
           </div>
         ) : null}
 
-        {/* Mapa dominante; painéis laterais mais estreitos em monitores médios */}
+        {/* Mapa dominante; mestre usa colunas desde md e tela cheia compacta */}
         <div
           className={[
-            "grid min-h-0 flex-1 gap-2 grid-cols-1 overflow-y-auto lg:overflow-hidden",
-            leftCollapsed && rightCollapsed
-              ? "lg:grid-cols-[auto_minmax(0,1fr)_auto]"
-              : leftCollapsed
-                ? "lg:grid-cols-[auto_minmax(0,1fr)_minmax(190px,210px)] xl:grid-cols-[auto_minmax(0,1.4fr)_minmax(200px,230px)] 2xl:grid-cols-[auto_minmax(0,1fr)_260px]"
-                : rightCollapsed
-                  ? "lg:grid-cols-[minmax(190px,210px)_minmax(0,1fr)_auto] xl:grid-cols-[minmax(200px,230px)_minmax(0,1.4fr)_auto] 2xl:grid-cols-[250px_minmax(0,1fr)_auto]"
-                  : "lg:grid-cols-[minmax(190px,210px)_minmax(0,1fr)_minmax(190px,210px)] xl:grid-cols-[minmax(200px,230px)_minmax(0,1.4fr)_minmax(200px,230px)] 2xl:grid-cols-[250px_minmax(0,1fr)_260px]",
+            "grid min-h-0 flex-1 grid-cols-1 overflow-y-auto",
+            layoutScrollClass,
+            immersive ? "gap-0.5" : "gap-2",
+            gridColumnsClass,
           ].join(" ")}
         >
           <div
             className={[
-              "order-2 min-h-0 overflow-hidden lg:order-1 lg:max-h-none lg:h-full",
+              "order-2 min-h-0 overflow-hidden md:order-1",
+              panelSideClass,
               leftCollapsed
-                ? "max-h-none w-10"
-                : "max-h-[min(42vh,22rem)]",
+                ? "max-h-none w-9 sm:w-10"
+                : panelStackMaxClass,
             ].join(" ")}
           >
             {leftCollapsed ? (
@@ -1457,21 +1613,24 @@ export function GameRoom() {
               </button>
             ) : (
               <div className="flex h-full min-h-0 flex-col">
-                <button
-                  type="button"
-                  onClick={() => setLeftCollapsed(true)}
-                  className="mb-1 shrink-0 border px-2 py-1 text-left text-[11px] text-[var(--color-ink-soft)]"
-                  style={{
-                    fontFamily: "'Cinzel', serif",
-                    borderColor: "var(--color-border)",
-                    backgroundColor: "var(--color-parchment)",
-                  }}
-                >
-                  ◀ Recolher painel
-                </button>
+                {!immersive ? (
+                  <button
+                    type="button"
+                    onClick={() => setLeftCollapsed(true)}
+                    className="mb-1 shrink-0 border px-2 py-1 text-left text-[11px] text-[var(--color-ink-soft)]"
+                    style={{
+                      fontFamily: "'Cinzel', serif",
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "var(--color-parchment)",
+                    }}
+                  >
+                    ◀ Recolher painel
+                  </button>
+                ) : null}
                 <div className="min-h-0 flex-1 overflow-hidden">
                   {isMaster ? (
                     <MasterPanel
+                      compact={false}
                       board={board}
                       tool={tool}
                       characters={characters}
@@ -1555,7 +1714,7 @@ export function GameRoom() {
             )}
           </div>
 
-          <div className="order-1 min-h-[min(58vh,32rem)] lg:order-2 lg:min-h-0 lg:h-full">
+          <div className={["order-1 md:order-2", mapOrderClass].join(" ")}>
             <GameBoard
               board={board}
               tool={tool}
@@ -1619,10 +1778,11 @@ export function GameRoom() {
 
           <div
             className={[
-              "order-3 min-h-0 overflow-hidden lg:max-h-none lg:h-full",
+              "order-3 min-h-0 overflow-hidden",
+              panelSideClass,
               rightCollapsed
-                ? "max-h-none w-10"
-                : "max-h-[min(36vh,18rem)]",
+                ? "max-h-none w-9 sm:w-10"
+                : chatStackMaxClass,
             ].join(" ")}
           >
             {rightCollapsed ? (
@@ -1642,20 +1802,22 @@ export function GameRoom() {
               </button>
             ) : (
               <div className="flex h-full min-h-0 flex-col">
-                <button
-                  type="button"
-                  onClick={() => setRightCollapsed(true)}
-                  className="mb-1 shrink-0 border px-2 py-1 text-left text-[11px] text-[var(--color-ink-soft)]"
-                  style={{
-                    fontFamily: "'Cinzel', serif",
-                    borderColor: "var(--color-border)",
-                    backgroundColor: "var(--color-parchment)",
-                  }}
-                >
-                  Recolher chat ▶
-                </button>
+                {!immersive ? (
+                  <button
+                    type="button"
+                    onClick={() => setRightCollapsed(true)}
+                    className="mb-1 shrink-0 border px-2 py-1 text-left text-[11px] text-[var(--color-ink-soft)]"
+                    style={{
+                      fontFamily: "'Cinzel', serif",
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "var(--color-parchment)",
+                    }}
+                  >
+                    Recolher chat ▶
+                  </button>
+                ) : null}
                 <div className="min-h-0 flex-1 overflow-hidden">
-                  <GameChat messages={chat} onSend={handleSendChat} />
+                  <GameChat compact={false} messages={chat} onSend={handleSendChat} />
                 </div>
               </div>
             )}

@@ -4,6 +4,7 @@ import type { ChatMessage, ChatRollPart } from "../../types/game";
 interface GameChatProps {
   messages: ChatMessage[];
   onSend: (text: string) => Promise<void> | void;
+  compact?: boolean;
 }
 
 function formatRollBreakdown(part: ChatRollPart): string {
@@ -198,7 +199,7 @@ function RollMessageBody({ message }: { message: ChatMessage }) {
   );
 }
 
-export function GameChat({ messages, onSend }: GameChatProps) {
+export function GameChat({ messages, onSend, compact = false }: GameChatProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState<string[]>(() => {
@@ -300,13 +301,21 @@ export function GameChat({ messages, onSend }: GameChatProps) {
       style={{ borderColor: "var(--color-border-strong)", backgroundColor: "var(--color-surface)" }}
     >
       <div
-        className="border-b px-4 py-3 text-sm text-[var(--color-ink)]"
+        className={[
+          "border-b text-[var(--color-ink)]",
+          compact ? "px-2 py-1.5 text-xs" : "px-4 py-3 text-sm",
+        ].join(" ")}
         style={{ borderColor: "var(--color-border)", fontFamily: "'Cinzel', serif", fontWeight: 600 }}
       >
         Chat & Dados
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
+      <div
+        className={[
+          "flex-1 overflow-y-auto",
+          compact ? "space-y-1 px-2 py-1.5" : "space-y-2 px-3 py-3",
+        ].join(" ")}
+      >
         {messages.length === 0 && (
           <p className="text-sm italic text-[var(--color-ink-soft)]">
             Digite uma mensagem ou use /R 1d20+5
@@ -340,7 +349,11 @@ export function GameChat({ messages, onSend }: GameChatProps) {
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={handleSubmit} className="border-t p-3" style={{ borderColor: "var(--color-border)" }}>
+      <form
+        onSubmit={handleSubmit}
+        className={compact ? "border-t p-1.5" : "border-t p-3"}
+        style={{ borderColor: "var(--color-border)" }}
+      >
         <input
           ref={inputRef}
           value={text}
@@ -353,7 +366,10 @@ export function GameChat({ messages, onSend }: GameChatProps) {
           }}
           onKeyDown={handleInputKeyDown}
           placeholder="Mensagem ou /R 1d20+9 · ↑ histórico"
-          className="w-full border px-3 py-2 text-sm text-[var(--color-ink)] outline-none focus:border-[var(--color-crimson)]"
+          className={[
+            "w-full border text-[var(--color-ink)] outline-none focus:border-[var(--color-crimson)]",
+            compact ? "px-2 py-1 text-xs" : "px-3 py-2 text-sm",
+          ].join(" ")}
           style={{ backgroundColor: "var(--color-parchment)", borderColor: "var(--color-border)" }}
           autoComplete="off"
         />

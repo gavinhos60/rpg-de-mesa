@@ -90,6 +90,8 @@ interface MasterPanelProps {
   onWatchPlayerSceneChange?: (enabled: boolean) => void;
   campaignId?: number;
   onPreviewPapyrus?: (papyrus: Papyrus) => void;
+  /** Layout compacto (tela cheia do mestre). */
+  compact?: boolean;
 }
 
 function uid(prefix: string) {
@@ -168,6 +170,7 @@ export function MasterPanel({
   onWatchPlayerSceneChange,
   campaignId,
   onPreviewPapyrus,
+  compact = false,
 }: MasterPanelProps) {
   const [mapUrl, setMapUrl] = useState(board.mapUrl || "");
   const [mapWidthDraft, setMapWidthDraft] = useState(() =>
@@ -849,32 +852,48 @@ export function MasterPanel({
       }}
     >
       <header
-        className="shrink-0 border-b px-3 pb-2 pt-3"
+        className={[
+          "shrink-0 border-b",
+          compact ? "px-2 pb-1.5 pt-1.5" : "px-3 pb-2 pt-3",
+        ].join(" ")}
         style={{
           borderColor: "var(--color-border)",
           background:
             "linear-gradient(180deg, var(--color-parchment-soft) 0%, var(--color-surface) 100%)",
         }}
       >
-        <div className="mb-2 flex items-baseline justify-between gap-2">
+        <div
+          className={[
+            "flex items-baseline justify-between gap-2",
+            compact ? "mb-1" : "mb-2",
+          ].join(" ")}
+        >
           <h3
-            className="text-base text-[var(--color-ink)]"
+            className={[
+              "text-[var(--color-ink)]",
+              compact ? "text-sm" : "text-base",
+            ].join(" ")}
             style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
           >
             Mestre
           </h3>
-          <span className="truncate text-[10px] text-[var(--color-ink-soft)]">
-            {activeTabMeta?.hint}
-          </span>
+          {!compact ? (
+            <span className="truncate text-[10px] text-[var(--color-ink-soft)]">
+              {activeTabMeta?.hint}
+            </span>
+          ) : null}
         </div>
 
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-0.5 sm:gap-1">
           {tools.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => onToolChange(item.id)}
-              className="border px-2 py-1 text-[11px]"
+              className={[
+                "border text-[var(--color-ink-muted)]",
+                compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]",
+              ].join(" ")}
               style={{
                 fontFamily: "'Cinzel', serif",
                 borderColor:
@@ -897,9 +916,17 @@ export function MasterPanel({
           ))}
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div
+          className={[
+            "flex flex-wrap items-center",
+            compact ? "mt-1 gap-1" : "mt-2 gap-2",
+          ].join(" ")}
+        >
           <label
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded border px-2 py-1 text-[11px]"
+            className={[
+              "inline-flex cursor-pointer items-center gap-1 rounded border",
+              compact ? "px-1.5 py-0.5 text-[10px]" : "gap-1.5 px-2 py-1 text-[11px]",
+            ].join(" ")}
             style={{
               borderColor: placeOnSecretLayer
                 ? "var(--color-crimson)"
@@ -922,7 +949,10 @@ export function MasterPanel({
           <button
             type="button"
             onClick={clearDrawings}
-            className="border px-2 py-1 text-[11px] text-[var(--color-ink-muted)]"
+            className={[
+              "border text-[var(--color-ink-muted)]",
+              compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-[11px]",
+            ].join(" ")}
             style={fieldStyle}
           >
             Limpar marcações
@@ -932,7 +962,10 @@ export function MasterPanel({
         {Object.keys(board.playerViewsByUserId ?? {}).length > 0 ||
         board.playerMapView ? (
           <div
-            className="mt-2 rounded border px-2 py-1.5"
+            className={[
+              "rounded border",
+              compact ? "mt-1 px-1.5 py-1" : "mt-2 px-2 py-1.5",
+            ].join(" ")}
             style={{
               borderColor: "var(--color-crimson)",
               backgroundColor:
@@ -986,7 +1019,10 @@ export function MasterPanel({
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
-              className="relative px-1 py-2.5 text-[11px] transition-colors"
+              className={[
+                "relative px-0.5 transition-colors",
+                compact ? "py-1.5 text-[10px]" : "px-1 py-2.5 text-[11px]",
+              ].join(" ")}
               style={{
                 fontFamily: "'Cinzel', serif",
                 fontWeight: active ? 600 : 500,
@@ -1008,7 +1044,12 @@ export function MasterPanel({
         })}
       </nav>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div
+        className={[
+          "min-h-0 flex-1 overflow-y-auto",
+          compact ? "p-2" : "p-3",
+        ].join(" ")}
+      >
         {activeTab === "mapa" && (
           <div className="space-y-3">
             <section
