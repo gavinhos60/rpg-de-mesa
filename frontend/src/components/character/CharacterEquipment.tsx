@@ -20,6 +20,10 @@ import {
     normalizeActiveSlots,
     normalizeAttunedSlots,
 } from "../../utils/equipmentSlots";
+import {
+    getChoiceStacks,
+    resolveEquipmentChoiceId,
+} from "../../utils/startingEquipment";
 import { InventoryEquipmentSection } from "./InventoryEquipmentSection";
 import { EquipmentCatalogImage } from "./EquipmentCatalogImage";
 import type { ActiveSlots, AttunedSlots } from "../../types/character";
@@ -68,13 +72,9 @@ export function CharacterEquipment({
         const result = [...startingEquipment.fixed];
 
         for (const choice of startingEquipment.choices) {
-            const selectedId =
-                data.equipment.choiceSelections[choice.id] ??
-                choice.alternatives[0]?.id;
-            const selected = choice.alternatives.find(
-                (alternative) => alternative.id === selectedId
+            result.push(
+                ...getChoiceStacks(choice, data.equipment.choiceSelections)
             );
-            if (selected) result.push(...selected.items);
         }
 
         return result;
@@ -230,10 +230,10 @@ export function CharacterEquipment({
                 </h3>
                 <div className="grid gap-4 md:grid-cols-2">
                     {startingEquipment.choices.map((choice) => {
-                        const selectedId =
-                            data.equipment.choiceSelections[choice.id] ??
-                            choice.alternatives[0]?.id ??
-                            "";
+                        const selectedId = resolveEquipmentChoiceId(
+                            choice,
+                            data.equipment.choiceSelections
+                        );
 
                         return (
                             <label key={choice.id} className="border p-4" style={card}>

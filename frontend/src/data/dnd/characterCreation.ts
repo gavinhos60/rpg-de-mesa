@@ -24,6 +24,7 @@ import {
 } from "./elementalDisciplines";
 import { getPactBoon } from "./eldritchInvocations";
 import { getClassFeatureChoiceIssues } from "./classFeatureChoices";
+import { isEquipmentChoiceComplete } from "../../utils/startingEquipment";
 import { getAllWarlockChoicesIssues, getWarlockPactExtrasIssues } from "./warlockPact";
 
 function filled(value: string | null | undefined): boolean {
@@ -289,7 +290,11 @@ function equipmentIssues(data: CharacterFormData): string[] {
     );
     const choices = characterClass?.startingEquipment?.choices ?? [];
     const incomplete = choices.some(
-        (choice) => !filled(data.equipment.choiceSelections[choice.id])
+        (choice) =>
+            !isEquipmentChoiceComplete(
+                choice,
+                data.equipment.choiceSelections
+            )
     );
 
     return incomplete ? ["Complete as escolhas de equipamento da classe."] : [];

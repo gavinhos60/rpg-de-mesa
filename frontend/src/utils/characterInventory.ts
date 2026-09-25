@@ -1,6 +1,7 @@
 import { DND_BACKGROUNDS } from "../data/dnd/backgrounds";
 import { DND_CLASSES } from "../data/dnd/classes";
 import type { CharacterFormData } from "../types/character";
+import { getChoiceStacks } from "./startingEquipment";
 
 export interface CharacterInventoryRow {
     itemId: string;
@@ -22,13 +23,10 @@ export function buildCharacterInventory(
         }
 
         for (const choice of starting.choices) {
-            const selectedId =
-                data.equipment.choiceSelections[choice.id] ??
-                choice.alternatives[0]?.id;
-            const selected = choice.alternatives.find(
-                (alternative) => alternative.id === selectedId
-            );
-            for (const stack of selected?.items ?? []) {
+            for (const stack of getChoiceStacks(
+                choice,
+                data.equipment.choiceSelections
+            )) {
                 addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
             }
         }

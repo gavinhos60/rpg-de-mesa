@@ -10,6 +10,10 @@ import type {
     ItemBonus,
 } from "../types/character";
 import { buildCharacterInventory } from "./characterInventory";
+import {
+    buildDefaultChoiceSelections,
+    normalizeChoiceSelections,
+} from "./startingEquipment";
 
 const AUTO_EQUIP_ARMOR_PRIORITY = [
     "chain-mail",
@@ -351,20 +355,13 @@ export function ensureClassEquipmentDefaults(
         return ensureStarterEquipmentEquipped(data);
     }
 
-    const defaultChoices = Object.fromEntries(
-        startingEquipment.choices.map((choice) => [
-            choice.id,
-            choice.alternatives[0]?.id ?? "",
-        ])
-    );
-
     const classChanged = data.equipment.classId !== primaryClassId;
     const choiceSelections = classChanged
-        ? defaultChoices
-        : {
-              ...defaultChoices,
-              ...data.equipment.choiceSelections,
-          };
+        ? buildDefaultChoiceSelections(primaryClassId)
+        : normalizeChoiceSelections(
+              primaryClassId,
+              data.equipment.choiceSelections
+          );
 
     const withChoices: CharacterFormData = {
         ...data,
