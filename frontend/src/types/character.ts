@@ -167,7 +167,8 @@ export interface CharacterTalentChoice {
     | "language"
     | "spell"
     | "class"
-    | "custom";
+    | "custom"
+    | "maneuver";
 
     name: string;
     description: string;

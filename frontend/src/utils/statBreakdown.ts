@@ -339,7 +339,7 @@ export function getArmorClassBreakdown(
     return lines;
 }
 
-function getSkillProficiencySourceLabels(
+export function getSkillProficiencySourceLabels(
     data: CharacterFormData,
     skillId: Skill
 ): string[] {
@@ -379,10 +379,6 @@ function getSkillProficiencySourceLabels(
     );
     if (monkeyPath && skillId === "deception") {
         add("Caminho do Macaco");
-    }
-
-    if (data.skills?.[skillId]?.proficient) {
-        add("Perícia (ficha)");
     }
 
     return sources;

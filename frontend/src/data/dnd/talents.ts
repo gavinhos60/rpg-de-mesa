@@ -328,6 +328,17 @@ export const DND_TALENTS: CharacterTalent[] = [
         name: "Adepto Marcial",
         source: "Livro do Jogador 2014",
 
+        choices: [
+            {
+                id: "feat:martial-adept-maneuvers",
+                type: "maneuver",
+                name: "Manobras",
+                description:
+                    "Escolha duas manobras do Mestre de Batalha.",
+                count: 2,
+            },
+        ],
+
         description:
             "Você aprende duas manobras da lista do arquétipo Mestre de Batalha. Você ganha um dado de superioridade, que é um d6, e pode usá-lo para executar suas manobras.",
     },

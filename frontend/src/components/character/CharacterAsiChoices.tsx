@@ -3,6 +3,7 @@ import { ABILITIES } from "../../data/dnd/abilities";
 import { DND_CLASSES } from "../../data/dnd/classes";
 import { getAsiMilestones } from "../../data/dnd/classFeatures";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
+import { applyAsiSelectionUpdate } from "../../data/dnd/featCleanup";
 import { DND_TALENTS, sortTalentsByName } from "../../data/dnd/talents";
 import { CharacterTalentChoices } from "./CharacterTalentChoices";
 
@@ -31,13 +32,7 @@ export function CharacterAsiChoices({
     ]);
 
     function updateSelection(key: string, selection: AsiSelection) {
-        onChange({
-            ...data,
-            asiSelections: {
-                ...data.asiSelections,
-                [key]: selection,
-            },
-        });
+        onChange(applyAsiSelectionUpdate(data, key, selection));
     }
 
     if (milestones.length === 0) {

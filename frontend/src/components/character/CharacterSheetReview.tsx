@@ -23,8 +23,11 @@ import {
 } from "../../data/dnd/skills";
 import { DND_TALENTS } from "../../data/dnd/talents";
 import {
+    formatAsiFeatChoiceLines,
+    getAsiFeatLanguages,
     getAsiMilestones,
     getFeatSavingThrowAbilities,
+    hasSelectedFeat,
 } from "../../data/dnd/classFeatures";
 import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
 import { CharacterWarlockChoices } from "./CharacterWarlockChoices";
@@ -486,16 +489,18 @@ export function CharacterSheetReview({
                             {data.alignment ? ` e de alinhamento ${ALIGNMENT_NAMES[data.alignment]}` : ""}.
                         </p>
                         {((race?.languages?.length ?? 0) > 0 ||
-                            data.backgroundChoices.languages.length > 0) && (
+                            data.backgroundChoices.languages.length > 0 ||
+                            (data.talentChoices.languages ?? []).length > 0 ||
+                            getAsiFeatLanguages(data).length > 0) && (
                                 <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
                                     <span className="text-[var(--color-ink)]" style={cinzel}>
                                         Idiomas:
                                     </span>{" "}
                                     {[
                                         ...(race?.languages ?? []),
-                                        ...(data.backgroundChoices.languages ?? []),     
+                                        ...(data.backgroundChoices.languages ?? []),
                                         ...(data.talentChoices.languages ?? []),
-                                                                 
+                                        ...getAsiFeatLanguages(data),
                                     ]
                                         .map((language) => getLanguageOptions([language])[0]?.name ?? language)
                                         .join(", ")}
@@ -571,6 +576,16 @@ export function CharacterSheetReview({
                                                 ? `+2 ${abilityNames[0] ?? "—"}`
                                                 : `+1 ${abilityNames[0] ?? "—"} / +1 ${abilityNames[1] ?? "—"}`)}
                                     </span>
+                                    {selection?.kind === "feat" && selection.featId ? (
+                                        <ul className="mt-1 space-y-0.5 text-xs text-[var(--color-ink-muted)]">
+                                            {formatAsiFeatChoiceLines(
+                                                selection.featId,
+                                                selection.featChoices
+                                            ).map((line) => (
+                                                <li key={line}>{line}</li>
+                                            ))}
+                                        </ul>
+                                    ) : null}
                                 </div>
                             );
                         })}
@@ -1859,16 +1874,3 @@ function groupSpellsByLevel(spells: Spell[]): Record<string, Spell[]> {
         }, {});
 }
 
-function hasSelectedFeat(data: CharacterFormData, featId: string): boolean {
-    if (data.talentId === featId) return true;
-
-    const validKeys = new Set(
-        getAsiMilestones(data.classes).map((milestone) => milestone.key)
-    );
-    return Object.entries(data.asiSelections).some(
-        ([key, selection]) =>
-            validKeys.has(key) &&
-            selection.kind === "feat" &&
-            selection.featId === featId
-    );
-}

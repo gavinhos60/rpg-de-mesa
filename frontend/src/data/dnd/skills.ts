@@ -112,10 +112,6 @@ export function getProficientSkills(data: CharacterFormData): Set<Skill> {
             selection.level >= 3
     );
 
-    const flagged = Object.entries(data.skills ?? {})
-        .filter(([, value]) => value?.proficient)
-        .map(([id]) => id as Skill);
-
     return new Set<Skill>([
         ...getResolvedSkillProficiencies(data),
         ...(data.skillProficiencies?.race ?? []),
@@ -125,8 +121,27 @@ export function getProficientSkills(data: CharacterFormData): Set<Skill> {
         ...getAsiFeatSkills(data),
         ...getClassFeatureBonusSkills(data),
         ...(monkeyPath ? ["deception" as Skill] : []),
-        ...flagged,
     ]);
+}
+
+/** Alinha `skills[id].proficient` com as fontes reais (não usa o flag antigo como entrada). */
+export function syncSkillProficiencyFlags(
+    data: CharacterFormData
+): CharacterFormData {
+    if (!data.skills) return data;
+
+    const proficient = getProficientSkills(data);
+    const skills = Object.fromEntries(
+        Object.entries(data.skills).map(([id, value]) => [
+            id,
+            {
+                ...value,
+                proficient: proficient.has(id as Skill),
+            },
+        ])
+    ) as CharacterFormData["skills"];
+
+    return { ...data, skills };
 }
 
 export function getSkillExtraBonus(

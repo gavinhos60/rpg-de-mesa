@@ -26,6 +26,7 @@ import {
     canEnterStep,
     getStepIssues,
 } from "../data/dnd/characterCreation";
+import { syncSkillProficiencyFlags } from "../data/dnd/skills";
 import { ensureClassEquipmentDefaults } from "../utils/equipmentSlots";
 import {
     createCharacterFromForm,
@@ -159,7 +160,7 @@ function mergeSheet(
         };
     }
 
-    return {
+    const merged: CharacterFormData = {
         ...initialData,
         ...sheet,
         name: sheet.name?.trim() || fallbackName?.trim() || "",
@@ -215,6 +216,8 @@ function mergeSheet(
         featureChoices: sheet.featureChoices ?? {},
         classes: Array.isArray(sheet.classes) ? sheet.classes : [],
     };
+
+    return syncSkillProficiencyFlags(merged);
 }
 
 function sheetFromCharacter(character: SavedCharacter): CharacterFormData {

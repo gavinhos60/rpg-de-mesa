@@ -14,9 +14,15 @@ import {
   BATTLE_MASTER_MANEUVERS_KEY,
   getBattleManeuverLimit,
   getSelectedManeuvers,
+  MARTIAL_ADEPT_MANEUVERS_KEY,
   superiorityDieSize,
   superiorityDiceMax,
 } from "../../data/dnd/battleMasterManeuvers";
+import {
+  getMartialAdeptManeuverIds,
+  getValidAsiKeys,
+  hasSelectedFeat,
+} from "../../data/dnd/classFeatures";
 import {
   METAMAGIC_OPTIONS,
   SORCERER_METAMAGIC_KEY,
@@ -67,7 +73,6 @@ import {
   CLERIC_KNOWLEDGE_SKILLS_KEY,
   CLERIC_NATURE_CANTRIP_KEY,
   CLERIC_NATURE_SKILL_KEY,
-  MARTIAL_ADEPT_MANEUVERS_KEY,
   WARLOCK_CHAIN_FAMILIAR_KEY,
   expertiseKey,
   getExpertiseLimit,
@@ -94,6 +99,57 @@ function choiceValues(
   return (featureChoices?.[key] ?? []).filter(Boolean);
 }
 
+function patchMartialAdeptManeuvers(
+  onChange: Dispatch<SetStateAction<CharacterFormData>> | undefined,
+  data: CharacterFormData,
+  next: string[]
+) {
+  if (!onChange) return;
+
+  if (data.talentId === "martial-adept") {
+    onChange((previous) => ({
+      ...previous,
+      featureChoices: {
+        ...previous.featureChoices,
+        [MARTIAL_ADEPT_MANEUVERS_KEY]: next,
+      },
+    }));
+    return;
+  }
+
+  const validKeys = getValidAsiKeys(data.classes);
+  for (const [key, selection] of Object.entries(data.asiSelections)) {
+    if (
+      !validKeys.has(key) ||
+      selection.kind !== "feat" ||
+      selection.featId !== "martial-adept"
+    ) {
+      continue;
+    }
+
+    onChange((previous) => {
+      const current = previous.asiSelections[key];
+      if (!current || current.kind !== "feat") return previous;
+      return {
+        ...previous,
+        asiSelections: {
+          ...previous.asiSelections,
+          [key]: {
+            ...current,
+            featChoices: {
+              ...current.featChoices,
+              [MARTIAL_ADEPT_MANEUVERS_KEY]: next,
+            },
+          },
+        },
+      };
+    });
+    return;
+  }
+
+  patchChoices(onChange, MARTIAL_ADEPT_MANEUVERS_KEY, next);
+}
+
 export function CharacterClassFeatureChoices({
   data,
   onChange,
@@ -101,7 +157,7 @@ export function CharacterClassFeatureChoices({
 }: Props) {
   const sections: ReactNode[] = [];
 
-  if (data.talentId === "martial-adept") {
+  if (hasSelectedFeat(data, "martial-adept")) {
     sections.push(
       <MultiPick
         key="martial-adept"
@@ -112,9 +168,9 @@ export function CharacterClassFeatureChoices({
           label: item.name,
           detail: item.description,
         }))}
-        selected={choiceValues(data.featureChoices, MARTIAL_ADEPT_MANEUVERS_KEY)}
+        selected={getMartialAdeptManeuverIds(data)}
         readOnly={readOnly}
-        onChange={(next) => patchChoices(onChange, MARTIAL_ADEPT_MANEUVERS_KEY, next)}
+        onChange={(next) => patchMartialAdeptManeuvers(onChange, data, next)}
       />
     );
   }

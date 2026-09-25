@@ -22,6 +22,7 @@ import {
 } from "../data/dnd/elementalDisciplines";
 import { getAllWarlockChoicesIssues } from "../data/dnd/warlockPact";
 import { getClassFeatureChoiceIssues } from "../data/dnd/classFeatureChoices";
+import { DND_TALENTS } from "../data/dnd/talents";
 import {
   canAdvanceLevel,
   MAX_CHARACTER_LEVEL,
@@ -126,6 +127,20 @@ export function getLevelUpIssues(
 
     if (!filled(selection.featId)) {
       issues.push(`Selecione o talento da melhoria ${index + 1}.`);
+      return;
+    }
+
+    const feat = DND_TALENTS.find((item) => item.id === selection.featId);
+    if (feat?.choices?.length) {
+      for (const choice of feat.choices) {
+        const values = (selection.featChoices[choice.id] ?? []).filter((value) =>
+          filled(value)
+        );
+        if (values.length < choice.count) {
+          issues.push(`Complete as escolhas do talento da melhoria ${index + 1}.`);
+          break;
+        }
+      }
     }
   });
 

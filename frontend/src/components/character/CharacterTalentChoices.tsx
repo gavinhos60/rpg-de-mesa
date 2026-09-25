@@ -5,7 +5,8 @@ import type {
 } from "../../types/character";
 
 import { ABILITIES } from "../../data/dnd/abilities";
-import { DND_SKILLS } from "../../data/dnd/skills";
+import { DND_SKILLS, getProficientSkills } from "../../data/dnd/skills";
+import { BATTLE_MASTER_MANEUVERS } from "../../data/dnd/battleMasterManeuvers";
 import { DND_CLASSES } from "../../data/dnd/classes";
 
 interface CharacterTalentChoicesProps {
@@ -92,7 +93,8 @@ function TalentChoice({
         choice.type,
         choice.options,
         data,
-        choice.excludeProficient
+        choice.excludeProficient,
+        selectedValues
     );
 
     const complete = selectedValues.length === choice.count;
@@ -179,17 +181,28 @@ function getChoiceOptions(
     type: string,
     explicitOptions: string[] | undefined,
     data: CharacterFormData,
-    excludeProficient?: boolean
+    excludeProficient?: boolean,
+    pinnedValues: string[] = []
 ): ChoiceOption[] {
     switch (type) {
         case "ability":
             return getAbilityOptions(explicitOptions);
         case "skill":
-            return getSkillOptions(explicitOptions, data, excludeProficient);
+            return getSkillOptions(
+                explicitOptions,
+                data,
+                excludeProficient,
+                pinnedValues
+            );
         case "class":
             return getClassOptions(explicitOptions);
         case "language":
             return getLanguageOptions(explicitOptions);
+        case "maneuver":
+            return BATTLE_MASTER_MANEUVERS.map((maneuver) => ({
+                id: maneuver.id,
+                name: maneuver.name,
+            }));
         case "tool":
             return getToolOptions(explicitOptions);
         case "custom":
@@ -210,13 +223,11 @@ function getAbilityOptions(explicitOptions?: string[]): ChoiceOption[] {
 function getSkillOptions(
     explicitOptions: string[] | undefined,
     data: CharacterFormData,
-    excludeProficient?: boolean
+    excludeProficient?: boolean,
+    pinnedValues: string[] = []
 ): ChoiceOption[] {
-    const currentProficiencies = new Set<Skill>([
-        ...(data.skillProficiencies?.class ?? []),
-        ...(data.skillProficiencies?.race ?? []),
-        ...(data.skillProficiencies?.background ?? []),
-    ]);
+    const currentProficiencies = getProficientSkills(data);
+    const pinned = new Set(pinnedValues);
 
     let skills = DND_SKILLS;
 
@@ -225,7 +236,13 @@ function getSkillOptions(
     }
 
     if (excludeProficient) {
-        skills = skills.filter((skill) => !currentProficiencies.has(skill.id));
+        const blocked = new Set(currentProficiencies);
+        for (const id of pinnedValues) {
+            blocked.delete(id as Skill);
+        }
+        skills = skills.filter(
+            (skill) => pinned.has(skill.id) || !blocked.has(skill.id)
+        );
     }
 
     return skills.map((skill) => ({ id: skill.id, name: skill.name }));

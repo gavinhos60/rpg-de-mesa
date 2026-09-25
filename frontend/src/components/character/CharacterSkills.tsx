@@ -17,11 +17,19 @@ import {
     DND_SKILLS,
     getProficientSkills,
     getSkillExtraBonus,
+    syncSkillProficiencyFlags,
 } from "../../data/dnd/skills";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
-import { getAsiFeatSkills } from "../../data/dnd/classFeatures";
-import { getSkillStatBreakdown } from "../../utils/statBreakdown";
+import {
+    getAllKnownLanguageIds,
+    getAsiFeatSkills,
+} from "../../data/dnd/classFeatures";
+import {
+    getSkillProficiencySourceLabels,
+    getSkillStatBreakdown,
+} from "../../utils/statBreakdown";
+import { getLanguageOptions } from "./CharacterTalentChoices";
 import { StatBreakdownTooltip } from "./StatBreakdownTooltip";
 import {
     getRaceDisplayName,
@@ -75,7 +83,6 @@ export function CharacterSkills({
 
     const selectedClassSkills = data.skillProficiencies?.class ?? [];
     const selectedRaceSkills = data.skillProficiencies?.race ?? [];
-    const selectedBackgroundSkills = data.skillProficiencies?.background ?? [];
     const selectedTalentSkills = data.skillProficiencies?.talent ?? [];
     const selectedAsiFeatSkills = getAsiFeatSkills(data);
     const selectedBackground = DND_BACKGROUNDS.find(
@@ -134,36 +141,17 @@ export function CharacterSkills({
         const alreadySelected = selectedClassSkills.includes(skill);
 
         if (alreadySelected) {
-            onChange((previous) => {
-                const current = previous.skillProficiencies?.class ?? [];
-                const updated = current.filter((item) => item !== skill);
-
-                const raceSkills = previous.skillProficiencies?.race ?? [];
-                const backgroundSkills =
-                    previous.skillProficiencies?.background ?? [];
-                const talentSkills = previous.skillProficiencies?.talent ?? [];
-
-                const stillProficient =
-                    updated.includes(skill) ||
-                    raceSkills.includes(skill) ||
-                    backgroundSkills.includes(skill) ||
-                    talentSkills.includes(skill);
-
-                return {
+            onChange((previous) =>
+                syncSkillProficiencyFlags({
                     ...previous,
                     skillProficiencies: {
                         ...(previous.skillProficiencies ?? {}),
-                        class: updated,
+                        class: (previous.skillProficiencies?.class ?? []).filter(
+                            (item) => item !== skill
+                        ),
                     },
-                    skills: {
-                        ...previous.skills,
-                        [skill]: {
-                            ...previous.skills[skill],
-                            proficient: stillProficient,
-                        },
-                    },
-                };
-            });
+                })
+            );
 
             return;
         }
@@ -172,22 +160,15 @@ export function CharacterSkills({
             return;
         }
 
-        onChange((previous) => {
-            const current = previous.skillProficiencies?.class ?? [];
-            const updated = [...current, skill];
-
-            return {
+        onChange((previous) =>
+            syncSkillProficiencyFlags({
                 ...previous,
                 skillProficiencies: {
                     ...(previous.skillProficiencies ?? {}),
-                    class: updated,
+                    class: [...(previous.skillProficiencies?.class ?? []), skill],
                 },
-                skills: {
-                    ...previous.skills,
-                    [skill]: { ...previous.skills[skill], proficient: true },
-                },
-            };
-        });
+            })
+        );
     }
 
     function toggleRaceSkill(skill: Skill) {
@@ -202,36 +183,17 @@ export function CharacterSkills({
         const alreadySelected = selectedRaceSkills.includes(skill);
 
         if (alreadySelected) {
-            onChange((previous) => {
-                const current = previous.skillProficiencies?.race ?? [];
-                const updated = current.filter((item) => item !== skill);
-
-                const classSkills = previous.skillProficiencies?.class ?? [];
-                const backgroundSkills =
-                    previous.skillProficiencies?.background ?? [];
-                const talentSkills = previous.skillProficiencies?.talent ?? [];
-
-                const stillProficient =
-                    classSkills.includes(skill) ||
-                    updated.includes(skill) ||
-                    backgroundSkills.includes(skill) ||
-                    talentSkills.includes(skill);
-
-                return {
+            onChange((previous) =>
+                syncSkillProficiencyFlags({
                     ...previous,
                     skillProficiencies: {
                         ...(previous.skillProficiencies ?? {}),
-                        race: updated,
+                        race: (previous.skillProficiencies?.race ?? []).filter(
+                            (item) => item !== skill
+                        ),
                     },
-                    skills: {
-                        ...previous.skills,
-                        [skill]: {
-                            ...previous.skills[skill],
-                            proficient: stillProficient,
-                        },
-                    },
-                };
-            });
+                })
+            );
 
             return;
         }
@@ -240,22 +202,15 @@ export function CharacterSkills({
             return;
         }
 
-        onChange((previous) => {
-            const current = previous.skillProficiencies?.race ?? [];
-            const updated = [...current, skill];
-
-            return {
+        onChange((previous) =>
+            syncSkillProficiencyFlags({
                 ...previous,
                 skillProficiencies: {
                     ...(previous.skillProficiencies ?? {}),
-                    race: updated,
+                    race: [...(previous.skillProficiencies?.race ?? []), skill],
                 },
-                skills: {
-                    ...previous.skills,
-                    [skill]: { ...previous.skills[skill], proficient: true },
-                },
-            };
-        });
+            })
+        );
     }
 
     function updateBackgroundReplacement(index: number, skill: Skill | "") {
@@ -273,24 +228,7 @@ export function CharacterSkills({
                 ...baseBackgroundSkills,
                 ...replacements.filter(Boolean),
             ];
-            const proficient = new Set<Skill>([
-                ...(previous.skillProficiencies?.class ?? []),
-                ...(previous.skillProficiencies?.race ?? []),
-                ...(previous.skillProficiencies?.talent ?? []),
-                ...getAsiFeatSkills(previous),
-                ...backgroundSkills,
-            ]);
-            const skills = Object.fromEntries(
-                Object.entries(previous.skills).map(([id, value]) => [
-                    id,
-                    {
-                        ...value,
-                        proficient: proficient.has(id as Skill),
-                    },
-                ])
-            ) as CharacterFormData["skills"];
-
-            return {
+            return syncSkillProficiencyFlags({
                 ...previous,
                 backgroundChoices: {
                     ...previous.backgroundChoices,
@@ -300,8 +238,7 @@ export function CharacterSkills({
                     ...previous.skillProficiencies,
                     background: backgroundSkills,
                 },
-                skills,
-            };
+            });
         });
     }
 
@@ -565,6 +502,66 @@ export function CharacterSkills({
                 </section>
             )}
 
+            {(() => {
+                const languageIds = [
+                    ...(selectedRace?.languages ?? []),
+                    ...getAllKnownLanguageIds(data),
+                ].filter((id, index, all) => all.indexOf(id) === index);
+
+                if (languageIds.length === 0) return null;
+
+                return (
+                    <section className="mb-8">
+                        <div className="mb-4">
+                            <h3
+                                className="text-lg text-[var(--color-ink)]"
+                                style={{ ...cinzel, fontWeight: 600 }}
+                            >
+                                Idiomas
+                            </h3>
+                            <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                                Inclui raça, antecedente, Linguista e outras fontes.
+                            </p>
+                        </div>
+                        <p className="border p-4 text-sm text-[var(--color-ink)]" style={card}>
+                            {languageIds
+                                .map(
+                                    (id) =>
+                                        getLanguageOptions([id])[0]?.name ?? id
+                                )
+                                .join(", ")}
+                        </p>
+                    </section>
+                );
+            })()}
+
+            {selectedAsiFeatSkills.length > 0 && (
+                <section className="mb-8">
+                    <div className="mb-4">
+                        <h3
+                            className="text-lg text-[var(--color-ink)]"
+                            style={{ ...cinzel, fontWeight: 600 }}
+                        >
+                            Perícias do Habilidoso (melhoria de nível)
+                        </h3>
+                        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                            Escolhidas em Melhorias por nível (etapa Atributos).
+                        </p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {selectedAsiFeatSkills.map((skill) => (
+                            <SkillOption
+                                key={skill}
+                                skill={skill}
+                                available={false}
+                                selected={true}
+                                onClick={() => {}}
+                            />
+                        ))}
+                    </div>
+                </section>
+            )}
+
             <section className="mb-8">
                 <div className="mb-4">
                     <h3 className="text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
@@ -578,15 +575,10 @@ export function CharacterSkills({
 
                 <div className="grid gap-3 md:grid-cols-2">
                     {DND_SKILLS.map((skill) => {
-                        const sources: string[] = [];
-
-                        if (selectedClassSkills.includes(skill.id)) sources.push("Classe");
-                        if (
-                            selectedRaceSkills.includes(skill.id) ||
-                            raceFixedSkills.includes(skill.id)
-                        ) sources.push("Raça");
-                        if (selectedBackgroundSkills.includes(skill.id)) sources.push("Background");
-                        if (selectedTalentSkills.includes(skill.id)) sources.push("Talento");
+                        const sources = getSkillProficiencySourceLabels(
+                            data,
+                            skill.id
+                        );
 
                         if (sources.length === 0) {
                             return null;

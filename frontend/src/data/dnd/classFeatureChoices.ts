@@ -5,9 +5,14 @@ import {
   FIGHTING_STYLE_2_KEY,
 } from "./fightingStyles";
 import {
+  getBattleManeuver,
   getBattleManeuverLimit,
   getSelectedManeuvers,
 } from "./battleMasterManeuvers";
+import {
+  getMartialAdeptManeuverIds,
+  hasSelectedFeat,
+} from "./classFeatures";
 import {
   METAMAGIC_OPTIONS,
   getMetamagicLimit,
@@ -46,8 +51,6 @@ export const CLERIC_KNOWLEDGE_LANGUAGES_KEY = "cleric:knowledge-languages";
 export const CLERIC_NATURE_SKILL_KEY = "cleric:nature-skill";
 export const CLERIC_NATURE_CANTRIP_KEY = "cleric:nature-cantrip";
 export const WARLOCK_CHAIN_FAMILIAR_KEY = "warlock:chain-familiar";
-export const MARTIAL_ADEPT_MANEUVERS_KEY = "feat:martial-adept-maneuvers";
-
 export const BARD_MAGICAL_SECRETS_6_KEY = "bard:magical-secrets-6";
 export const BARD_MAGICAL_SECRETS_10_KEY = "bard:magical-secrets-10";
 export const BARD_MAGICAL_SECRETS_14_KEY = "bard:magical-secrets-14";
@@ -323,8 +326,8 @@ export function getClassFeatureChoiceIssues(data: CharacterFormData): string[] {
     issues.push(...getMagicalSecretsIssues(data, selection));
   }
 
-  if (data.talentId === "martial-adept") {
-    const maneuvers = choiceValues(data.featureChoices, MARTIAL_ADEPT_MANEUVERS_KEY);
+  if (hasSelectedFeat(data, "martial-adept")) {
+    const maneuvers = getMartialAdeptManeuverIds(data);
     if (maneuvers.length < 2) {
       issues.push("Adepto Marcial: escolha 2 manobras.");
     }
@@ -367,9 +370,18 @@ export function getClassFeatureSummaryLines(
     );
   }
 
-  const maneuvers = getSelectedManeuvers(fc);
-  if (maneuvers.length > 0) {
-    lines.push(`Manobras: ${maneuvers.length} selecionada(s)`);
+  const battleMaster = getSelectedManeuvers(fc);
+  if (battleMaster.length > 0) {
+    lines.push(`Manobras (Mestre de Batalha): ${battleMaster.length} selecionada(s)`);
+  }
+
+  const martialAdept = getMartialAdeptManeuverIds(data);
+  if (martialAdept.length > 0) {
+    lines.push(
+      `Adepto Marcial: ${martialAdept
+        .map((id) => getBattleManeuver(id)?.name ?? id)
+        .join(", ")}`
+    );
   }
 
   return lines;

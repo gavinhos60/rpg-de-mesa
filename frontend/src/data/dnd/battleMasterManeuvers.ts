@@ -1,4 +1,5 @@
 export const BATTLE_MASTER_MANEUVERS_KEY = "fighter:battle-master-maneuvers";
+export const MARTIAL_ADEPT_MANEUVERS_KEY = "feat:martial-adept-maneuvers";
 
 export interface BattleManeuver {
   id: string;

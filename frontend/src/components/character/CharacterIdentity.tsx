@@ -9,6 +9,7 @@ import type {
 } from "../../types/character";
 
 import { CharacterTalentChoices } from "./CharacterTalentChoices";
+import { applyInitialTalentChange } from "../../data/dnd/featCleanup";
 import { RibbonButton } from "../icons/MedievalIcons";
 import { getEquipmentItem } from "../../data/dnd/equipment";
 import {
@@ -132,17 +133,7 @@ export function CharacterIdentity({
     }
 
     function updateTalent(talentId: string) {
-        onChange({
-            ...data,
-            talentId,
-            talentChoices: {},
-            skillProficiencies: {
-                class: data.skillProficiencies?.class ?? [],
-                race: data.skillProficiencies?.race ?? [],
-                background: data.skillProficiencies?.background ?? [],
-                talent: [],
-            },
-        });
+        onChange(applyInitialTalentChange(data, talentId));
     }
 
     function updateBackground(backgroundId: string) {
