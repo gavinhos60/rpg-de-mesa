@@ -333,7 +333,7 @@ export function ensureStarterEquipmentEquipped(
         ...data,
         equipment: {
             ...data.equipment,
-            attuned,
+            attunedSlots: attuned,
             activeSlots: active,
         },
     };

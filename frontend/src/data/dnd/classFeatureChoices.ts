@@ -3,22 +3,18 @@ import { DND_CLASSES } from "./classes";
 import {
   FIGHTING_STYLE_KEY,
   FIGHTING_STYLE_2_KEY,
-  fightingStylesForClass,
 } from "./fightingStyles";
 import {
-  BATTLE_MASTER_MANEUVERS_KEY,
   getBattleManeuverLimit,
   getSelectedManeuvers,
 } from "./battleMasterManeuvers";
 import {
   METAMAGIC_OPTIONS,
-  SORCERER_METAMAGIC_KEY,
   getMetamagicLimit,
   getSelectedMetamagic,
 } from "./metamagicOptions";
 import { DRACONIC_ANCESTRY_KEY, DRACONIC_ANCESTRIES } from "./draconicAncestry";
 import {
-  DRUID_LAND_TERRAIN_KEY,
   DRUID_LAND_BONUS_CANTRIP_KEY,
   LAND_TERRAINS,
   getLandTerrainId,

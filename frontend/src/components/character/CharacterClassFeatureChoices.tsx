@@ -58,7 +58,6 @@ import {
   favoredTerrainLimit,
 } from "../../data/dnd/rangerOptions";
 import {
-  BARD_EXPERTISE_KEY,
   BARD_LORE_SKILLS_KEY,
   BARD_MAGICAL_SECRETS_10_KEY,
   BARD_MAGICAL_SECRETS_14_KEY,
@@ -69,7 +68,6 @@ import {
   CLERIC_NATURE_CANTRIP_KEY,
   CLERIC_NATURE_SKILL_KEY,
   MARTIAL_ADEPT_MANEUVERS_KEY,
-  ROGUE_EXPERTISE_KEY,
   WARLOCK_CHAIN_FAMILIAR_KEY,
   expertiseKey,
   getExpertiseLimit,
