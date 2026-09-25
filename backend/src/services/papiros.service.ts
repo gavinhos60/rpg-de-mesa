@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma";
 import { emitToCampaignSessions } from "../socket/io";
+import { normalizePlayerAudience } from "./publishAudience.service";
 
 async function ensureCampaignMember(userId: number, campaignId: number) {
   const member = await prisma.campaignMember.findUnique({
@@ -48,7 +49,11 @@ export async function listPapyri(
   }
 
   return prisma.papyrus.findMany({
-    where: { campaignId, published: true },
+    where: {
+      campaignId,
+      published: true,
+      audienceUserIds: { has: authenticatedUserId },
+    },
     orderBy: { updatedAt: "desc" },
   });
 }
@@ -68,8 +73,13 @@ export async function getPapyrus(
     throw new Error("PAPYRUS_NOT_FOUND");
   }
 
-  if (member.role !== "MASTER" && !papyrus.published) {
-    throw new Error("PAPYRUS_NOT_FOUND");
+  if (member.role !== "MASTER") {
+    if (
+      !papyrus.published ||
+      !papyrus.audienceUserIds.includes(authenticatedUserId)
+    ) {
+      throw new Error("PAPYRUS_NOT_FOUND");
+    }
   }
 
   return papyrus;
@@ -176,11 +186,32 @@ export async function setPapyrusPublished(
   campaignId: number,
   papyrusId: number,
   authenticatedUserId: number,
-  published: boolean
+  published: boolean,
+  audienceUserIds?: unknown
 ) {
-  return updatePapyrus(campaignId, papyrusId, authenticatedUserId, {
-    published,
+  await ensureMaster(authenticatedUserId, campaignId);
+
+  const existing = await prisma.papyrus.findFirst({
+    where: { id: papyrusId, campaignId },
   });
+  if (!existing) throw new Error("PAPYRUS_NOT_FOUND");
+
+  if (!published) {
+    const papyrus = await prisma.papyrus.update({
+      where: { id: papyrusId },
+      data: { published: false, audienceUserIds: [] },
+    });
+    await broadcastPapyri(campaignId);
+    return papyrus;
+  }
+
+  const audience = await normalizePlayerAudience(campaignId, audienceUserIds);
+  const papyrus = await prisma.papyrus.update({
+    where: { id: papyrusId },
+    data: { published: true, audienceUserIds: audience },
+  });
+  await broadcastPapyri(campaignId);
+  return papyrus;
 }
 
 export async function deletePapyrus(

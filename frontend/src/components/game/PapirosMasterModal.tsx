@@ -1,60 +1,57 @@
-import type { PlayerNote } from "../../types/notes";
+import type { Papyrus } from "../../types/papiros";
 import { floatingPopupStackOffset } from "../../hooks/useFloatingPopupStack";
 import { FloatingPopupWindow } from "./FloatingPopupWindow";
 
-interface NotesPlayerModalProps {
-  notes: PlayerNote[];
+interface PapirosMasterModalProps {
+  papyri: Papyrus[];
   busy?: boolean;
   onClose: () => void;
-  onEdit?: (note: PlayerNote) => void;
-  onDelete?: (note: PlayerNote) => void;
-  onExpand?: (note: PlayerNote) => void;
-  onTogglePublish?: (note: PlayerNote) => void;
-  /** Título da janela (ex.: anotações do jogador vs. do mestre). */
-  title?: string;
+  onExpand?: (papyrus: Papyrus) => void;
+  onEdit?: (papyrus: Papyrus) => void;
+  onDelete?: (papyrus: Papyrus) => void;
+  onTogglePublish?: (papyrus: Papyrus) => void;
+  onPreview?: (papyrus: Papyrus) => void;
   zIndex?: number;
   stackIndex?: number;
   onActivate?: () => void;
 }
 
-export function NotesPlayerModal({
-  notes,
+export function PapirosMasterModal({
+  papyri,
   busy,
   onClose,
+  onExpand,
   onEdit,
   onDelete,
-  onExpand,
   onTogglePublish,
-  title,
+  onPreview,
   zIndex = 85,
   stackIndex = 0,
   onActivate,
-}: NotesPlayerModalProps) {
-  const windowTitle = title ?? `Minhas anotações (${notes.length})`;
-
+}: PapirosMasterModalProps) {
   return (
     <FloatingPopupWindow
       subtitle="Campanha"
-      title={windowTitle}
-      ariaLabel="Anotações"
+      title={`Pergaminhos (${papyri.length})`}
+      ariaLabel="Biblioteca de papiros"
       onClose={onClose}
       zIndex={zIndex}
       initialOffset={floatingPopupStackOffset(stackIndex)}
       onActivate={onActivate}
     >
       <div className="p-4">
-        {notes.length === 0 ? (
+        {papyri.length === 0 ? (
           <p className="text-sm italic text-[var(--color-ink-soft)]">
-            Nenhuma anotação ainda.
+            Nenhum papiro ainda.
           </p>
         ) : (
           <ul className="space-y-3">
-            {notes.map((note) => (
+            {papyri.map((papyrus) => (
               <li
-                key={note.id}
+                key={papyrus.id}
                 className="border p-3"
                 style={{
-                  borderColor: note.published
+                  borderColor: papyrus.published
                     ? "var(--color-crimson)"
                     : "var(--color-border)",
                   backgroundColor: "var(--color-parchment)",
@@ -69,42 +66,52 @@ export function NotesPlayerModal({
                         fontWeight: 600,
                       }}
                     >
-                      {note.title.trim() || "Sem título"}
+                      {papyrus.title}
                     </p>
                     <p className="text-[10px] text-[var(--color-ink-soft)]">
-                      {onTogglePublish && note.published
-                        ? `Publicada (${note.audienceUserIds?.length ?? 0} jog.) · `
-                        : onTogglePublish
-                          ? "Rascunho · "
-                          : ""}
-                      {new Date(note.updatedAt).toLocaleString("pt-BR")}
+                      {papyrus.published ? "Publicado" : "Rascunho"} ·{" "}
+                      {new Date(papyrus.updatedAt).toLocaleString("pt-BR")}
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-1">
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
                     {onTogglePublish ? (
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => onTogglePublish(note)}
+                        onClick={() => onTogglePublish(papyrus)}
                         className="border px-2 py-1 text-[10px]"
                         style={{
                           fontFamily: "'Cinzel', serif",
                           borderColor: "var(--color-crimson)",
-                          backgroundColor: note.published
+                          backgroundColor: papyrus.published
                             ? "var(--color-crimson)"
                             : "var(--color-parchment-soft)",
-                          color: note.published
+                          color: papyrus.published
                             ? "var(--color-ink-inverse)"
                             : "var(--color-crimson)",
                         }}
                       >
-                        {note.published ? "Recolher" : "Publicar"}
+                        {papyrus.published ? "Recolher" : "Publicar"}
+                      </button>
+                    ) : null}
+                    {onPreview ? (
+                      <button
+                        type="button"
+                        onClick={() => onPreview(papyrus)}
+                        className="border px-2 py-1 text-[10px] text-[var(--color-ink)]"
+                        style={{
+                          fontFamily: "'Cinzel', serif",
+                          borderColor: "var(--color-border)",
+                          backgroundColor: "var(--color-parchment-soft)",
+                        }}
+                      >
+                        Prévia
                       </button>
                     ) : null}
                     {onExpand ? (
                       <button
                         type="button"
-                        onClick={() => onExpand(note)}
+                        onClick={() => onExpand(papyrus)}
                         className="border px-2 py-1 text-[10px] text-[var(--color-ink)]"
                         style={{
                           fontFamily: "'Cinzel', serif",
@@ -119,7 +126,7 @@ export function NotesPlayerModal({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => onEdit(note)}
+                        onClick={() => onEdit(papyrus)}
                         className="border px-2 py-1 text-[10px] text-[var(--color-ink)]"
                         style={{
                           fontFamily: "'Cinzel', serif",
@@ -134,7 +141,7 @@ export function NotesPlayerModal({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => onDelete(note)}
+                        onClick={() => onDelete(papyrus)}
                         className="border px-2 py-1 text-[10px] text-[var(--color-crimson)]"
                         style={{
                           fontFamily: "'Cinzel', serif",
@@ -147,9 +154,9 @@ export function NotesPlayerModal({
                     ) : null}
                   </div>
                 </div>
-                {note.imageUrl ? (
+                {papyrus.imageUrl ? (
                   <img
-                    src={note.imageUrl}
+                    src={papyrus.imageUrl}
                     alt=""
                     className="mb-2 max-h-40 w-full rounded border object-contain"
                     style={{
@@ -159,7 +166,7 @@ export function NotesPlayerModal({
                   />
                 ) : null}
                 <p className="max-h-48 overflow-y-auto break-words whitespace-pre-wrap text-sm text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">
-                  {note.body}
+                  {papyrus.body}
                 </p>
               </li>
             ))}

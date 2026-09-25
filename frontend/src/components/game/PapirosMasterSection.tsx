@@ -18,6 +18,7 @@ import {
   createNote,
   deleteNote,
   listNotes,
+  publishNote,
   updateNote,
 } from "../../services/notes.service";
 import type { PlayerNote } from "../../types/notes";
@@ -27,12 +28,14 @@ import { NotesPlayerModal } from "./NotesPlayerModal";
 import { PapirosMasterModal } from "./PapirosMasterModal";
 import { RibbonButton } from "../icons/MedievalIcons";
 import { useFloatingPopupStack } from "../../hooks/useFloatingPopupStack";
+import { PublishAudienceModal } from "./PublishAudienceModal";
+import { buildCampaignPlayerOptions } from "../../utils/campaignPlayers";
 
-type MasterFloatingPopup =
-  | { id: number; kind: "papyri-list" }
-  | { id: number; kind: "notes-list" }
-  | { id: number; kind: "papyrus"; papyrusId: number }
-  | { id: number; kind: "note"; noteId: number };
+type MasterFloatingPopupEntry =
+  | { kind: "papyri-list" }
+  | { kind: "notes-list" }
+  | { kind: "papyrus"; papyrusId: number }
+  | { kind: "note"; noteId: number };
 
 const fieldStyle = {
   backgroundColor: "var(--color-parchment)",
@@ -50,6 +53,12 @@ type SubSection = "documentos" | "anotacoes" | "mercado";
 interface PapirosMasterSectionProps {
   campaignId: number;
   characters: CampaignCharacterLite[];
+  members?: Array<{
+    userId: number;
+    role: "MASTER" | "PLAYER";
+    name: string;
+    email: string;
+  }>;
   onCharacterUpdated?: (character: CampaignCharacterLite) => void;
   onPreviewPapyrus?: (papyrus: Papyrus) => void;
 }
@@ -86,6 +95,7 @@ function readImageAsDataUrl(file: File, maxSize = 512): Promise<string> {
 export function PapirosMasterSection({
   campaignId,
   characters,
+  members = [],
   onCharacterUpdated,
   onPreviewPapyrus,
 }: PapirosMasterSectionProps) {
@@ -122,7 +132,18 @@ export function PapirosMasterSection({
     activate: activatePopup,
     zIndexFor: popupZIndex,
     stackIndexFor: popupStackIndex,
-  } = useFloatingPopupStack<MasterFloatingPopup>();
+  } = useFloatingPopupStack<MasterFloatingPopupEntry>();
+
+  const [publishTarget, setPublishTarget] = useState<
+    | { kind: "papyrus"; item: Papyrus }
+    | { kind: "note"; item: PlayerNote }
+    | null
+  >(null);
+
+  const campaignPlayers = useMemo(
+    () => buildCampaignPlayerOptions(characters, members),
+    [characters, members]
+  );
 
   const filteredNotes = useMemo(() => {
     const query = noteSearch.trim().toLowerCase();
@@ -259,14 +280,71 @@ export function PapirosMasterSection({
     }
   }
 
-  async function handleTogglePublish(papyrus: Papyrus) {
+  function requestPublishPapyrus(papyrus: Papyrus) {
+    if (papyrus.published) {
+      void unpublishPapyrus(papyrus);
+      return;
+    }
+    setPublishTarget({ kind: "papyrus", item: papyrus });
+  }
+
+  function requestPublishNote(note: PlayerNote) {
+    if (note.published) {
+      void unpublishNote(note);
+      return;
+    }
+    setPublishTarget({ kind: "note", item: note });
+  }
+
+  async function unpublishPapyrus(papyrus: Papyrus) {
     try {
       setBusy(true);
-      await publishPapyrus(campaignId, papyrus.id, !papyrus.published);
+      await publishPapyrus(campaignId, papyrus.id, { published: false });
       await refresh();
     } catch (err) {
       console.error(err);
-      setMessage("Erro ao publicar/recolher.");
+      setMessage("Erro ao recolher documento.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function unpublishNote(note: PlayerNote) {
+    try {
+      setBusy(true);
+      await publishNote(campaignId, note.id, { published: false });
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      setMessage("Erro ao recolher anotação.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmPublishAudience(audienceUserIds: number[]) {
+    if (!publishTarget) return;
+    try {
+      setBusy(true);
+      setMessage("");
+      if (publishTarget.kind === "papyrus") {
+        await publishPapyrus(campaignId, publishTarget.item.id, {
+          published: true,
+          audienceUserIds,
+        });
+        setMessage("Documento publicado.");
+      } else {
+        await publishNote(campaignId, publishTarget.item.id, {
+          published: true,
+          audienceUserIds,
+        });
+        setMessage("Anotação publicada.");
+      }
+      setPublishTarget(null);
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      setMessage("Erro ao publicar. Selecione ao menos um jogador.");
     } finally {
       setBusy(false);
     }
@@ -472,7 +550,9 @@ export function PapirosMasterSection({
                       {papyrus.title}
                     </p>
                     <p className="text-[10px] text-[var(--color-ink-soft)]">
-                      {papyrus.published ? "Publicado" : "Rascunho"}
+                      {papyrus.published
+                        ? `Publicado (${papyrus.audienceUserIds?.length ?? 0} jog.)`
+                        : "Rascunho"}
                     </p>
                   </div>
                 </div>
@@ -483,7 +563,7 @@ export function PapirosMasterSection({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void handleTogglePublish(papyrus)}
+                    onClick={() => requestPublishPapyrus(papyrus)}
                     className="border px-2 py-1 text-[10px]"
                     style={{
                       borderColor: "var(--color-crimson)",
@@ -548,8 +628,8 @@ export function PapirosMasterSection({
       {sub === "anotacoes" && (
         <div className="min-w-0 space-y-3">
           <p className="text-[10px] leading-snug text-[var(--color-ink-soft)]">
-            Anotações privadas do mestre nesta campanha (texto, imagens). Só
-            você vê este conteúdo.
+            Anotações do mestre (texto, imagens). Rascunhos só você vê; ao
+            publicar, escolha quais jogadores recebem na mesa.
           </p>
           <section
             className="rounded border p-2.5"
@@ -699,7 +779,9 @@ export function PapirosMasterSection({
                 key={note.id}
                 className="min-w-0 overflow-hidden rounded border p-2"
                 style={{
-                  borderColor: "var(--color-border)",
+                  borderColor: note.published
+                    ? "var(--color-crimson)"
+                    : "var(--color-border)",
                   backgroundColor: "var(--color-parchment)",
                 }}
               >
@@ -710,6 +792,9 @@ export function PapirosMasterSection({
                   {note.title.trim() || "Sem título"}
                 </p>
                 <p className="text-[10px] text-[var(--color-ink-soft)]">
+                  {note.published
+                    ? `Publicada (${note.audienceUserIds?.length ?? 0} jog.) · `
+                    : "Rascunho · "}
                   {new Date(note.updatedAt).toLocaleString("pt-BR")}
                 </p>
                 {note.body.trim() ? (
@@ -729,6 +814,24 @@ export function PapirosMasterSection({
                   />
                 ) : null}
                 <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => requestPublishNote(note)}
+                    className="border px-2 py-1 text-[10px]"
+                    style={{
+                      borderColor: "var(--color-crimson)",
+                      backgroundColor: note.published
+                        ? "var(--color-crimson)"
+                        : "var(--color-parchment)",
+                      color: note.published
+                        ? "var(--color-ink-inverse)"
+                        : "var(--color-crimson)",
+                      fontFamily: "'Cinzel', serif",
+                    }}
+                  >
+                    {note.published ? "Recolher" : "Publicar"}
+                  </button>
                   <button
                     type="button"
                     onClick={() =>
@@ -876,7 +979,7 @@ export function PapirosMasterSection({
               stackIndex={stackIndex}
               onActivate={onActivate}
               onClose={() => closePopup(popupId)}
-              onTogglePublish={(papyrus) => void handleTogglePublish(papyrus)}
+              onTogglePublish={(papyrus) => requestPublishPapyrus(papyrus)}
               onPreview={(papyrus) => onPreviewPapyrus?.(papyrus)}
               onEdit={(papyrus) => {
                 closePopup(popupId);
@@ -912,6 +1015,7 @@ export function PapirosMasterSection({
                 setNoteImageUrl(note.imageUrl ?? "");
               }}
               onDelete={(note) => void handleDeleteNote(note.id)}
+              onTogglePublish={(note) => requestPublishNote(note)}
               onExpand={(note) =>
                 pushPopup({ kind: "note", noteId: note.id })
               }
@@ -987,6 +1091,31 @@ export function PapirosMasterSection({
           </DocumentExpandModal>
         );
       })}
+
+      <PublishAudienceModal
+        open={publishTarget != null}
+        itemKind={publishTarget?.kind === "note" ? "note" : "papyrus"}
+        itemTitle={
+          publishTarget?.kind === "note"
+            ? publishTarget.item.title
+            : publishTarget?.kind === "papyrus"
+              ? publishTarget.item.title
+              : ""
+        }
+        players={campaignPlayers}
+        initialAudienceUserIds={
+          publishTarget?.kind === "note"
+            ? publishTarget.item.audienceUserIds
+            : publishTarget?.kind === "papyrus"
+              ? publishTarget.item.audienceUserIds
+              : []
+        }
+        busy={busy}
+        onCancel={() => setPublishTarget(null)}
+        onConfirm={(audienceUserIds) =>
+          void confirmPublishAudience(audienceUserIds)
+        }
+      />
 
       {marketOpen ? (
         <MercadoMasterModal

@@ -44,11 +44,11 @@ export async function updatePapyrus(
 export async function publishPapyrus(
   campaignId: number,
   papyrusId: number,
-  published: boolean
+  payload: { published: boolean; audienceUserIds?: number[] }
 ): Promise<Papyrus> {
   const response = await api.post<Papyrus>(
     `/campaigns/${campaignId}/papiros/${papyrusId}/publish`,
-    { published }
+    payload
   );
   return response.data;
 }

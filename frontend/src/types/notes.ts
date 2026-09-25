@@ -5,6 +5,8 @@ export interface PlayerNote {
   title: string;
   body: string;
   imageUrl?: string | null;
+  published?: boolean;
+  audienceUserIds?: number[];
   createdAt: string;
   updatedAt: string;
 }

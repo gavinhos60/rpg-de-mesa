@@ -2021,6 +2021,7 @@ export function MasterPanel({
           <PapirosMasterSection
             campaignId={campaignId}
             characters={characters}
+            members={members}
             onCharacterUpdated={onCharacterUpdated}
             onPreviewPapyrus={onPreviewPapyrus}
           />

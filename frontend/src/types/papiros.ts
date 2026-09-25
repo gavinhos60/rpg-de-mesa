@@ -5,6 +5,7 @@ export interface Papyrus {
   body: string;
   imageUrl?: string | null;
   published: boolean;
+  audienceUserIds?: number[];
   createdById: number;
   createdAt: string;
   updatedAt: string;

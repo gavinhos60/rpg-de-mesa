@@ -87,17 +87,18 @@ model GameSession {
 }
 
 model Papyrus {
-  id          Int      @id @default(autoincrement())
-  campaignId  Int
-  campaign    Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  title       String
-  body        String   @db.Text
-  imageUrl    String?
-  published   Boolean  @default(false)
-  createdById Int
-  createdBy   User     @relation("PapyrusCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  campaignId      Int
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  title           String
+  body            String   @db.Text
+  imageUrl        String?
+  published       Boolean  @default(false)
+  audienceUserIds Int[]    @default([])
+  createdById     Int
+  createdBy       User     @relation("PapyrusCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([campaignId, published])
 }
@@ -163,16 +164,19 @@ model ShopDelivery {
 }
 
 model PlayerNote {
-  id         Int      @id @default(autoincrement())
-  campaignId Int
-  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  userId     Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title      String   @default("")
-  body       String   @db.Text
-  imageUrl   String?  @db.Text
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  campaignId      Int
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String   @default("")
+  body            String   @db.Text
+  imageUrl        String?  @db.Text
+  published       Boolean  @default(false)
+  audienceUserIds Int[]    @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([campaignId, userId])
+  @@index([campaignId, published])
 }

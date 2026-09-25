@@ -37,3 +37,24 @@ export async function deleteNote(
 ): Promise<void> {
   await api.delete(`/campaigns/${campaignId}/notes/${noteId}`);
 }
+
+export async function listPublishedNotes(
+  campaignId: number
+): Promise<PlayerNote[]> {
+  const response = await api.get<PlayerNote[]>(
+    `/campaigns/${campaignId}/notes/published`
+  );
+  return response.data;
+}
+
+export async function publishNote(
+  campaignId: number,
+  noteId: number,
+  payload: { published: boolean; audienceUserIds?: number[] }
+): Promise<PlayerNote> {
+  const response = await api.post<PlayerNote>(
+    `/campaigns/${campaignId}/notes/${noteId}/publish`,
+    payload
+  );
+  return response.data;
+}

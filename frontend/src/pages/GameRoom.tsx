@@ -90,6 +90,10 @@ import { ActionLoadingOverlay } from "../components/game/ActionLoadingOverlay";
 import { PapyrusOverlay } from "../components/game/PapyrusOverlay";
 import { ShopPlayerModal } from "../components/game/ShopPlayerModal";
 import { listPapiros, publishPapyrus } from "../services/papiros.service";
+import { listPublishedNotes } from "../services/notes.service";
+import type { PlayerNote } from "../types/notes";
+import { filterVisibleToUser } from "../utils/campaignPlayers";
+import { publishedNoteAsPapyrus } from "../utils/publishedScroll";
 import { listShops } from "../services/mercado.service";
 import type { Papyrus } from "../types/papiros";
 import type { Shop } from "../types/mercado";
@@ -173,8 +177,10 @@ export function GameRoom() {
     max?: number;
   }>({});
   const [publishedPapyri, setPublishedPapyri] = useState<Papyrus[]>([]);
+  const [publishedNotes, setPublishedNotes] = useState<PlayerNote[]>([]);
   const [previewPapyrus, setPreviewPapyrus] = useState<Papyrus | null>(null);
   const [dismissedPapyrusIds, setDismissedPapyrusIds] = useState<number[]>([]);
+  const [dismissedNoteIds, setDismissedNoteIds] = useState<number[]>([]);
   const [openShops, setOpenShops] = useState<Shop[]>([]);
   const [playerShopOpen, setPlayerShopOpen] = useState(false);
   const [localAnnotationResetKey, setLocalAnnotationResetKey] = useState(0);
@@ -439,10 +445,29 @@ export function GameRoom() {
         });
 
         currentSocket.on("papyrus:state", (items: Papyrus[]) => {
-          const next = Array.isArray(items) ? items : [];
+          const raw = Array.isArray(items) ? items : [];
+          const uid = user?.id;
+          const next =
+            roleRef.current === "MASTER"
+              ? raw
+              : filterVisibleToUser(raw, uid);
           setPublishedPapyri(next);
           setDismissedPapyrusIds((prev) => {
             const live = new Set(next.map((p) => p.id));
+            return prev.filter((id) => live.has(id));
+          });
+        });
+
+        currentSocket.on("note:state", (items: PlayerNote[]) => {
+          const raw = Array.isArray(items) ? items : [];
+          const uid = user?.id;
+          const next =
+            roleRef.current === "MASTER"
+              ? raw
+              : filterVisibleToUser(raw, uid);
+          setPublishedNotes(next);
+          setDismissedNoteIds((prev) => {
+            const live = new Set(next.map((n) => n.id));
             return prev.filter((id) => live.has(id));
           });
         });
@@ -483,12 +508,24 @@ export function GameRoom() {
         applyState(joined.state);
 
         try {
-          const [papyri, shops] = await Promise.all([
+          const [papyri, shops, notesForPlayer] = await Promise.all([
             listPapiros(campaignId),
             listShops(campaignId),
+            (joined.role ?? "PLAYER") === "MASTER"
+              ? Promise.resolve([] as PlayerNote[])
+              : listPublishedNotes(campaignId).catch(() => [] as PlayerNote[]),
           ]);
           if (!active) return;
-          setPublishedPapyri(papyri.filter((p) => p.published));
+          const uid = user?.id;
+          setPublishedPapyri(
+            (joined.role ?? "PLAYER") === "MASTER"
+              ? papyri.filter((p) => p.published)
+              : filterVisibleToUser(
+                  papyri.filter((p) => p.published),
+                  uid
+                )
+          );
+          setPublishedNotes(notesForPlayer);
           const visibleShops = shops.filter((s) => s.isOpen);
           setOpenShops(visibleShops);
           if ((joined.role ?? "PLAYER") !== "MASTER" && visibleShops.length > 0) {
@@ -1953,8 +1990,8 @@ export function GameRoom() {
                     prev.includes(id) ? prev : [...prev, id]
                   );
                   setPreviewPapyrus(null);
-                  void publishPapyrus(campaignId, id, false).catch((err) =>
-                    console.error(err)
+                  void publishPapyrus(campaignId, id, { published: false }).catch(
+                    (err) => console.error(err)
                   );
                 }
               : undefined
@@ -1963,37 +2000,42 @@ export function GameRoom() {
       )}
 
       {!previewPapyrus &&
+        !isMaster &&
         publishedPapyri
           .filter((p) => !dismissedPapyrusIds.includes(p.id))
           .slice(0, 1)
           .map((papyrus) => (
             <PapyrusOverlay
-              key={papyrus.id}
+              key={`papyrus-${papyrus.id}`}
               papyrus={papyrus}
-              isMaster={isMaster}
+              isMaster={false}
               onClose={() =>
                 setDismissedPapyrusIds((prev) =>
                   prev.includes(papyrus.id) ? prev : [...prev, papyrus.id]
                 )
               }
-              onUnpublish={
-                isMaster
-                  ? () => {
-                      const id = papyrus.id;
-                      setPublishedPapyri((prev) =>
-                        prev.filter((p) => p.id !== id)
-                      );
-                      setDismissedPapyrusIds((prev) =>
-                        prev.includes(id) ? prev : [...prev, id]
-                      );
-                      void publishPapyrus(campaignId, id, false).catch((err) =>
-                        console.error(err)
-                      );
-                    }
-                  : undefined
-              }
             />
           ))}
+
+      {!isMaster &&
+        publishedNotes
+          .filter((n) => !dismissedNoteIds.includes(n.id))
+          .slice(0, 1)
+          .map((note) => {
+            const scroll = publishedNoteAsPapyrus(note);
+            return (
+              <PapyrusOverlay
+                key={`note-${note.id}`}
+                papyrus={scroll}
+                isMaster={false}
+                onClose={() =>
+                  setDismissedNoteIds((prev) =>
+                    prev.includes(note.id) ? prev : [...prev, note.id]
+                  )
+                }
+              />
+            );
+          })}
     </div>
   );
 }

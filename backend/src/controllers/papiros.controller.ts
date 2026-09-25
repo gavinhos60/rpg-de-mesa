@@ -30,6 +30,11 @@ function mapError(error: unknown, res: Response, fallback: string) {
     case "PAPYRUS_BODY_REQUIRED":
       res.status(400).json({ error: "Texto do papiro é obrigatório" });
       return true;
+    case "AUDIENCE_REQUIRED":
+      res
+        .status(400)
+        .json({ error: "Selecione ao menos um jogador para exibir" });
+      return true;
     default:
       return false;
   }
@@ -139,7 +144,8 @@ export async function publishPapyrusController(req: Request, res: Response) {
       Number(req.params.campaignId),
       Number(req.params.papyrusId),
       req.user.userId,
-      published
+      published,
+      req.body.audienceUserIds
     );
     res.json(item);
   } catch (error) {

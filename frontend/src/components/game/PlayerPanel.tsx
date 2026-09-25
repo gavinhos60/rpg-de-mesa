@@ -15,9 +15,9 @@ import {
 } from "../../services/notes.service";
 import { useFloatingPopupStack } from "../../hooks/useFloatingPopupStack";
 
-type PlayerFloatingPopup =
-  | { id: number; kind: "notes-list" }
-  | { id: number; kind: "note"; noteId: number };
+type PlayerFloatingPopupEntry =
+  | { kind: "notes-list" }
+  | { kind: "note"; noteId: number };
 
 const fieldStyle = {
   backgroundColor: "var(--color-parchment)",
@@ -58,7 +58,7 @@ export function PlayerPanel({
     activate: activatePopup,
     zIndexFor: popupZIndex,
     stackIndexFor: popupStackIndex,
-  } = useFloatingPopupStack<PlayerFloatingPopup>();
+  } = useFloatingPopupStack<PlayerFloatingPopupEntry>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -149,7 +149,7 @@ export function PlayerPanel({
     setEditingId(note.id);
     setTitle(note.title);
     setBody(note.body);
-    setNotesOpen(false);
+    closePopupsWhere((entry) => entry.kind === "notes-list");
     setTab("anotacoes");
   }
 

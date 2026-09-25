@@ -1,4 +1,6 @@
 import { prisma } from "../lib/prisma";
+import { emitToCampaignSessions } from "../socket/io";
+import { normalizePlayerAudience } from "./publishAudience.service";
 
 async function ensureCampaignMember(userId: number, campaignId: number) {
   const member = await prisma.campaignMember.findUnique({
@@ -17,6 +19,22 @@ async function ensureCampaignMember(userId: number, campaignId: number) {
   return member;
 }
 
+async function ensureMaster(userId: number, campaignId: number) {
+  const member = await ensureCampaignMember(userId, campaignId);
+  if (member.role !== "MASTER") {
+    throw new Error("MASTER_REQUIRED");
+  }
+  return member;
+}
+
+async function broadcastPublishedNotes(campaignId: number) {
+  const published = await prisma.playerNote.findMany({
+    where: { campaignId, published: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  await emitToCampaignSessions(campaignId, "note:state", published);
+}
+
 export async function listPlayerNotes(
   campaignId: number,
   authenticatedUserId: number
@@ -25,6 +43,22 @@ export async function listPlayerNotes(
 
   return prisma.playerNote.findMany({
     where: { campaignId, userId: authenticatedUserId },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+export async function listPublishedNotesForPlayer(
+  campaignId: number,
+  authenticatedUserId: number
+) {
+  await ensureCampaignMember(authenticatedUserId, campaignId);
+
+  return prisma.playerNote.findMany({
+    where: {
+      campaignId,
+      published: true,
+      audienceUserIds: { has: authenticatedUserId },
+    },
     orderBy: { updatedAt: "desc" },
   });
 }
@@ -83,10 +117,16 @@ export async function updatePlayerNote(
     update.imageUrl = imageUrl;
   }
 
-  return prisma.playerNote.update({
+  const note = await prisma.playerNote.update({
     where: { id: noteId },
     data: update,
   });
+
+  if (existing.published) {
+    await broadcastPublishedNotes(campaignId);
+  }
+
+  return note;
 }
 
 export async function deletePlayerNote(
@@ -102,4 +142,40 @@ export async function deletePlayerNote(
   if (!existing) throw new Error("NOTE_NOT_FOUND");
 
   await prisma.playerNote.delete({ where: { id: noteId } });
+
+  if (existing.published) {
+    await broadcastPublishedNotes(campaignId);
+  }
+}
+
+export async function setNotePublished(
+  campaignId: number,
+  noteId: number,
+  authenticatedUserId: number,
+  published: boolean,
+  audienceUserIds?: unknown
+) {
+  await ensureMaster(authenticatedUserId, campaignId);
+
+  const existing = await prisma.playerNote.findFirst({
+    where: { id: noteId, campaignId, userId: authenticatedUserId },
+  });
+  if (!existing) throw new Error("NOTE_NOT_FOUND");
+
+  if (!published) {
+    const note = await prisma.playerNote.update({
+      where: { id: noteId },
+      data: { published: false, audienceUserIds: [] },
+    });
+    await broadcastPublishedNotes(campaignId);
+    return note;
+  }
+
+  const audience = await normalizePlayerAudience(campaignId, audienceUserIds);
+  const note = await prisma.playerNote.update({
+    where: { id: noteId },
+    data: { published: true, audienceUserIds: audience },
+  });
+  await broadcastPublishedNotes(campaignId);
+  return note;
 }

@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
 import {
   listPlayerNotes,
+  listPublishedNotesForPlayer,
   createPlayerNote,
   updatePlayerNote,
   deletePlayerNote,
+  setNotePublished,
 } from "../services/notes.service";
 
 function mapError(error: unknown, res: Response, fallback: string) {
@@ -24,8 +26,60 @@ function mapError(error: unknown, res: Response, fallback: string) {
         .status(400)
         .json({ error: "Informe texto ou imagem na anotação" });
       return true;
+    case "MASTER_REQUIRED":
+      res.status(403).json({ error: "Apenas o mestre pode publicar anotações" });
+      return true;
+    case "AUDIENCE_REQUIRED":
+      res
+        .status(400)
+        .json({ error: "Selecione ao menos um jogador para exibir" });
+      return true;
     default:
       return false;
+  }
+}
+
+export async function listPublishedNotesController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const items = await listPublishedNotesForPlayer(
+      Number(req.params.campaignId),
+      req.user.userId
+    );
+    res.json(items);
+  } catch (error) {
+    console.error(error);
+    if (mapError(error, res, "Erro ao listar anotações publicadas")) return;
+    res.status(500).json({ error: "Erro ao listar anotações publicadas" });
+  }
+}
+
+export async function publishNoteController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const published =
+      req.body.published != null ? Boolean(req.body.published) : true;
+
+    const item = await setNotePublished(
+      Number(req.params.campaignId),
+      Number(req.params.noteId),
+      req.user.userId,
+      published,
+      req.body.audienceUserIds
+    );
+    res.json(item);
+  } catch (error) {
+    console.error(error);
+    if (mapError(error, res, "Erro ao publicar anotação")) return;
+    res.status(500).json({ error: "Erro ao publicar anotação" });
   }
 }
 
