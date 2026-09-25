@@ -131,6 +131,10 @@ model ShopItem {
   unlimitedStock Boolean        @default(false)
   category       String
   extraInfo      String?
+  bonusStat      String?
+  bonusValue     Int?
+  requiresAttunement Boolean @default(false)
+  weight         Float?
   available      Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt

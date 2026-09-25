@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "ShopItem" ADD COLUMN "weight" DOUBLE PRECISION;

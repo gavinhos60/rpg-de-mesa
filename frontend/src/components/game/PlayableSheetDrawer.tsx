@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
-import type { Ability, CharacterFormData, CharacterWallet, Skill, Spell } from "../../types/character";
+import type {
+  Ability,
+  ActiveSlots,
+  AttunedSlots,
+  CharacterFormData,
+  CharacterWallet,
+  Skill,
+  Spell,
+} from "../../types/character";
 import type { CampaignCharacterLite } from "../../types/game";
 import { CharacterSheetReview } from "../character/CharacterSheetReview";
 import { DND_BACKGROUNDS } from "../../data/dnd/backgrounds";
@@ -35,6 +43,8 @@ interface PlayableSheetDrawerProps {
   onTransferItem?: (
     payload: InventoryItemAction & { targetCharacterId: number }
   ) => Promise<void>;
+  onUpdateAttunedSlots?: (slots: AttunedSlots) => Promise<void>;
+  onUpdateActiveSlots?: (slots: ActiveSlots) => Promise<void>;
   xpBusy?: boolean;
   onUpdateXp?: (xp: number) => Promise<void>;
   onLevelUp?: (data: CharacterFormData) => Promise<void>;
@@ -63,6 +73,8 @@ export function PlayableSheetDrawer({
   onUpdateWallet,
   onDiscardItem,
   onTransferItem,
+  onUpdateAttunedSlots,
+  onUpdateActiveSlots,
   xpBusy = false,
   onUpdateXp,
   onLevelUp,
@@ -223,6 +235,8 @@ export function PlayableSheetDrawer({
                     onUpdateWallet,
                     onDiscardItem,
                     onTransferItem,
+                    onUpdateAttunedSlots,
+                    onUpdateActiveSlots,
                   }
                 : undefined
             }

@@ -377,7 +377,16 @@ export function CharacterEquipment({
                             Itens especiais
                         </h4>
                         {(data.equipment.customItems ?? []).map((item) => (
-                            <div key={item.id} className="border p-4" style={card}>
+                            <div key={item.id} className="flex gap-3 border p-4" style={card}>
+                                {item.imageUrl ? (
+                                    <img
+                                        src={item.imageUrl}
+                                        alt=""
+                                        className="h-16 w-16 shrink-0 rounded border object-cover"
+                                        style={{ borderColor: "var(--color-border)" }}
+                                    />
+                                ) : null}
+                                <div className="min-w-0 flex-1">
                                 <p className="text-[var(--color-ink)]" style={cinzel}>
                                     {item.name}
                                     {item.quantity > 1 ? ` × ${item.quantity}` : ""}
@@ -390,6 +399,7 @@ export function CharacterEquipment({
                                         Concedido por {item.grantedByName}
                                     </p>
                                 ) : null}
+                                </div>
                             </div>
                         ))}
                     </div>

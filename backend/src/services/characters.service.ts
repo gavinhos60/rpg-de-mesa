@@ -334,6 +334,8 @@ export async function grantCustomItemToCharacter(
     weight?: number;
     category?: string;
     imageUrl?: string;
+    itemBonus?: ItemBonus;
+    requiresAttunement?: boolean;
   },
   options?: {
     /** Skip MASTER check when caller already validated (e.g. shop delivery). */
@@ -381,6 +383,8 @@ export async function grantCustomItemToCharacter(
     weightRaw != null && Number.isFinite(weightRaw) && weightRaw >= 0
       ? weightRaw
       : undefined;
+  const itemBonus = parseItemBonus(item.itemBonus);
+  const requiresAttunement = Boolean(item.requiresAttunement);
 
   const master = await prisma.user.findUnique({
     where: { id: authenticatedUserId },
@@ -434,6 +438,8 @@ export async function grantCustomItemToCharacter(
     if (weight != null) merged.weight = weight;
     if (category) merged.category = category;
     if (imageUrl) merged.imageUrl = imageUrl;
+    if (itemBonus) merged.itemBonus = itemBonus;
+    if (requiresAttunement) merged.requiresAttunement = true;
     if (master?.name) merged.grantedByName = master.name;
     const nextCustom = [...existingCustom];
     nextCustom[mergeIndex] = merged;
@@ -448,6 +454,8 @@ export async function grantCustomItemToCharacter(
     if (weight != null) customItem.weight = weight;
     if (category) customItem.category = category;
     if (imageUrl) customItem.imageUrl = imageUrl;
+    if (itemBonus) customItem.itemBonus = itemBonus;
+    if (requiresAttunement) customItem.requiresAttunement = true;
     if (master?.name) customItem.grantedByName = master.name;
     equipment.customItems = [...existingCustom, customItem];
   }
@@ -474,6 +482,20 @@ export async function grantCustomItemToCharacter(
 
 type SheetRoot = Record<string, unknown>;
 type EquipmentStack = { itemId: string; quantity: number };
+type ItemBonusStat =
+  | "ac"
+  | "strength"
+  | "dexterity"
+  | "constitution"
+  | "intelligence"
+  | "wisdom"
+  | "charisma";
+
+type ItemBonus = {
+  stat: ItemBonusStat;
+  value: number;
+};
+
 type CustomItem = {
   id: string;
   name: string;
@@ -481,8 +503,31 @@ type CustomItem = {
   quantity: number;
   weight?: number;
   category?: string;
+  imageUrl?: string;
+  itemBonus?: ItemBonus;
+  requiresAttunement?: boolean;
   grantedByName?: string;
 };
+
+const VALID_ITEM_BONUS_STATS = new Set<ItemBonusStat>([
+  "ac",
+  "strength",
+  "dexterity",
+  "constitution",
+  "intelligence",
+  "wisdom",
+  "charisma",
+]);
+
+function parseItemBonus(raw: unknown): ItemBonus | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const row = raw as Record<string, unknown>;
+  const stat = String(row.stat ?? "").trim() as ItemBonusStat;
+  const value = Math.floor(Number(row.value));
+  if (!VALID_ITEM_BONUS_STATS.has(stat)) return undefined;
+  if (!Number.isFinite(value) || value < 1 || value > 10) return undefined;
+  return { stat, value };
+}
 
 const characterInclude = {
   player: {
@@ -551,11 +596,156 @@ function asCustomItems(value: unknown): CustomItem[] {
       if (Number.isFinite(weight) && weight >= 0) next.weight = weight;
       const category = String(row.category ?? "").trim();
       if (category) next.category = category;
+      const imageUrl = String(row.imageUrl ?? "").trim();
+      if (imageUrl) next.imageUrl = imageUrl;
       const grantedByName = String(row.grantedByName ?? "").trim();
       if (grantedByName) next.grantedByName = grantedByName;
+      const itemBonus = parseItemBonus(row.itemBonus);
+      if (itemBonus) next.itemBonus = itemBonus;
+      if (row.requiresAttunement === true) {
+        next.requiresAttunement = true;
+      }
       return next;
     })
     .filter((item): item is CustomItem => Boolean(item));
+}
+
+type AttunedItemRef =
+  | { kind: "catalog"; itemId: string }
+  | { kind: "custom"; customItemId: string };
+
+function parseAttunedRef(raw: unknown): AttunedItemRef | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entry = raw as Record<string, unknown>;
+  if (entry.kind === "catalog") {
+    const itemId = String(entry.itemId ?? "").trim();
+    return itemId ? { kind: "catalog", itemId } : null;
+  }
+  if (entry.kind === "custom") {
+    const customItemId = String(entry.customItemId ?? "").trim();
+    return customItemId ? { kind: "custom", customItemId } : null;
+  }
+  return null;
+}
+
+function normalizeAttunedSlotsInput(raw: unknown): [
+  AttunedItemRef | null,
+  AttunedItemRef | null,
+  AttunedItemRef | null,
+] {
+  const slots: [AttunedItemRef | null, AttunedItemRef | null, AttunedItemRef | null] =
+    [null, null, null];
+  if (!Array.isArray(raw)) return slots;
+  for (let i = 0; i < 3; i++) {
+    slots[i] = parseAttunedRef(raw[i]);
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < 3; i++) {
+    const ref = slots[i];
+    if (!ref) continue;
+    const key =
+      ref.kind === "catalog"
+        ? `catalog:${ref.itemId}`
+        : `custom:${ref.customItemId}`;
+    if (seen.has(key)) {
+      slots[i] = null;
+      continue;
+    }
+    seen.add(key);
+  }
+  return slots;
+}
+
+function attunedRefKey(ref: AttunedItemRef): string {
+  return ref.kind === "catalog"
+    ? `catalog:${ref.itemId}`
+    : `custom:${ref.customItemId}`;
+}
+
+function validateAttunedMagicSlotRefs(
+  equipment: Record<string, unknown>,
+  slots: Array<AttunedItemRef | null>
+) {
+  const customItems = asCustomItems(equipment.customItems);
+  for (const ref of slots) {
+    if (!ref) continue;
+    if (ref.kind === "catalog") {
+      throw new Error("ATTUNED_ITEM_INVALID");
+    }
+    const item = customItems.find((entry) => entry.id === ref.customItemId);
+    if (!item || item.quantity <= 0 || !item.requiresAttunement) {
+      throw new Error("ATTUNED_ITEM_INVALID");
+    }
+  }
+}
+
+function validateActiveEquipmentSlotRefs(
+  equipment: Record<string, unknown>,
+  slots: Array<AttunedItemRef | null>
+) {
+  const customItems = asCustomItems(equipment.customItems);
+  for (const ref of slots) {
+    if (!ref) continue;
+    if (ref.kind === "catalog") {
+      if (!ref.itemId) throw new Error("ATTUNED_ITEM_INVALID");
+      continue;
+    }
+    const item = customItems.find((entry) => entry.id === ref.customItemId);
+    if (!item || item.quantity <= 0 || item.requiresAttunement) {
+      throw new Error("ATTUNED_ITEM_INVALID");
+    }
+  }
+}
+
+function normalizeActiveSlotsInput(raw: unknown): [
+  AttunedItemRef | null,
+  AttunedItemRef | null,
+  AttunedItemRef | null,
+  AttunedItemRef | null,
+  AttunedItemRef | null,
+] {
+  const slots: [
+    AttunedItemRef | null,
+    AttunedItemRef | null,
+    AttunedItemRef | null,
+    AttunedItemRef | null,
+    AttunedItemRef | null,
+  ] = [null, null, null, null, null];
+  if (!Array.isArray(raw)) return slots;
+  for (let i = 0; i < 5; i++) {
+    slots[i] = parseAttunedRef(raw[i]);
+  }
+  const seen = new Set<string>();
+  for (let i = 0; i < 5; i++) {
+    const ref = slots[i];
+    if (!ref) continue;
+    const key = attunedRefKey(ref);
+    if (seen.has(key)) {
+      slots[i] = null;
+      continue;
+    }
+    seen.add(key);
+  }
+  return slots;
+}
+
+function clearEquipmentSlotRefs(
+  equipment: Record<string, unknown>,
+  predicate: (ref: AttunedItemRef) => boolean
+) {
+  const attuned = normalizeAttunedSlotsInput(equipment.attunedSlots);
+  for (let i = 0; i < 3; i++) {
+    const ref = attuned[i];
+    if (ref && predicate(ref)) attuned[i] = null;
+  }
+  equipment.attunedSlots = attuned;
+
+  const active = normalizeActiveSlotsInput(equipment.activeSlots);
+  for (let i = 0; i < 5; i++) {
+    const ref = active[i];
+    if (ref && predicate(ref)) active[i] = null;
+  }
+  equipment.activeSlots = active;
 }
 
 function normalizeWalletInput(raw: unknown): {
@@ -647,6 +837,9 @@ function removeCustomQuantity(
   const moved: CustomItem = { ...current, quantity: amount };
   if (current.quantity === amount) {
     customItems.splice(index, 1);
+    clearEquipmentSlotRefs(equipment, (ref) =>
+      ref.kind === "custom" ? ref.customItemId === customItemId : false
+    );
   } else {
     customItems[index] = {
       ...current,
@@ -731,6 +924,52 @@ export async function updateCharacterWallet(
   );
   const sheetRoot = asSheetRoot(character.sheet);
   sheetRoot.wallet = normalizeWalletInput(walletInput);
+
+  return prisma.character.update({
+    where: { id: characterId },
+    data: { sheet: sheetRoot as Prisma.InputJsonValue },
+    include: characterInclude,
+  });
+}
+
+export async function updateCharacterAttunedSlots(
+  characterId: number,
+  authenticatedUserId: number,
+  attunedSlotsInput: unknown
+) {
+  const character = await requireOwnedOrCampaignMaster(
+    characterId,
+    authenticatedUserId
+  );
+  const sheetRoot = asSheetRoot(character.sheet);
+  const equipment = asEquipment(sheetRoot);
+  const attunedSlots = normalizeAttunedSlotsInput(attunedSlotsInput);
+  validateAttunedMagicSlotRefs(equipment, attunedSlots);
+  equipment.attunedSlots = attunedSlots;
+  sheetRoot.equipment = equipment;
+
+  return prisma.character.update({
+    where: { id: characterId },
+    data: { sheet: sheetRoot as Prisma.InputJsonValue },
+    include: characterInclude,
+  });
+}
+
+export async function updateCharacterActiveSlots(
+  characterId: number,
+  authenticatedUserId: number,
+  activeSlotsInput: unknown
+) {
+  const character = await requireOwnedOrCampaignMaster(
+    characterId,
+    authenticatedUserId
+  );
+  const sheetRoot = asSheetRoot(character.sheet);
+  const equipment = asEquipment(sheetRoot);
+  const activeSlots = normalizeActiveSlotsInput(activeSlotsInput);
+  validateActiveEquipmentSlotRefs(equipment, activeSlots);
+  equipment.activeSlots = activeSlots;
+  sheetRoot.equipment = equipment;
 
   return prisma.character.update({
     where: { id: characterId },

@@ -26,6 +26,10 @@ import { monsterPortraitUrl } from "../../data/dnd/monsterPortrait";
 import { hitPointsFromSheet } from "../../utils/characterCombat";
 import { kilogramsToPounds } from "../../data/dnd/equipment";
 import { grantCustomItem } from "../../services/character.service";
+import { parseItemBonusFields } from "../../data/itemBonus";
+import { ItemBonusFields } from "../character/ItemBonusFields";
+import { RequiresAttunementField } from "../character/RequiresAttunementField";
+import type { ItemBonusStat } from "../../types/character";
 import type { BoardTool } from "./GameBoard";
 import { RibbonButton } from "../icons/MedievalIcons";
 import { PapirosMasterSection } from "./PapirosMasterSection";
@@ -239,6 +243,10 @@ export function MasterPanel({
   const [itemDescription, setItemDescription] = useState("");
   const [itemQuantity, setItemQuantity] = useState("1");
   const [itemWeight, setItemWeight] = useState("");
+  const [itemImageUrl, setItemImageUrl] = useState("");
+  const [itemBonusStat, setItemBonusStat] = useState<ItemBonusStat | "">("");
+  const [itemBonusValue, setItemBonusValue] = useState("");
+  const [itemRequiresAttunement, setItemRequiresAttunement] = useState(false);
   const [grantingItem, setGrantingItem] = useState(false);
   const [grantItemMessage, setGrantItemMessage] = useState("");
 
@@ -606,12 +614,18 @@ export function MasterPanel({
         : undefined;
     setGrantingItem(true);
     setGrantItemMessage("");
+    const parsedBonus = parseItemBonusFields(itemBonusStat, itemBonusValue);
+
     try {
+      const imageUrl = itemImageUrl.trim() || undefined;
       const updated = await grantCustomItem(characterId, {
         name,
         description: itemDescription.trim() || undefined,
         quantity,
         ...(weight != null ? { weight } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+        ...(parsedBonus ? { itemBonus: parsedBonus } : {}),
+        ...(itemRequiresAttunement ? { requiresAttunement: true } : {}),
       });
       onCharacterUpdated?.({
         id: updated.id,
@@ -628,6 +642,10 @@ export function MasterPanel({
       setItemDescription("");
       setItemQuantity("1");
       setItemWeight("");
+      setItemImageUrl("");
+      setItemBonusStat("");
+      setItemBonusValue("");
+      setItemRequiresAttunement(false);
       setGrantItemMessage(`“${name}” adicionado ao inventário de ${updated.name}.`);
     } catch (error: unknown) {
       const message =
@@ -1979,6 +1997,61 @@ export function MasterPanel({
                 className="mb-1.5 w-full resize-y border px-2 py-1.5 text-sm outline-none"
                 style={fieldStyle}
               />
+              {itemImageUrl.startsWith("data:") ? (
+                <p className="mb-1.5 text-[10px] text-[var(--color-ink-soft)]">
+                  Imagem anexada (arquivo). Remova abaixo para trocar.
+                </p>
+              ) : (
+                <input
+                  value={itemImageUrl}
+                  onChange={(event) => setItemImageUrl(event.target.value)}
+                  placeholder="URL da imagem (opcional)"
+                  className="mb-1.5 w-full border px-2 py-1.5 text-sm outline-none"
+                  style={fieldStyle}
+                />
+              )}
+              <label className="mb-1.5 block text-[10px] text-[var(--color-ink-soft)]">
+                Ou enviar imagem do item
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="mt-1 block w-full text-xs"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    void readImageAsDataUrl(file, 512)
+                      .then(setItemImageUrl)
+                      .catch(() =>
+                        window.alert("Não foi possível ler a imagem.")
+                      );
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+              {itemImageUrl ? (
+                <div
+                  className="mb-2 overflow-hidden rounded border"
+                  style={{ borderColor: "var(--color-border)" }}
+                >
+                  <img
+                    src={itemImageUrl}
+                    alt=""
+                    className="max-h-28 w-full object-contain"
+                    style={{ backgroundColor: "var(--color-parchment)" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setItemImageUrl("")}
+                    className="w-full border-t px-2 py-1 text-[10px] text-[var(--color-crimson)]"
+                    style={{
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "var(--color-parchment)",
+                    }}
+                  >
+                    Remover imagem
+                  </button>
+                </div>
+              ) : null}
               <div className="mb-2 grid grid-cols-2 gap-1.5">
                 <label className="block text-[10px] text-[var(--color-ink-soft)]">
                   Qtd
@@ -2000,6 +2073,18 @@ export function MasterPanel({
                   />
                 </label>
               </div>
+              <ItemBonusFields
+                stat={itemBonusStat}
+                value={itemBonusValue}
+                onStatChange={setItemBonusStat}
+                onValueChange={setItemBonusValue}
+                className="mb-2"
+              />
+              <RequiresAttunementField
+                checked={itemRequiresAttunement}
+                onChange={setItemRequiresAttunement}
+                className="mb-2"
+              />
               <RibbonButton
                 type="button"
                 className="w-full"

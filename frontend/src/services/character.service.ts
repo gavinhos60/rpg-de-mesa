@@ -1,5 +1,8 @@
 import { api } from "./api";
 import type {
+  ActiveSlots,
+  AttunedSlots,
+  ItemBonus,
   CharacterFormData,
   CharacterResourcesState,
   CharacterWallet,
@@ -173,6 +176,8 @@ export async function grantCustomItem(
     weight?: number;
     category?: string;
     imageUrl?: string;
+    itemBonus?: ItemBonus;
+    requiresAttunement?: boolean;
   }
 ): Promise<SavedCharacter> {
   const response = await api.post<SavedCharacter>(
@@ -189,6 +194,28 @@ export async function updateCharacterWallet(
   const response = await api.patch<SavedCharacter>(
     `/characters/${characterId}/wallet`,
     wallet
+  );
+  return response.data;
+}
+
+export async function updateCharacterAttunedSlots(
+  characterId: number,
+  attunedSlots: AttunedSlots
+): Promise<SavedCharacter> {
+  const response = await api.patch<SavedCharacter>(
+    `/characters/${characterId}/attuned-slots`,
+    { attunedSlots }
+  );
+  return response.data;
+}
+
+export async function updateCharacterActiveSlots(
+  characterId: number,
+  activeSlots: ActiveSlots
+): Promise<SavedCharacter> {
+  const response = await api.patch<SavedCharacter>(
+    `/characters/${characterId}/active-slots`,
+    { activeSlots }
   );
   return response.data;
 }

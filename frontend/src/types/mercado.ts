@@ -9,6 +9,10 @@ export interface ShopItem {
   unlimitedStock: boolean;
   category: string;
   extraInfo?: string | null;
+  bonusStat?: string | null;
+  bonusValue?: number | null;
+  requiresAttunement?: boolean;
+  weight?: number | null;
   available: boolean;
   createdAt: string;
   updatedAt: string;
@@ -59,6 +63,10 @@ export interface ShopItemInput {
   unlimitedStock?: boolean;
   category: string;
   extraInfo?: string | null;
+  bonusStat?: string | null;
+  bonusValue?: number | null;
+  requiresAttunement?: boolean;
+  weight?: number | null;
   available?: boolean;
 }
 

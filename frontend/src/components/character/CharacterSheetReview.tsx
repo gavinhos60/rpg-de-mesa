@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type {
     Ability,
@@ -22,7 +22,6 @@ import {
     getSkillExtraBonus,
 } from "../../data/dnd/skills";
 import { DND_TALENTS } from "../../data/dnd/talents";
-import { DND_BACKGROUNDS } from "../../data/dnd/backgrounds";
 import {
     getAsiMilestones,
     getFeatSavingThrowAbilities,
@@ -71,6 +70,16 @@ import type { CharacterWallet } from "../../types/character";
 import type { InventoryItemAction } from "../../services/character.service";
 import { CharacterXpBar } from "./CharacterXpBar";
 import { CharacterLevelUpModal } from "./CharacterLevelUpModal";
+import { InventoryEquipmentSection } from "./InventoryEquipmentSection";
+import { buildCharacterInventory } from "../../utils/characterInventory";
+import { sumEquipmentBonuses, applyAbilityEquipmentBonus } from "../../utils/equipmentBonuses";
+import type { ActiveSlots, AttunedSlots } from "../../types/character";
+import { formatItemBonusLabel } from "../../data/itemBonus";
+import { StatBreakdownTooltip } from "./StatBreakdownTooltip";
+import {
+    getAbilityStatBreakdown,
+    getArmorClassBreakdown,
+} from "../../utils/statBreakdown";
 
 interface CharacterSheetReviewProps {
     data: CharacterFormData;
@@ -89,6 +98,8 @@ interface CharacterSheetReviewProps {
         onTransferItem: (
             payload: InventoryItemAction & { targetCharacterId: number }
         ) => Promise<void>;
+        onUpdateAttunedSlots?: (slots: AttunedSlots) => Promise<void>;
+        onUpdateActiveSlots?: (slots: ActiveSlots) => Promise<void>;
     };
     /** Editar XP e subir de nível na mesa ou na ficha do jogador. */
     xpManage?: {
@@ -133,12 +144,6 @@ const SCHOOL_ACCENTS: Record<string, string> = {
     transmutation: "#9A7A2C",
 };
 
-interface ReviewInventoryRow {
-    itemId: string;
-    classQuantity: number;
-    manualQuantity: number;
-}
-
 export function CharacterSheetReview({
     data,
     backgrounds,
@@ -178,7 +183,40 @@ export function CharacterSheetReview({
         setWalletDraft(resolveCharacterWallet(data));
     }, [data]);
 
-    const abilities = getFinalAbilities(data);
+    const baseAbilities = getFinalAbilities(data);
+    const equipmentBonuses = sumEquipmentBonuses(data);
+    const abilities = {
+        strength: applyAbilityEquipmentBonus(
+            baseAbilities.strength,
+            "strength",
+            equipmentBonuses
+        ),
+        dexterity: applyAbilityEquipmentBonus(
+            baseAbilities.dexterity,
+            "dexterity",
+            equipmentBonuses
+        ),
+        constitution: applyAbilityEquipmentBonus(
+            baseAbilities.constitution,
+            "constitution",
+            equipmentBonuses
+        ),
+        intelligence: applyAbilityEquipmentBonus(
+            baseAbilities.intelligence,
+            "intelligence",
+            equipmentBonuses
+        ),
+        wisdom: applyAbilityEquipmentBonus(
+            baseAbilities.wisdom,
+            "wisdom",
+            equipmentBonuses
+        ),
+        charisma: applyAbilityEquipmentBonus(
+            baseAbilities.charisma,
+            "charisma",
+            equipmentBonuses
+        ),
+    };
     const rollAbilities = Boolean(canRoll && onRollAbility);
     const rollSkills = Boolean(canRoll && onRollSkill);
     const useFeatures = Boolean(canRoll && onUseFeature);
@@ -229,15 +267,16 @@ export function CharacterSheetReview({
         })
         .join(" / ");
 
-    const inventory = buildInventory(data);
+    const inventory = buildCharacterInventory(data);
     const wallet = resolveCharacterWallet(data);
-    const armorClass = getArmorClassFromEquipment(
-        abilities.dexterity,
-        abilities.wisdom,
-        abilities.constitution,
-        primaryClass,
-        inventory.map((row) => row.itemId)
-    );
+    const armorClass =
+        getArmorClassFromEquipment(
+            abilities.dexterity,
+            abilities.wisdom,
+            abilities.constitution,
+            primaryClass,
+            inventory.map((row) => row.itemId)
+        ) + equipmentBonuses.ac;
     const inventoryWeight = inventory.reduce((total, row) => {
         const item = getEquipmentItem(row.itemId);
         return total + (item?.weight ?? 0) *
@@ -247,6 +286,20 @@ export function CharacterSheetReview({
         0
     ) + walletWeightLb(wallet);
     const isOverCapacity = inventoryWeight > carryingCapacity;
+    const armorClassBreakdown = useMemo(
+        () => getArmorClassBreakdown(data),
+        [data]
+    );
+    const abilityBreakdownById = useMemo(
+        () =>
+            Object.fromEntries(
+                ABILITIES.map((ability) => [
+                    ability.id,
+                    getAbilityStatBreakdown(data, ability.id),
+                ])
+            ) as Record<Ability, ReturnType<typeof getAbilityStatBreakdown>>,
+        [data]
+    );
     const coinCount = totalCoinCount(wallet);
     const coinWeight = walletWeightLb(wallet);
     const coinValue = walletValueInPo(wallet);
@@ -374,6 +427,7 @@ export function CharacterSheetReview({
                             name={ability.name}
                             score={abilities[ability.id]}
                             modifier={formatModifier(getAbilityModifier(abilities[ability.id]))}
+                            breakdown={abilityBreakdownById[ability.id]}
                             onRoll={
                                 rollAbilities
                                     ? () =>
@@ -391,7 +445,11 @@ export function CharacterSheetReview({
                 <RuleTitle>Combate &amp; Sentidos</RuleTitle>
                 <div className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                     <StatBox label="Pontos de vida" value={hitPoints} />
-                    <StatBox label="Classe de armadura" value={armorClass} />
+                    <StatBox
+                        label="Classe de armadura"
+                        value={armorClass}
+                        breakdown={armorClassBreakdown}
+                    />
                     <StatBox label="Iniciativa" value={formatModifier(initiative)} />
                     <StatBox label="Deslocamento" value={formatMeters(movement)} />
                     <StatBox
@@ -791,6 +849,17 @@ export function CharacterSheetReview({
                     ) : null}
                 </div>
 
+                <InventoryEquipmentSection
+                    data={data}
+                    editable={Boolean(
+                        inventoryManage?.onUpdateAttunedSlots ||
+                            inventoryManage?.onUpdateActiveSlots
+                    )}
+                    busy={inventoryManage?.busy}
+                    onUpdateAttunedSlots={inventoryManage?.onUpdateAttunedSlots}
+                    onUpdateActiveSlots={inventoryManage?.onUpdateActiveSlots}
+                />
+
                 {inventory.length === 0 &&
                 (data.equipment.customItems ?? []).length === 0 ? (
                     <p className="text-sm italic text-[var(--color-ink-muted)]">Nenhum item registrado.</p>
@@ -878,7 +947,18 @@ export function CharacterSheetReview({
                                 </p>
                                 <ul className="space-y-3 text-sm">
                                     {(data.equipment.customItems ?? []).map((item) => (
-                                        <li key={item.id}>
+                                        <li key={item.id} className="flex gap-3">
+                                            {item.imageUrl ? (
+                                                <img
+                                                    src={item.imageUrl}
+                                                    alt=""
+                                                    className="h-14 w-14 shrink-0 rounded border object-cover"
+                                                    style={{
+                                                        borderColor: "var(--color-border)",
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <div className="min-w-0 flex-1">
                                             <p className="text-[var(--color-ink)]" style={cinzel}>
                                                 {item.name}
                                                 {item.quantity > 1 ? ` × ${item.quantity}` : ""}
@@ -886,6 +966,22 @@ export function CharacterSheetReview({
                                             {item.description ? (
                                                 <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-ink-muted)]">
                                                     {item.description}
+                                                </p>
+                                            ) : null}
+                                            {formatItemBonusLabel(
+                                                item.itemBonus?.stat,
+                                                item.itemBonus?.value
+                                            ) ? (
+                                                <p className="mt-0.5 text-[10px] text-[var(--color-crimson)]">
+                                                    {formatItemBonusLabel(
+                                                        item.itemBonus?.stat,
+                                                        item.itemBonus?.value
+                                                    )}
+                                                </p>
+                                            ) : null}
+                                            {item.requiresAttunement ? (
+                                                <p className="mt-0.5 text-[10px] text-[var(--color-ink-soft)]">
+                                                    Requer sintonização
                                                 </p>
                                             ) : null}
                                             {item.grantedByName ? (
@@ -937,6 +1033,7 @@ export function CharacterSheetReview({
                                                     ) : null}
                                                 </span>
                                             ) : null}
+                                            </div>
                                         </li>
                                     ))}
                                 </ul>
@@ -1350,11 +1447,13 @@ function AbilityHex({
     name,
     score,
     modifier,
+    breakdown,
     onRoll,
 }: {
     name: string;
     score: number;
     modifier: string;
+    breakdown?: ReturnType<typeof getAbilityStatBreakdown>;
     onRoll?: () => void;
 }) {
     const body = (
@@ -1384,27 +1483,31 @@ function AbilityHex({
         boxShadow: "inset 0 0 0 1px var(--color-border)",
     } as const;
 
+    const wrapped = (content: ReactNode) => (
+        <StatBreakdownTooltip lines={breakdown ?? []} className="w-full">
+            {content}
+        </StatBreakdownTooltip>
+    );
+
     if (onRoll) {
-        return (
-            <div className="relative">
-                <button
-                    type="button"
-                    onClick={onRoll}
-                    title={`Rolar teste de ${name}`}
-                    className="flex w-full flex-col items-center px-2 pb-8 pt-3 transition hover:brightness-95"
-                    style={hexStyle}
-                >
-                    {body}
-                </button>
-            </div>
+        return wrapped(
+            <button
+                type="button"
+                onClick={onRoll}
+                className="flex w-full flex-col items-center px-2 pb-8 pt-3 transition hover:brightness-95"
+                style={hexStyle}
+            >
+                {body}
+            </button>
         );
     }
 
-    return (
-        <div className="relative">
-            <div className="flex flex-col items-center px-2 pb-8 pt-3" style={hexStyle}>
-                {body}
-            </div>
+    return wrapped(
+        <div
+            className="flex w-full flex-col items-center px-2 pb-8 pt-3"
+            style={hexStyle}
+        >
+            {body}
         </div>
     );
 }
@@ -1413,27 +1516,39 @@ function StatBox({
     label,
     value,
     hint,
+    breakdown,
 }: {
     label: string;
     value: string | number;
     hint?: string;
+    breakdown?: ReturnType<typeof getArmorClassBreakdown>;
 }) {
     return (
-        <div
-            className="border px-3 py-4 text-center"
-            style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
-        >
-            <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--color-border)]" style={cinzel}>
-                {label}
-            </p>
-            <p
-                className="mt-2 text-2xl leading-none text-[var(--color-crimson)]"
-                style={{ ...cinzel, fontWeight: 600 }}
+        <StatBreakdownTooltip lines={breakdown ?? []} className="h-full">
+            <div
+                className="h-full border px-3 py-4 text-center"
+                style={{
+                    borderColor: "var(--color-border)",
+                    backgroundColor: "var(--color-surface)",
+                }}
             >
-                {value}
-            </p>
-            {hint && <p className="mt-1 text-[10px] text-[var(--color-ink-soft)]">{hint}</p>}
-        </div>
+                <p
+                    className="text-[10px] uppercase tracking-[0.16em] text-[var(--color-border)]"
+                    style={cinzel}
+                >
+                    {label}
+                </p>
+                <p
+                    className="mt-2 text-2xl leading-none text-[var(--color-crimson)]"
+                    style={{ ...cinzel, fontWeight: 600 }}
+                >
+                    {value}
+                </p>
+                {hint ? (
+                    <p className="mt-1 text-[10px] text-[var(--color-ink-soft)]">{hint}</p>
+                ) : null}
+            </div>
+        </StatBreakdownTooltip>
     );
 }
 
@@ -1594,81 +1709,10 @@ function SectionTitle({ children }: { children: string }) {
     );
 }
 
-function buildInventory(data: CharacterFormData): ReviewInventoryRow[] {
-    const counts = new Map<string, ReviewInventoryRow>();
-    const classId = data.equipment.classId || data.classes[0]?.classId;
-    const characterClass = DND_CLASSES.find((item) => item.id === classId);
-    const starting = characterClass?.startingEquipment;
-
-    if (starting) {
-        for (const stack of starting.fixed) {
-            addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
-        }
-
-        for (const choice of starting.choices) {
-            const selectedId = data.equipment.choiceSelections[choice.id] ?? choice.alternatives[0]?.id;
-            const selected = choice.alternatives.find((alternative) => alternative.id === selectedId);
-            for (const stack of selected?.items ?? []) {
-                addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
-            }
-        }
-    }
-
-    const background = DND_BACKGROUNDS.find(
-        (item) => item.id === data.backgroundId
-    );
-    for (const stack of background?.startingEquipment ?? []) {
-        addInventoryQuantity(counts, stack.itemId, stack.quantity, "class");
-    }
-    if (background?.equipmentFromToolChoice) {
-        data.backgroundChoices.tools.filter(Boolean).forEach((itemId) => {
-            addInventoryQuantity(counts, itemId, 1, "class");
-        });
-    }
-
-    for (const stack of data.equipment.manualItems) {
-        addInventoryQuantity(counts, stack.itemId, stack.quantity, "manual");
-    }
-
-    for (const stack of data.equipment.removedItems ?? []) {
-        let remaining = Math.max(0, stack.quantity);
-        const current = counts.get(stack.itemId);
-        if (!current || remaining <= 0) continue;
-        const fromClass = Math.min(current.classQuantity, remaining);
-        current.classQuantity -= fromClass;
-        remaining -= fromClass;
-        const fromManual = Math.min(current.manualQuantity, remaining);
-        current.manualQuantity -= fromManual;
-        if (current.classQuantity <= 0 && current.manualQuantity <= 0) {
-            counts.delete(stack.itemId);
-        } else {
-            counts.set(stack.itemId, current);
-        }
-    }
-
-    return [...counts.values()].filter(
-        (row) => row.classQuantity + row.manualQuantity > 0
-    );
-}
-
-function addInventoryQuantity(
-    counts: Map<string, ReviewInventoryRow>,
-    itemId: string,
-    quantity: number,
-    source: "class" | "manual"
-) {
-    const current = counts.get(itemId) ?? {
-        itemId,
-        classQuantity: 0,
-        manualQuantity: 0,
-    };
-    if (source === "class") current.classQuantity += quantity;
-    else current.manualQuantity += quantity;
-    counts.set(itemId, current);
-}
-
-function groupInventory(inventory: ReviewInventoryRow[]) {
-    return inventory.reduce<Record<string, ReviewInventoryRow[]>>((groups, row) => {
+function groupInventory(inventory: ReturnType<typeof buildCharacterInventory>) {
+    return inventory.reduce<
+        Record<string, ReturnType<typeof buildCharacterInventory>>
+    >((groups, row) => {
         const category = getEquipmentItem(row.itemId)?.category ?? "gear";
         groups[category] = [...(groups[category] ?? []), row];
         return groups;

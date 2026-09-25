@@ -10,6 +10,8 @@ import {
 import { getMyCharacters, getCharacterById } from "../services/character.service";
 import {
   updateCharacterWallet,
+  updateCharacterAttunedSlots,
+  updateCharacterActiveSlots,
   updateCharacterResources,
   updateCharacterProgressFromForm,
   updateCharacterXp,
@@ -56,6 +58,8 @@ import { emptyBoardState, playerIsOnFrozenScene, snapToGrid, clearOwnAnnotations
 import type {
   Ability,
   CharacterFormData,
+  ActiveSlots,
+  AttunedSlots,
   CharacterWallet,
   RestKind,
   Skill,
@@ -951,6 +955,44 @@ export function GameRoom() {
         setInventoryBusy(false);
       }
     });
+  }
+
+  async function handleUpdateAttunedSlots(attunedSlots: AttunedSlots) {
+    if (!openCharacter) return;
+    setInventoryBusy(true);
+    try {
+      const updated = await updateCharacterAttunedSlots(
+        openCharacter.id,
+        attunedSlots
+      );
+      applyCharacterUpdate(updated);
+    } catch (err) {
+      console.error(err);
+      alert(apiErrorMessage(err, "Não foi possível salvar a sintonização."));
+      throw err;
+    } finally {
+      setInventoryBusy(false);
+    }
+  }
+
+  async function handleUpdateActiveSlots(activeSlots: ActiveSlots) {
+    if (!openCharacter) return;
+    setInventoryBusy(true);
+    try {
+      const updated = await updateCharacterActiveSlots(
+        openCharacter.id,
+        activeSlots
+      );
+      applyCharacterUpdate(updated);
+    } catch (err) {
+      console.error(err);
+      alert(
+        apiErrorMessage(err, "Não foi possível salvar os equipamentos ativos.")
+      );
+      throw err;
+    } finally {
+      setInventoryBusy(false);
+    }
   }
 
   async function handleDiscardItem(payload: InventoryItemAction) {
@@ -1915,6 +1957,8 @@ export function GameRoom() {
           onUpdateWallet={handleUpdateWallet}
           onDiscardItem={handleDiscardItem}
           onTransferItem={handleTransferItem}
+          onUpdateAttunedSlots={handleUpdateAttunedSlots}
+          onUpdateActiveSlots={handleUpdateActiveSlots}
           xpBusy={xpBusy}
           onUpdateXp={handleUpdateXp}
           onLevelUp={handleLevelUp}

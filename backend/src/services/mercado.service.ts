@@ -33,6 +33,37 @@ const shopInclude = {
   },
 };
 
+const VALID_BONUS_STATS = new Set([
+  "ac",
+  "strength",
+  "dexterity",
+  "constitution",
+  "intelligence",
+  "wisdom",
+  "charisma",
+]);
+
+function parseShopItemBonus(
+  statRaw: unknown,
+  valueRaw: unknown
+): { bonusStat: string; bonusValue: number } | null {
+  const bonusStat = String(statRaw ?? "").trim();
+  const bonusValue = Math.floor(Number(valueRaw));
+  if (!VALID_BONUS_STATS.has(bonusStat)) return null;
+  if (!Number.isFinite(bonusValue) || bonusValue < 1 || bonusValue > 10) {
+    return null;
+  }
+  return { bonusStat, bonusValue };
+}
+
+function parseItemWeight(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 async function broadcastShops(campaignId: number) {
   const shops = await prisma.shop.findMany({
     where: { campaignId, isOpen: true },
@@ -226,6 +257,10 @@ export async function createShopItem(
     unlimitedStock?: boolean;
     category: string;
     extraInfo?: string | null;
+    bonusStat?: string | null;
+    bonusValue?: number | null;
+    requiresAttunement?: boolean;
+    weight?: number | null;
     available?: boolean;
   }
 ) {
@@ -251,6 +286,9 @@ export async function createShopItem(
     quantity = Number.isFinite(qty) && qty >= 0 ? qty : 0;
   }
 
+  const weight = parseItemWeight(data.weight);
+  const bonus = parseShopItemBonus(data.bonusStat, data.bonusValue);
+
   const item = await prisma.shopItem.create({
     data: {
       shopId,
@@ -269,6 +307,10 @@ export async function createShopItem(
         data.extraInfo != null
           ? String(data.extraInfo).trim() || null
           : null,
+      bonusStat: bonus?.bonusStat ?? null,
+      bonusValue: bonus?.bonusValue ?? null,
+      requiresAttunement: Boolean(data.requiresAttunement),
+      ...(weight !== undefined ? { weight } : {}),
       available: data.available != null ? Boolean(data.available) : true,
     },
   });
@@ -294,6 +336,10 @@ export async function updateShopItem(
     unlimitedStock?: boolean;
     category?: string;
     extraInfo?: string | null;
+    bonusStat?: string | null;
+    bonusValue?: number | null;
+    requiresAttunement?: boolean;
+    weight?: number | null;
     available?: boolean;
   }
 ) {
@@ -337,6 +383,20 @@ export async function updateShopItem(
   if (data.extraInfo !== undefined) {
     update.extraInfo =
       data.extraInfo == null ? null : String(data.extraInfo).trim() || null;
+  }
+  if (data.bonusStat !== undefined || data.bonusValue !== undefined) {
+    const bonus = parseShopItemBonus(
+      data.bonusStat ?? null,
+      data.bonusValue ?? null
+    );
+    update.bonusStat = bonus?.bonusStat ?? null;
+    update.bonusValue = bonus?.bonusValue ?? null;
+  }
+  if (data.weight !== undefined) {
+    update.weight = parseItemWeight(data.weight);
+  }
+  if (data.requiresAttunement != null) {
+    update.requiresAttunement = Boolean(data.requiresAttunement);
   }
   if (data.available != null) {
     update.available = Boolean(data.available);
@@ -453,6 +513,23 @@ export async function deliverShopItem(
       quantity,
       category: item.category,
       imageUrl: item.imageUrl ?? undefined,
+      ...(item.weight != null ? { weight: item.weight } : {}),
+      ...(item.bonusStat && item.bonusValue
+        ? {
+            itemBonus: {
+              stat: item.bonusStat as
+                | "ac"
+                | "strength"
+                | "dexterity"
+                | "constitution"
+                | "intelligence"
+                | "wisdom"
+                | "charisma",
+              value: item.bonusValue,
+            },
+          }
+        : {}),
+      ...(item.requiresAttunement ? { requiresAttunement: true } : {}),
     },
     { skipMasterCheck: true }
   );

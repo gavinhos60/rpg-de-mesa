@@ -245,12 +245,51 @@ export interface CharacterWallet {
     pp: number;
 }
 
+export type ItemBonusStat =
+    | "ac"
+    | "strength"
+    | "dexterity"
+    | "constitution"
+    | "intelligence"
+    | "wisdom"
+    | "charisma";
+
+export interface ItemBonus {
+    stat: ItemBonusStat;
+    value: number;
+}
+
+export type EquipmentSlotRef =
+    | { kind: "catalog"; itemId: string }
+    | { kind: "custom"; customItemId: string };
+
+/** @deprecated Use EquipmentSlotRef */
+export type AttunedItemRef = EquipmentSlotRef;
+
+/** Até 3 equipamentos mágicos sintonizados. */
+export type AttunedSlots = [
+    EquipmentSlotRef | null,
+    EquipmentSlotRef | null,
+    EquipmentSlotRef | null,
+];
+
+/** Até 5 equipamentos comuns ativos. */
+export type ActiveSlots = [
+    EquipmentSlotRef | null,
+    EquipmentSlotRef | null,
+    EquipmentSlotRef | null,
+    EquipmentSlotRef | null,
+    EquipmentSlotRef | null,
+];
+
 export interface CharacterEquipmentData {
     classId: string;
     choiceSelections: Record<string, string>;
     manualItems: EquipmentStack[];
     /** Itens customizados (ex.: dados pelo mestre). */
     customItems?: CustomInventoryItem[];
+    attunedSlots?: AttunedSlots;
+    activeSlots?: ActiveSlots;
     /**
      * Quantidades removidas do equipamento inicial (classe/antecedente).
      * Usado para descarte/transferência na mesa.
@@ -268,6 +307,9 @@ export interface CustomInventoryItem {
     imageUrl?: string;
     /** Quem concedeu o item (opcional). */
     grantedByName?: string;
+    itemBonus?: ItemBonus;
+    /** Só pode ir em equipamentos mágicos sintonizados. */
+    requiresAttunement?: boolean;
 }
 
 export type SpellSchool =

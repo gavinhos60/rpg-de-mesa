@@ -9,6 +9,8 @@ import {
   deleteCharacter,
   grantCustomItemToCharacter,
   updateCharacterWallet,
+  updateCharacterAttunedSlots,
+  updateCharacterActiveSlots,
   updateCharacterResources,
   updateCharacterProgress,
   discardCharacterItem,
@@ -66,6 +68,9 @@ function mapCharacterError(error: unknown, res: Response, fallback: string) {
       res.status(400).json({
         error: "Informe o nome do item",
       });
+      return true;
+    case "ATTUNED_ITEM_INVALID":
+      res.status(400).json({ error: "Item inválido para sintonização" });
       return true;
     case "ITEM_NOT_FOUND":
       res.status(404).json({ error: "Item não encontrado no inventário" });
@@ -288,6 +293,8 @@ export async function grantCustomItemController(req: Request, res: Response) {
         weight: req.body.weight != null ? Number(req.body.weight) : undefined,
         category: req.body.category,
         imageUrl: req.body.imageUrl,
+        itemBonus: req.body.itemBonus,
+        requiresAttunement: req.body.requiresAttunement,
       }
     );
 
@@ -296,6 +303,50 @@ export async function grantCustomItemController(req: Request, res: Response) {
     console.error(error);
     if (mapCharacterError(error, res, "Erro ao conceder item")) return;
     res.status(500).json({ error: "Erro ao conceder item" });
+  }
+}
+
+export async function updateAttunedSlotsController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await updateCharacterAttunedSlots(
+      Number(req.params.id),
+      req.user.userId,
+      req.body.attunedSlots
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao atualizar sintonização")) return;
+    res.status(500).json({ error: "Erro ao atualizar sintonização" });
+  }
+}
+
+export async function updateActiveSlotsController(req: Request, res: Response) {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: "Usuário não autenticado" });
+      return;
+    }
+
+    const character = await updateCharacterActiveSlots(
+      Number(req.params.id),
+      req.user.userId,
+      req.body.activeSlots
+    );
+
+    res.json(character);
+  } catch (error) {
+    console.error(error);
+    if (mapCharacterError(error, res, "Erro ao atualizar equipamentos ativos")) {
+      return;
+    }
+    res.status(500).json({ error: "Erro ao atualizar equipamentos ativos" });
   }
 }
 

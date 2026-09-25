@@ -1,5 +1,7 @@
 import { createPortal } from "react-dom";
+import { formatItemBonusLabel } from "../../data/itemBonus";
 import type { Shop } from "../../types/mercado";
+import type { ItemBonusStat } from "../../types/character";
 import { isItemSoldOut } from "../../types/mercado";
 import { ShopBrowser } from "./ShopBrowser";
 
@@ -145,9 +147,15 @@ function ShopItemsList({ shop }: { shop: Shop }) {
                   {item.description}
                 </p>
               ) : null}
-              {item.extraInfo ? (
-                <p className="text-xs italic text-[var(--color-ink-soft)]">
-                  {item.extraInfo}
+              {formatItemBonusLabel(
+                item.bonusStat as ItemBonusStat | undefined,
+                item.bonusValue ?? undefined
+              ) ? (
+                <p className="text-xs text-[var(--color-crimson)]">
+                  {formatItemBonusLabel(
+                    item.bonusStat as ItemBonusStat | undefined,
+                    item.bonusValue ?? undefined
+                  )}
                 </p>
               ) : null}
             </div>

@@ -187,6 +187,10 @@ export async function createShopItemController(req: Request, res: Response) {
         unlimitedStock: req.body.unlimitedStock,
         category: req.body.category,
         extraInfo: req.body.extraInfo,
+        bonusStat: req.body.bonusStat,
+        bonusValue: req.body.bonusValue,
+        requiresAttunement: req.body.requiresAttunement,
+        weight: req.body.weight,
         available: req.body.available,
       }
     );
@@ -219,6 +223,10 @@ export async function updateShopItemController(req: Request, res: Response) {
         unlimitedStock: req.body.unlimitedStock,
         category: req.body.category,
         extraInfo: req.body.extraInfo,
+        bonusStat: req.body.bonusStat,
+        bonusValue: req.body.bonusValue,
+        requiresAttunement: req.body.requiresAttunement,
+        weight: req.body.weight,
         available: req.body.available,
       }
     );

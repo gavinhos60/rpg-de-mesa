@@ -105,6 +105,8 @@ const initialData: CharacterFormData = {
         manualItems: [],
         customItems: [],
         removedItems: [],
+        attunedSlots: [null, null, null],
+        activeSlots: [null, null, null, null, null],
     },
     wallet: { pl: 0, po: 0, pp: 0 },
     spells: {
@@ -182,6 +184,9 @@ function mergeSheet(
             manualItems: sheet.equipment?.manualItems ?? [],
             customItems: sheet.equipment?.customItems ?? [],
             removedItems: sheet.equipment?.removedItems ?? [],
+            attunedSlots: sheet.equipment?.attunedSlots ?? [null, null, null],
+            activeSlots:
+                sheet.equipment?.activeSlots ?? [null, null, null, null, null],
         },
         wallet: sheet.wallet
             ? {

@@ -9,6 +9,11 @@ import {
   updateShop,
   updateShopItem,
 } from "../../services/mercado.service";
+import { kilogramsToPounds, formatMetricWeight } from "../../data/dnd/equipment";
+import { formatItemBonusLabel, parseItemBonusFields } from "../../data/itemBonus";
+import { ItemBonusFields } from "../character/ItemBonusFields";
+import { RequiresAttunementField } from "../character/RequiresAttunementField";
+import type { ItemBonusStat } from "../../types/character";
 import { DeliverItemModal } from "./DeliverItemModal";
 import { RibbonButton } from "../icons/MedievalIcons";
 
@@ -65,7 +70,10 @@ export function MercadoMasterModal({
   const [itemDescription, setItemDescription] = useState("");
   const [itemQty, setItemQty] = useState("1");
   const [itemUnlimited, setItemUnlimited] = useState(false);
-  const [itemExtra, setItemExtra] = useState("");
+  const [itemBonusStat, setItemBonusStat] = useState<ItemBonusStat | "">("");
+  const [itemBonusValue, setItemBonusValue] = useState("");
+  const [itemRequiresAttunement, setItemRequiresAttunement] = useState(false);
+  const [itemWeight, setItemWeight] = useState("");
   const [itemImageUrl, setItemImageUrl] = useState("");
   const [showAddItem, setShowAddItem] = useState(false);
 
@@ -128,6 +136,16 @@ export function MercadoMasterModal({
       onMessage?.("Nome do item é obrigatório.");
       return;
     }
+    const weightParsed = Number(String(itemWeight).replace(",", "."));
+    const weight =
+      itemWeight.trim() !== "" &&
+      Number.isFinite(weightParsed) &&
+      weightParsed >= 0
+        ? kilogramsToPounds(weightParsed)
+        : undefined;
+
+    const parsedBonus = parseItemBonusFields(itemBonusStat, itemBonusValue);
+
     try {
       setBusy(true);
       await createShopItem(campaignId, selectedShop.id, {
@@ -135,8 +153,12 @@ export function MercadoMasterModal({
         price: itemPrice.trim() || "—",
         category: itemCategory,
         description: itemDescription.trim() || null,
-        extraInfo: itemExtra.trim() || null,
         imageUrl: itemImageUrl.trim() || null,
+        ...(weight != null ? { weight } : {}),
+        ...(parsedBonus
+          ? { bonusStat: parsedBonus.stat, bonusValue: parsedBonus.value }
+          : { bonusStat: null, bonusValue: null }),
+        requiresAttunement: itemRequiresAttunement,
         unlimitedStock: itemUnlimited,
         quantity: itemUnlimited
           ? null
@@ -145,7 +167,10 @@ export function MercadoMasterModal({
       });
       setItemName("");
       setItemDescription("");
-      setItemExtra("");
+      setItemBonusStat("");
+      setItemBonusValue("");
+      setItemRequiresAttunement(false);
+      setItemWeight("");
       setItemImageUrl("");
       setItemQty("1");
       setItemUnlimited(false);
@@ -418,18 +443,21 @@ export function MercadoMasterModal({
                           ))}
                         </select>
                       </div>
+                      <label className="block text-[10px] text-[var(--color-ink-soft)]">
+                        Peso (kg)
+                        <input
+                          value={itemWeight}
+                          onChange={(e) => setItemWeight(e.target.value)}
+                          placeholder="—"
+                          className="mt-0.5 w-full border px-2 py-1 text-sm outline-none"
+                          style={fieldStyle}
+                        />
+                      </label>
                       <textarea
                         value={itemDescription}
                         onChange={(e) => setItemDescription(e.target.value)}
                         placeholder="Descrição"
                         rows={2}
-                        className="w-full border px-2 py-1 text-sm outline-none"
-                        style={fieldStyle}
-                      />
-                      <input
-                        value={itemExtra}
-                        onChange={(e) => setItemExtra(e.target.value)}
-                        placeholder="Info extra"
                         className="w-full border px-2 py-1 text-sm outline-none"
                         style={fieldStyle}
                       />
@@ -458,6 +486,18 @@ export function MercadoMasterModal({
                         placeholder="URL da imagem"
                         className="w-full border px-2 py-1 text-sm outline-none"
                         style={fieldStyle}
+                      />
+                      <ItemBonusFields
+                        stat={itemBonusStat}
+                        value={itemBonusValue}
+                        onStatChange={setItemBonusStat}
+                        onValueChange={setItemBonusValue}
+                        className="mt-1.5"
+                      />
+                      <RequiresAttunementField
+                        checked={itemRequiresAttunement}
+                        onChange={setItemRequiresAttunement}
+                        className="mt-1.5"
                       />
                       <RibbonButton
                         type="button"
@@ -524,6 +564,9 @@ export function MercadoMasterModal({
                             </p>
                             <p className="text-[11px] text-[var(--color-crimson)]">
                               {item.price}
+                              {item.weight != null && item.weight > 0
+                                ? ` · ${formatMetricWeight(item.weight)}`
+                                : ""}
                               {item.unlimitedStock
                                 ? " · ∞"
                                 : ` · estoque ${item.quantity ?? 0}`}
@@ -532,6 +575,17 @@ export function MercadoMasterModal({
                             {item.description ? (
                               <p className="text-xs text-[var(--color-ink-muted)]">
                                 {item.description}
+                              </p>
+                            ) : null}
+                            {formatItemBonusLabel(
+                              item.bonusStat as ItemBonusStat | undefined,
+                              item.bonusValue ?? undefined
+                            ) ? (
+                              <p className="text-[10px] text-[var(--color-crimson)]">
+                                {formatItemBonusLabel(
+                                  item.bonusStat as ItemBonusStat | undefined,
+                                  item.bonusValue ?? undefined
+                                )}
                               </p>
                             ) : null}
                             <div className="mt-1.5 flex flex-wrap gap-1">
