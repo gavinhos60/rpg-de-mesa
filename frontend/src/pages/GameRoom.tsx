@@ -54,7 +54,13 @@ import type {
   InitiativeRequest,
   SessionRuntimeState,
 } from "../types/game";
-import { emptyBoardState, playerIsOnFrozenScene, snapToGrid, clearOwnAnnotations } from "../types/game";
+import {
+  emptyBoardState,
+  normalizeBoardState,
+  playerIsOnFrozenScene,
+  snapToGrid,
+  clearOwnAnnotations,
+} from "../types/game";
 import type {
   Ability,
   CharacterFormData,
@@ -219,7 +225,7 @@ export function GameRoom() {
   const pendingBoardRef = useRef<BoardState | null>(null);
 
   const applyState = useCallback((state: SessionRuntimeState) => {
-    setBoard(state.board ?? emptyBoardState());
+    setBoard(normalizeBoardState(state.board ?? emptyBoardState()));
     setChat(
       (state.chat ?? []).filter(
         (message) => !message.secret || roleRef.current === "MASTER"
@@ -303,14 +309,15 @@ export function GameRoom() {
 
         currentSocket.on("board:state", (nextBoard: BoardState) => {
           setBoard((previous) => {
+            const normalized = normalizeBoardState(nextBoard);
             const wasFrozen =
               Boolean(previous.playerMapView) ||
               Object.keys(previous.playerViewsByUserId ?? {}).length > 0;
             const nowFrozen =
-              Boolean(nextBoard.playerMapView) ||
-              Object.keys(nextBoard.playerViewsByUserId ?? {}).length > 0;
+              Boolean(normalized.playerMapView) ||
+              Object.keys(normalized.playerViewsByUserId ?? {}).length > 0;
             const masterMapChanged =
-              (previous.mapUrl || "") !== (nextBoard.mapUrl || "");
+              (previous.mapUrl || "") !== (normalized.mapUrl || "");
             if (!nowFrozen || masterMapChanged) {
               // Sai da inspeção do mapa congelado quando o mestre muda de cenário.
               queueMicrotask(() => setWatchPlayerScene(false));
@@ -320,10 +327,10 @@ export function GameRoom() {
             const dragging = draggingTokenIdsRef.current;
             const settling = settlingTokensRef.current;
             const now = performance.now();
-            if (dragging.size === 0 && settling.size === 0) return nextBoard;
+            if (dragging.size === 0 && settling.size === 0) return normalized;
             return {
-              ...nextBoard,
-              tokens: nextBoard.tokens.map((token) => {
+              ...normalized,
+              tokens: normalized.tokens.map((token) => {
                 if (dragging.has(token.id)) {
                   const local = previous.tokens.find((item) => item.id === token.id);
                   return local ? { ...token, x: local.x, y: local.y } : token;
@@ -1838,6 +1845,9 @@ export function GameRoom() {
                 const { hpMax, hpCurrent } = hitPointsFromSheet(character.sheet);
                 const ownerUserId = character.playerId || user.id;
                 const onFrozen = playerIsOnFrozenScene(board, ownerUserId);
+                const frozenView =
+                  board.playerViewsByUserId?.[String(ownerUserId)] ??
+                  board.playerMapView;
                 handleBoardChange({
                   ...board,
                   tokens: [
@@ -1858,6 +1868,9 @@ export function GameRoom() {
                       hpMax,
                       hpCurrent,
                       customValue: "",
+                      sceneMapUrl: onFrozen
+                        ? frozenView?.mapUrl ?? board.mapUrl
+                        : board.mapUrl,
                       ...(onFrozen ? { onPlayerScene: true as const } : {}),
                     },
                   ],

@@ -35,6 +35,8 @@ export type BoardToken = {
    * quando o mestre troca de mapa sem levá-lo.
    */
   onPlayerScene?: boolean;
+  /** Mapa (URL) onde o token está posicionado. Ausente = mapa ativo na criação. */
+  sceneMapUrl?: string;
 };
 
 export type BoardDrawing = {
@@ -527,34 +529,134 @@ export function clearOwnAnnotations(
   return next;
 }
 
+export function resolveTokenSceneMapUrl(
+  token: BoardToken,
+  activeMapUrl: string
+): string {
+  const pinned = token.sceneMapUrl?.trim();
+  if (pinned) return pinned;
+  if (token.onPlayerScene) return "";
+  return activeMapUrl;
+}
+
+/** NPC/monstro permanece no mapa onde foi colocado ao trocar de cenário. */
+export function npcTokenAfterSceneChange(
+  token: BoardToken,
+  oldMapUrl: string,
+  nextMapUrl: string,
+  hasFrozen: boolean
+): BoardToken {
+  const pinned = resolveTokenSceneMapUrl(token, oldMapUrl);
+  if (nextMapUrl === pinned) {
+    return { ...token, sceneMapUrl: pinned, onPlayerScene: undefined };
+  }
+  if (!token.sceneMapUrl?.trim() && oldMapUrl && nextMapUrl !== oldMapUrl) {
+    return {
+      ...token,
+      sceneMapUrl: oldMapUrl,
+      onPlayerScene: hasFrozen ? true : undefined,
+    };
+  }
+  return {
+    ...token,
+    sceneMapUrl: pinned,
+    onPlayerScene:
+      pinned !== nextMapUrl && hasFrozen ? true : undefined,
+  };
+}
+
+function frozenSceneMapUrls(board: BoardState): Set<string> {
+  const urls = new Set<string>();
+  for (const view of Object.values(board.playerViewsByUserId ?? {})) {
+    if (view.mapUrl) urls.add(view.mapUrl);
+  }
+  if (
+    board.playerMapView?.mapUrl &&
+    Object.keys(board.playerViewsByUserId ?? {}).length === 0
+  ) {
+    urls.add(board.playerMapView.mapUrl);
+  }
+  return urls;
+}
+
+/** Repara sessões antigas (tokens invisíveis após troca de mapa). */
+export function normalizeBoardState(board: BoardState): BoardState {
+  const activeMapUrl = board.mapUrl ?? "";
+  const frozenUrls = frozenSceneMapUrls(board);
+  const legacyFrozenUrl =
+    frozenUrls.size === 1 ? [...frozenUrls][0] : undefined;
+
+  const tokens = board.tokens.map((token) => {
+    if (token.sceneMapUrl?.trim()) return token;
+    if (token.onPlayerScene) {
+      if (legacyFrozenUrl) {
+        return { ...token, sceneMapUrl: legacyFrozenUrl };
+      }
+      return {
+        ...token,
+        onPlayerScene: undefined,
+        sceneMapUrl: activeMapUrl || undefined,
+      };
+    }
+    return {
+      ...token,
+      sceneMapUrl: activeMapUrl || token.sceneMapUrl,
+    };
+  });
+
+  return { ...board, tokens };
+}
+
+function tokensOnMap(
+  board: BoardState,
+  mapUrl: string,
+  activeMapUrl: string
+): BoardToken[] {
+  return board.tokens.filter((token) => {
+    const scene = resolveTokenSceneMapUrl(token, activeMapUrl);
+    if (!scene) return Boolean(token.onPlayerScene);
+    return scene === mapUrl;
+  });
+}
+
 /** Tokens visíveis no cenário atual do espectador. */
 export function tokensForViewer(
   board: BoardState,
   isMaster: boolean,
   options?: { watchPlayerScene?: boolean; currentUserId?: number }
 ): BoardToken[] {
+  const activeMapUrl = board.mapUrl ?? "";
   const views = board.playerViewsByUserId ?? {};
   const hasPerUser = Object.keys(views).length > 0;
   const hasLegacy = Boolean(board.playerMapView) && !hasPerUser;
+  const hasFrozen = hasPerUser || hasLegacy;
 
-  if (!hasPerUser && !hasLegacy) {
-    return board.tokens;
+  if (!hasFrozen) {
+    return tokensOnMap(board, activeMapUrl, activeMapUrl);
   }
 
   if (isMaster) {
     if (options?.watchPlayerScene) {
-      return board.tokens.filter((token) => token.onPlayerScene);
+      const frozenUrls = frozenSceneMapUrls(board);
+      if (frozenUrls.size === 0) {
+        return board.tokens.filter((token) => token.onPlayerScene);
+      }
+      return board.tokens.filter((token) => {
+        const scene = resolveTokenSceneMapUrl(token, activeMapUrl);
+        return scene !== "" && frozenUrls.has(scene);
+      });
     }
-    return board.tokens.filter((token) => !token.onPlayerScene);
+    return tokensOnMap(board, activeMapUrl, activeMapUrl);
   }
 
   const uid = options?.currentUserId;
   const myView = uid != null ? views[String(uid)] : undefined;
 
   if (myView || (hasLegacy && uid != null && playerIsOnFrozenScene(board, uid))) {
-    const myUrl = myView?.mapUrl ?? board.playerMapView?.mapUrl;
+    const myUrl = myView?.mapUrl ?? board.playerMapView?.mapUrl ?? activeMapUrl;
     return board.tokens.filter((token) => {
-      if (!token.onPlayerScene) return false;
+      const scene = resolveTokenSceneMapUrl(token, activeMapUrl);
+      if (scene !== myUrl) return false;
       if (!hasPerUser) return true;
       if (token.ownerUserId == null) return true;
       const ownerView = views[String(token.ownerUserId)];
@@ -563,7 +665,7 @@ export function tokensForViewer(
     });
   }
 
-  return board.tokens.filter((token) => !token.onPlayerScene);
+  return tokensOnMap(board, activeMapUrl, activeMapUrl);
 }
 
 export function loadMapImageSize(

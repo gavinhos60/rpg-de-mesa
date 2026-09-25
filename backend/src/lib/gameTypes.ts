@@ -49,6 +49,8 @@ export type BoardToken = {
   secret?: boolean;
   /** Token no cenário congelado dos jogadores. */
   onPlayerScene?: boolean;
+  /** Mapa (URL) onde o token está posicionado. */
+  sceneMapUrl?: string;
 };
 
 export type BoardDrawing = {
@@ -196,6 +198,48 @@ export function emptyBoardState(): BoardState {
     visionRadiusSquares: DEFAULT_VISION_RADIUS_SQUARES,
     fogExemptUserIds: [],
   };
+}
+
+function frozenSceneMapUrls(board: BoardState): Set<string> {
+  const urls = new Set<string>();
+  for (const view of Object.values(board.playerViewsByUserId ?? {})) {
+    if (view.mapUrl) urls.add(view.mapUrl);
+  }
+  if (
+    board.playerMapView?.mapUrl &&
+    Object.keys(board.playerViewsByUserId ?? {}).length === 0
+  ) {
+    urls.add(board.playerMapView.mapUrl);
+  }
+  return urls;
+}
+
+/** Repara sessões com tokens invisíveis após troca de mapa. */
+export function normalizeBoardState(board: BoardState): BoardState {
+  const activeMapUrl = board.mapUrl ?? "";
+  const frozenUrls = frozenSceneMapUrls(board);
+  const legacyFrozenUrl =
+    frozenUrls.size === 1 ? [...frozenUrls][0] : undefined;
+
+  const tokens = board.tokens.map((token) => {
+    if (token.sceneMapUrl?.trim()) return token;
+    if (token.onPlayerScene) {
+      if (legacyFrozenUrl) {
+        return { ...token, sceneMapUrl: legacyFrozenUrl };
+      }
+      return {
+        ...token,
+        onPlayerScene: undefined,
+        sceneMapUrl: activeMapUrl || undefined,
+      };
+    }
+    return {
+      ...token,
+      sceneMapUrl: activeMapUrl || token.sceneMapUrl,
+    };
+  });
+
+  return { ...board, tokens };
 }
 
 export function metersPerSquareOf(board: BoardState): number {

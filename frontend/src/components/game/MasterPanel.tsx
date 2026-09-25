@@ -13,6 +13,7 @@ import {
   sizeCategoryToSpan,
   snapToGrid,
   snapshotPlayerMapView,
+  npcTokenAfterSceneChange,
 } from "../../types/game";
 import type { PlayerMapView } from "../../types/game";
 import { ABILITIES } from "../../data/dnd/abilities";
@@ -198,7 +199,7 @@ export function MasterPanel({
     widthDraft?: string;
     heightDraft?: string;
   } | null>(null);
-  /** Jogadores que vão para o novo mapa (câmera + todos os tokens deles). */
+  /** Jogadores que acompanham o mestre no novo mapa (câmera; tokens ficam no mapa anterior). */
   const [movePlayerIds, setMovePlayerIds] = useState<number[]>([]);
   const [npcSource, setNpcSource] = useState<NpcSource>("monster");
   const [npcName, setNpcName] = useState("Goblin");
@@ -360,8 +361,7 @@ export function MasterPanel({
     heightDraft?: string;
   }) {
     if (next.mapUrl !== board.mapUrl) {
-      // Padrão: levar todos os jogadores (câmera + tokens).
-      setMovePlayerIds(fogPlayers.map((player) => player.userId));
+      setMovePlayerIds([]);
       setPendingScene(next);
       return;
     }
@@ -451,27 +451,68 @@ export function MasterPanel({
       }
     }
 
-    // Tokens dos jogadores que mudam de mapa são removidos (recolocam no novo).
-    const tokens = board.tokens
-      .filter((token) => {
-        const owner =
-          token.ownerUserId != null ? Number(token.ownerUserId) : null;
-        if (owner != null && bring.has(owner)) return false;
-        return true;
-      })
-      .map((token) => {
-        const owner =
-          token.ownerUserId != null ? Number(token.ownerUserId) : null;
-        if (owner != null && leave.has(owner)) {
-          return { ...token, onPlayerScene: true as const };
-        }
-        if (owner != null && nextViews[String(owner)]) {
-          return { ...token, onPlayerScene: true as const };
-        }
-        return { ...token, onPlayerScene: undefined };
-      });
-
+    const mapIsChanging = nextMapUrl !== (board.mapUrl ?? "");
+    const oldMapUrl = board.mapUrl ?? "";
     const hasFrozen = Object.keys(nextViews).length > 0;
+
+    const tokens = board.tokens.map((token) => {
+      const owner =
+        token.ownerUserId != null ? Number(token.ownerUserId) : null;
+      const baseScene = token.sceneMapUrl ?? oldMapUrl;
+
+      if (mapIsChanging) {
+        if (owner != null && !movingEveryone && bring.has(owner)) {
+          return {
+            ...token,
+            sceneMapUrl: nextMapUrl,
+            onPlayerScene: undefined,
+          };
+        }
+        if (owner != null && !movingEveryone && leave.has(owner)) {
+          return {
+            ...token,
+            sceneMapUrl: baseScene || oldMapUrl,
+            onPlayerScene: true as const,
+          };
+        }
+        if (owner == null) {
+          return npcTokenAfterSceneChange(
+            token,
+            oldMapUrl,
+            nextMapUrl,
+            hasFrozen
+          );
+        }
+        if (movingEveryone || bring.has(owner)) {
+          return {
+            ...token,
+            sceneMapUrl: nextMapUrl,
+            onPlayerScene: undefined,
+          };
+        }
+        return {
+          ...token,
+          sceneMapUrl: oldMapUrl || baseScene,
+          onPlayerScene: true as const,
+        };
+      }
+
+      if (owner != null && leave.has(owner)) {
+        return {
+          ...token,
+          sceneMapUrl: baseScene || oldMapUrl,
+          onPlayerScene: true as const,
+        };
+      }
+      if (owner != null && nextViews[String(owner)]) {
+        return {
+          ...token,
+          sceneMapUrl: baseScene || oldMapUrl,
+          onPlayerScene: true as const,
+        };
+      }
+      return { ...token, onPlayerScene: undefined };
+    });
 
     onBoardChange({
       ...board,
@@ -506,6 +547,7 @@ export function MasterPanel({
       playerViewsByUserId: {},
       tokens: board.tokens.map((token) => ({
         ...token,
+        sceneMapUrl: board.mapUrl || token.sceneMapUrl,
         onPlayerScene: undefined,
       })),
     });
@@ -580,12 +622,13 @@ export function MasterPanel({
       };
     }
 
+    const placed: BoardToken = {
+      ...(placeOnSecretLayer ? { ...token, secret: true } : token),
+      sceneMapUrl: board.mapUrl || undefined,
+    };
     onBoardChange({
       ...board,
-      tokens: [
-        ...board.tokens,
-        placeOnSecretLayer ? { ...token, secret: true } : token,
-      ],
+      tokens: [...board.tokens, placed],
     });
   }
 
@@ -994,9 +1037,13 @@ export function MasterPanel({
               {Object.keys(board.playerViewsByUserId ?? {}).length > 0
                 ? `${Object.keys(board.playerViewsByUserId ?? {}).length} jogador(es) em outro cenário`
                 : "Jogadores em outro cenário"}
-              {board.tokens.some((t) => t.onPlayerScene)
-                ? ` · ${board.tokens.filter((t) => t.onPlayerScene).length} token(s) lá`
-                : ""}
+              {(() => {
+                const active = board.mapUrl ?? "";
+                const elsewhere = board.tokens.filter(
+                  (t) => (t.sceneMapUrl ?? active) !== active
+                ).length;
+                return elsewhere > 0 ? ` · ${elsewhere} token(s) lá` : "";
+              })()}
             </p>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
               <button
@@ -1122,6 +1169,20 @@ export function MasterPanel({
               >
                 Aplicar mapa
               </RibbonButton>
+              {(() => {
+                const active = board.mapUrl ?? "";
+                const elsewhere = board.tokens.filter((t) => {
+                  const scene = t.sceneMapUrl?.trim() || active;
+                  return scene !== active;
+                }).length;
+                if (elsewhere === 0) return null;
+                return (
+                  <p className="mt-2 text-[10px] leading-snug text-[var(--color-ink-soft)]">
+                    {elsewhere} token(s) de NPC/monstro em outro mapa — use
+                    &quot;Mapas preparados&quot; para voltar ao cenário.
+                  </p>
+                );
+              })()}
             </section>
 
             <section
@@ -2164,8 +2225,9 @@ export function MasterPanel({
                 Troca de cenário
               </h4>
               <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-                Escolha os jogadores e clique no mapa de destino para teleportar.
-                Tokens dos que mudam são removidos.
+                Marque quem acompanha o mestre e clique no mapa de destino.
+                Todos os tokens e NPCs permanecem no mapa anterior; só a
+                câmera dos jogadores selecionados muda.
               </p>
             </div>
 
@@ -2326,7 +2388,7 @@ export function MasterPanel({
 
               {board.tokens.some((token) => token.kind === "npc") ? (
                 <p className="mt-3 text-[11px] leading-snug text-[var(--color-ink-soft)]">
-                  NPCs acompanham o mestre no novo mapa.
+                  NPCs permanecem no mapa anterior (não vão com o mestre).
                 </p>
               ) : null}
             </div>
@@ -2337,10 +2399,10 @@ export function MasterPanel({
             >
               <p className="text-[11px] leading-snug text-[var(--color-ink-soft)]">
                 {movePlayerIds.length === 0
-                  ? "Só o mestre vai para o mapa clicado. Jogadores ficam onde estão (com tokens)."
+                  ? "Só o mestre vai para o mapa clicado. Jogadores e NPCs ficam no cenário anterior."
                   : movePlayerIds.length === fogPlayers.length
-                    ? "Mestre e todos os jogadores vão ao mapa clicado. Tokens dos jogadores são removidos."
-                    : "Mestre vai ao mapa clicado com o(s) jogador(es) marcado(s). Os demais ficam no cenário anterior."}
+                    ? "Mestre e todos os jogadores marcados vão ao mapa clicado. Tokens ficam no mapa anterior."
+                    : "Mestre vai com o(s) jogador(es) marcado(s). Tokens e NPCs permanecem no mapa anterior."}
               </p>
               <button
                 type="button"

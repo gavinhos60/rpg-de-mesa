@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "../lib/prisma";
 import {
   emptyBoardState,
+  normalizeBoardState,
   type SessionRuntimeState,
 } from "../lib/gameTypes";
 import type { Prisma } from "../generated/prisma/client";
@@ -75,7 +76,7 @@ export function parseSessionState(raw: unknown): SessionRuntimeState {
   }
 
   return {
-    board: mergedBoard,
+    board: normalizeBoardState(mergedBoard),
     chat: Array.isArray(data.chat)
       ? data.chat.map((message) => ({
           ...message,

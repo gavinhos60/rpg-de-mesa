@@ -338,6 +338,7 @@ export function attachGameSocket(httpServer: HttpServer) {
                   next.onPlayerScene !== undefined
                     ? next.onPlayerScene
                     : token.onPlayerScene,
+                sceneMapUrl: next.sceneMapUrl ?? token.sceneMapUrl,
               });
             }
 
