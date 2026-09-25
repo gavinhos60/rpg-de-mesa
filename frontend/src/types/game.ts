@@ -47,7 +47,13 @@ export type BoardDrawing = {
   secret?: boolean;
 };
 
-export type MeasureShape = "line" | "square" | "circle" | "cone" | "beam";
+export type MeasureShape =
+  | "line"
+  | "square"
+  | "circle"
+  | "cone"
+  | "beam"
+  | "ping";
 
 export type BoardRuler = {
   id: string;

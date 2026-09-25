@@ -50,6 +50,11 @@ import {
   EffectParticleLayer,
 } from "./EffectParticleLayer";
 import {
+  MapPingRipples,
+  createMapPingEffect,
+  isMapPingEffect,
+} from "./MapPingRipples";
+import {
   DEFAULT_EFFECT_SETTINGS,
   FX_INSTANT_MS,
   fxElementColor,
@@ -1347,6 +1352,21 @@ export function GameBoard({
       return;
     }
 
+    if (tool === "ruler" && measureSettings.shape === "ping") {
+      const snapped = applyMeasureSnap(
+        point,
+        gridSize,
+        measureSettings.snap,
+        isHex
+      );
+      onEffectPing?.({
+        sticky: false,
+        broadcast: measureSettings.broadcast,
+        effect: createMapPingEffect(snapped.x, snapped.y, measureSettings.color),
+      });
+      return;
+    }
+
     if (tool === "ruler") {
       const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
       setRulerStart(snapped);
@@ -1517,7 +1537,10 @@ export function GameBoard({
       ...localStickyEffects,
       ...transientEffects,
     ].filter(
-      (effect) => Boolean(effect.fxKind) && (isMaster || !effect.secret)
+      (effect) =>
+        Boolean(effect.fxKind) &&
+        !isMapPingEffect(effect) &&
+        (isMaster || !effect.secret)
     );
     if (tool === "effect" && effectStart && effectPreview) {
       const dragDist = Math.hypot(
@@ -1727,6 +1750,13 @@ export function GameBoard({
           ) : null}
 
           <svg className="absolute inset-0 h-full w-full overflow-visible">
+            <MapPingRipples
+              effects={[
+                ...mapBoard.effects,
+                ...localStickyEffects,
+                ...transientEffects,
+              ].filter((effect) => isMaster || !effect.secret)}
+            />
             <EffectHitAreas
               effects={[...mapBoard.effects, ...localStickyEffects].filter(
                 (effect) =>
@@ -1872,72 +1902,6 @@ export function GameBoard({
                 className="pointer-events-none"
               />
             )}
-            {mapBoard.rulers
-              .filter((ruler) => !ruler.live)
-              .map((ruler) => {
-              const squares =
-                typeof ruler.squares === "number"
-                  ? ruler.squares
-                  : measureCells(ruler.from, ruler.to);
-              const label = measureLabel(squares);
-              const shape = (ruler.shape ?? "line") as MeasureShape;
-              const selected =
-                selectedAnnotation?.kind === "ruler" &&
-                selectedAnnotation.id === ruler.id;
-              return (
-                <MeasureShapeGraphic
-                  key={ruler.id}
-                  shape={shape}
-                  from={ruler.from}
-                  to={ruler.to}
-                  gridSize={gridSize}
-                  label={label}
-                  byUserName={ruler.byUserName}
-                  color={ruler.color}
-                  selected={selected}
-                  interactive={tool === "select"}
-                  onSelect={() => {
-                    setSelection([]);
-                    setSelectedAnnotation({ kind: "ruler", id: ruler.id });
-                  }}
-                />
-              );
-            })}
-            {localStickyMeasures.map((mark) => {
-              const selected =
-                selectedAnnotation?.kind === "local-measure" &&
-                selectedAnnotation.id === mark.id;
-              return (
-                <MeasureShapeGraphic
-                  key={mark.id}
-                  shape={mark.shape}
-                  from={mark.from}
-                  to={mark.to}
-                  gridSize={gridSize}
-                  label={measureLabel(measureCells(mark.from, mark.to))}
-                  color={mark.color}
-                  selected={selected}
-                  interactive={tool === "select"}
-                  onSelect={() => {
-                    setSelection([]);
-                    setSelectedAnnotation({
-                      kind: "local-measure",
-                      id: mark.id,
-                    });
-                  }}
-                />
-              );
-            })}
-            {activeMeasure ? (
-              <MeasureShapeGraphic
-                shape={activeMeasure.shape}
-                from={activeMeasure.from}
-                to={activeMeasure.to}
-                gridSize={gridSize}
-                label={activeMeasure.label}
-                color={activeMeasure.color}
-              />
-            ) : null}
             {marquee && (
               <rect
                 x={Math.min(marquee.x1, marquee.x2)}
@@ -2263,6 +2227,7 @@ export function GameBoard({
                   onClick={(event) => {
                     event.stopPropagation();
                     setTokenLayerMenu(null);
+                    if (tool === "ruler") return;
                     if (event.shiftKey && isMaster) {
                       setSelection(
                         selectedIds.includes(token.id)
@@ -2293,6 +2258,37 @@ export function GameBoard({
                     event.stopPropagation();
                     if (event.button === 2) return;
                     setTokenLayerMenu(null);
+
+                    if (tool === "ruler") {
+                      if (measureSettings.shape === "ping") {
+                        const origin = applyMeasureSnap(
+                          { x: token.x, y: token.y },
+                          gridSize,
+                          measureSettings.snap,
+                          isHex
+                        );
+                        onEffectPing?.({
+                          sticky: false,
+                          broadcast: measureSettings.broadcast,
+                          effect: createMapPingEffect(
+                            origin.x,
+                            origin.y,
+                            measureSettings.color
+                          ),
+                        });
+                        return;
+                      }
+                      const origin = applyMeasureSnap(
+                        { x: token.x, y: token.y },
+                        gridSize,
+                        measureSettings.snap,
+                        isHex
+                      );
+                      setRulerStart(origin);
+                      setRulerPreview(origin);
+                      return;
+                    }
+
                     if (!canDragToken(token) || tool !== "select") return;
                     const group =
                       selectedIds.includes(token.id) && selectedIds.length > 1
@@ -2340,9 +2336,11 @@ export function GameBoard({
                     fontFamily: "'Cinzel', serif",
                     fontSize: initialFont,
                     cursor:
-                      canDragToken(token) && tool === "select"
-                        ? "grab"
-                        : "pointer",
+                      tool === "ruler"
+                        ? "crosshair"
+                        : canDragToken(token) && tool === "select"
+                          ? "grab"
+                          : "pointer",
                     backgroundImage: token.imageUrl
                       ? `url(${token.imageUrl})`
                       : undefined,
@@ -2482,6 +2480,80 @@ export function GameBoard({
               </div>
             );
           })}
+
+          <svg
+            className="absolute inset-0 z-[25] h-full w-full overflow-visible"
+            style={{
+              pointerEvents: tool === "select" ? "auto" : "none",
+            }}
+          >
+            {mapBoard.rulers
+              .filter((ruler) => !ruler.live)
+              .map((ruler) => {
+                const squares =
+                  typeof ruler.squares === "number"
+                    ? ruler.squares
+                    : measureCells(ruler.from, ruler.to);
+                const label = measureLabel(squares);
+                const shape = (ruler.shape ?? "line") as MeasureShape;
+                const selected =
+                  selectedAnnotation?.kind === "ruler" &&
+                  selectedAnnotation.id === ruler.id;
+                return (
+                  <MeasureShapeGraphic
+                    key={ruler.id}
+                    shape={shape}
+                    from={ruler.from}
+                    to={ruler.to}
+                    gridSize={gridSize}
+                    label={label}
+                    byUserName={ruler.byUserName}
+                    color={ruler.color}
+                    selected={selected}
+                    interactive={tool === "select"}
+                    onSelect={() => {
+                      setSelection([]);
+                      setSelectedAnnotation({ kind: "ruler", id: ruler.id });
+                    }}
+                  />
+                );
+              })}
+            {localStickyMeasures.map((mark) => {
+              const selected =
+                selectedAnnotation?.kind === "local-measure" &&
+                selectedAnnotation.id === mark.id;
+              return (
+                <MeasureShapeGraphic
+                  key={mark.id}
+                  shape={mark.shape}
+                  from={mark.from}
+                  to={mark.to}
+                  gridSize={gridSize}
+                  label={measureLabel(measureCells(mark.from, mark.to))}
+                  color={mark.color}
+                  selected={selected}
+                  interactive={tool === "select"}
+                  onSelect={() => {
+                    setSelection([]);
+                    setSelectedAnnotation({
+                      kind: "local-measure",
+                      id: mark.id,
+                    });
+                  }}
+                />
+              );
+            })}
+            {activeMeasure ? (
+              <MeasureShapeGraphic
+                shape={activeMeasure.shape}
+                from={activeMeasure.from}
+                to={activeMeasure.to}
+                gridSize={gridSize}
+                label={activeMeasure.label}
+                color={activeMeasure.color}
+              />
+            ) : null}
+          </svg>
 
           {!mapBoard.mapUrl && (
             <div className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs text-[#C09A5A]">

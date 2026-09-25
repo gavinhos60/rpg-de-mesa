@@ -1,6 +1,12 @@
 import { useState } from "react";
 
-export type MeasureShape = "line" | "square" | "circle" | "cone" | "beam";
+export type MeasureShape =
+  | "line"
+  | "square"
+  | "circle"
+  | "cone"
+  | "beam"
+  | "ping";
 export type MeasureSnap = "none" | "center" | "corner";
 export type MeasureFade = "instant" | "stay";
 
@@ -36,6 +42,7 @@ const SHAPES: Array<{ id: MeasureShape; label: string }> = [
   { id: "circle", label: "Círculo" },
   { id: "cone", label: "Cone" },
   { id: "beam", label: "Feixe" },
+  { id: "ping", label: "Ping" },
 ];
 
 const SNAPS: Array<{ id: MeasureSnap; label: string }> = [
@@ -87,6 +94,13 @@ function ShapeIcon({ shape }: { shape: MeasureShape }) {
       return (
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
           <rect x="2.5" y="6.5" width="11" height="3" rx="0.5" {...common} />
+        </svg>
+      );
+    case "ping":
+      return (
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+          <circle cx="8" cy="8" r="5" {...common} />
+          <circle cx="8" cy="8" r="2.2" {...common} />
         </svg>
       );
   }
@@ -218,6 +232,12 @@ export function MeasurePanel({
             </div>
           ) : null}
         </div>
+
+        {settings.shape === "ping" ? (
+          <p className="mb-3 text-[11px] leading-snug text-white/75">
+            Clique no mapa para enviar um ping. Use a cor abaixo.
+          </p>
+        ) : null}
 
         <div className="relative">
           <p className="mb-1 text-[11px] text-white/80">Ajuste na grelha</p>

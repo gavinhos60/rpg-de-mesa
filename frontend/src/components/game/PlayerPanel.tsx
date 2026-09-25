@@ -4,6 +4,7 @@ import type { BoardTool } from "./GameBoard";
 import { RibbonButton } from "../icons/MedievalIcons";
 import { ShopBrowser } from "./ShopBrowser";
 import { NotesPlayerModal } from "./NotesPlayerModal";
+import { DocumentExpandModal } from "./DocumentExpandModal";
 import type { Shop } from "../../types/mercado";
 import type { PlayerNote } from "../../types/notes";
 import {
@@ -12,6 +13,11 @@ import {
   listNotes,
   updateNote,
 } from "../../services/notes.service";
+import { useFloatingPopupStack } from "../../hooks/useFloatingPopupStack";
+
+type PlayerFloatingPopup =
+  | { id: number; kind: "notes-list" }
+  | { id: number; kind: "note"; noteId: number };
 
 const fieldStyle = {
   backgroundColor: "var(--color-parchment)",
@@ -44,7 +50,15 @@ export function PlayerPanel({
 }: PlayerPanelProps) {
   const [tab, setTab] = useState<PlayerTab>("jogo");
   const [notes, setNotes] = useState<PlayerNote[]>([]);
-  const [notesOpen, setNotesOpen] = useState(false);
+  const {
+    stack: popupStack,
+    push: pushPopup,
+    close: closePopup,
+    closeWhere: closePopupsWhere,
+    activate: activatePopup,
+    zIndexFor: popupZIndex,
+    stackIndexFor: popupStackIndex,
+  } = useFloatingPopupStack<PlayerFloatingPopup>();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -69,6 +83,14 @@ export function PlayerPanel({
       setMessage("Falha ao carregar anotações.");
     });
   }, [refreshNotes]);
+
+  useEffect(() => {
+    closePopupsWhere(
+      (entry) =>
+        entry.kind === "note" &&
+        !notes.some((item) => item.id === entry.noteId)
+    );
+  }, [notes, closePopupsWhere]);
 
   function resetForm() {
     setEditingId(null);
@@ -377,7 +399,7 @@ export function PlayerPanel({
             <RibbonButton
               type="button"
               className="w-full"
-              onClick={() => setNotesOpen(true)}
+              onClick={() => pushPopup({ kind: "notes-list" })}
             >
               Ver todas as anotações
             </RibbonButton>
@@ -385,15 +407,67 @@ export function PlayerPanel({
         )}
       </div>
 
-      {notesOpen ? (
-        <NotesPlayerModal
-          notes={notes}
-          busy={busy}
-          onClose={() => setNotesOpen(false)}
-          onEdit={startEdit}
-          onDelete={(note) => void handleDeleteNote(note)}
-        />
-      ) : null}
+      {popupStack.map((entry) => {
+        const popupId = entry.id;
+        const zIndex = popupZIndex(popupId);
+        const stackIndex = popupStackIndex(popupId);
+        const onActivate = () => activatePopup(popupId);
+
+        if (entry.kind === "notes-list") {
+          return (
+            <NotesPlayerModal
+              key={popupId}
+              notes={notes}
+              busy={busy}
+              zIndex={zIndex}
+              stackIndex={stackIndex}
+              onActivate={onActivate}
+              onClose={() => closePopup(popupId)}
+              onEdit={(note) => {
+                closePopup(popupId);
+                startEdit(note);
+              }}
+              onDelete={(note) => void handleDeleteNote(note)}
+              onExpand={(note) =>
+                pushPopup({ kind: "note", noteId: note.id })
+              }
+            />
+          );
+        }
+
+        const note = notes.find((item) => item.id === entry.noteId);
+        if (!note) return null;
+        return (
+          <DocumentExpandModal
+            key={popupId}
+            title={note.title}
+            subtitle="Anotação"
+            zIndex={zIndex}
+            stackIndex={stackIndex}
+            onActivate={onActivate}
+            onClose={() => closePopup(popupId)}
+          >
+            {note.imageUrl ? (
+              <img
+                src={note.imageUrl}
+                alt=""
+                className="mb-4 max-h-[50vh] w-full rounded border object-contain"
+                style={{
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-parchment-soft)",
+                }}
+              />
+            ) : null}
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">
+              {note.body.trim() || (
+                <span className="italic text-[var(--color-ink-soft)]">
+                  Sem texto.
+                </span>
+              )}
+            </div>
+          </DocumentExpandModal>
+        );
+      })}
     </div>
   );
 }

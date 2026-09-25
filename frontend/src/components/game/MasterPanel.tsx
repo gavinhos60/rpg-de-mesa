@@ -1072,6 +1072,31 @@ export function MasterPanel({
                 className="mb-2 w-full border px-2 py-1.5 text-sm outline-none"
                 style={fieldStyle}
               />
+              <label className="mb-2 block text-[10px] text-[var(--color-ink-soft)]">
+                Ou enviar do computador
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="mt-1 block w-full text-xs"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    if (!file) return;
+                    void (async () => {
+                      if (!file.type.startsWith("image/")) {
+                        window.alert("Selecione um arquivo de imagem.");
+                        return;
+                      }
+                      try {
+                        const dataUrl = await readImageAsDataUrl(file, 4096);
+                        setMapUrl(dataUrl);
+                      } catch {
+                        window.alert("Não foi possível ler a imagem.");
+                      }
+                    })();
+                  }}
+                />
+              </label>
               <RibbonButton
                 type="button"
                 onClick={() => void applyMap()}

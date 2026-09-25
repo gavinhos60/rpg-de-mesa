@@ -439,8 +439,12 @@ export function GameRoom() {
         });
 
         currentSocket.on("papyrus:state", (items: Papyrus[]) => {
-          setPublishedPapyri(Array.isArray(items) ? items : []);
-          setDismissedPapyrusIds([]);
+          const next = Array.isArray(items) ? items : [];
+          setPublishedPapyri(next);
+          setDismissedPapyrusIds((prev) => {
+            const live = new Set(next.map((p) => p.id));
+            return prev.filter((id) => live.has(id));
+          });
         });
 
         currentSocket.on("mercado:shops", (items: Shop[]) => {
@@ -1084,13 +1088,16 @@ export function GameRoom() {
     };
 
     // Instantânea local (sem transmitir): só neste cliente.
+    const isMapPing = payload.effect.label === "__ping__";
+    const pingTtl = payload.effect.expiresAt ?? Date.now() + 1400;
+
     if (!payload.sticky && !payload.broadcast) {
       pushTransient({
         ...payload.effect,
         id: payload.effect.id || `fx-${Date.now()}`,
         byUserId: user.id,
         byUserName: user.name,
-        expiresAt: Date.now() + FX_INSTANT_MS,
+        expiresAt: isMapPing ? pingTtl : Date.now() + FX_INSTANT_MS,
       });
       return;
     }
@@ -1106,13 +1113,15 @@ export function GameRoom() {
       radius: payload.effect.radius,
       color: payload.effect.color,
       label: payload.effect.label,
-      fxKind: payload.effect.fxKind || "glow",
+      fxKind: isMapPing ? "glow" : payload.effect.fxKind || "glow",
       fxElement: payload.effect.fxElement || "magic",
       byUserName: user.name,
       secret: payload.effect.secret,
       expiresAt: payload.sticky
         ? undefined
-        : payload.effect.expiresAt ?? Date.now() + FX_INSTANT_MS,
+        : isMapPing
+          ? pingTtl
+          : payload.effect.expiresAt ?? Date.now() + FX_INSTANT_MS,
     });
     if (!result.ok) {
       alert(result.error || "Falha ao enviar efeito");
@@ -1938,14 +1947,15 @@ export function GameRoom() {
           onUnpublish={
             isMaster
               ? () => {
-                  void publishPapyrus(campaignId, previewPapyrus.id, false)
-                    .then((updated) => {
-                      setPublishedPapyri((prev) =>
-                        prev.filter((p) => p.id !== updated.id)
-                      );
-                      setPreviewPapyrus(null);
-                    })
-                    .catch((err) => console.error(err));
+                  const id = previewPapyrus.id;
+                  setPublishedPapyri((prev) => prev.filter((p) => p.id !== id));
+                  setDismissedPapyrusIds((prev) =>
+                    prev.includes(id) ? prev : [...prev, id]
+                  );
+                  setPreviewPapyrus(null);
+                  void publishPapyrus(campaignId, id, false).catch((err) =>
+                    console.error(err)
+                  );
                 }
               : undefined
           }
@@ -1969,13 +1979,16 @@ export function GameRoom() {
               onUnpublish={
                 isMaster
                   ? () => {
-                      void publishPapyrus(campaignId, papyrus.id, false)
-                        .then((updated) => {
-                          setPublishedPapyri((prev) =>
-                            prev.filter((p) => p.id !== updated.id)
-                          );
-                        })
-                        .catch((err) => console.error(err));
+                      const id = papyrus.id;
+                      setPublishedPapyri((prev) =>
+                        prev.filter((p) => p.id !== id)
+                      );
+                      setDismissedPapyrusIds((prev) =>
+                        prev.includes(id) ? prev : [...prev, id]
+                      );
+                      void publishPapyrus(campaignId, id, false).catch((err) =>
+                        console.error(err)
+                      );
                     }
                   : undefined
               }

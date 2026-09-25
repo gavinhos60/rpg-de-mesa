@@ -22,7 +22,17 @@ import {
 } from "../../services/notes.service";
 import type { PlayerNote } from "../../types/notes";
 import { MercadoMasterModal } from "./MercadoMasterModal";
+import { DocumentExpandModal } from "./DocumentExpandModal";
+import { NotesPlayerModal } from "./NotesPlayerModal";
+import { PapirosMasterModal } from "./PapirosMasterModal";
 import { RibbonButton } from "../icons/MedievalIcons";
+import { useFloatingPopupStack } from "../../hooks/useFloatingPopupStack";
+
+type MasterFloatingPopup =
+  | { id: number; kind: "papyri-list" }
+  | { id: number; kind: "notes-list" }
+  | { id: number; kind: "papyrus"; papyrusId: number }
+  | { id: number; kind: "note"; noteId: number };
 
 const fieldStyle = {
   backgroundColor: "var(--color-parchment)",
@@ -104,6 +114,15 @@ export function PapirosMasterSection({
   const [noteBody, setNoteBody] = useState("");
   const [noteImageUrl, setNoteImageUrl] = useState("");
   const [noteSearch, setNoteSearch] = useState("");
+  const {
+    stack: popupStack,
+    push: pushPopup,
+    close: closePopup,
+    closeWhere: closePopupsWhere,
+    activate: activatePopup,
+    zIndexFor: popupZIndex,
+    stackIndexFor: popupStackIndex,
+  } = useFloatingPopupStack<MasterFloatingPopup>();
 
   const filteredNotes = useMemo(() => {
     const query = noteSearch.trim().toLowerCase();
@@ -134,6 +153,18 @@ export function PapirosMasterSection({
       setMessage("Falha ao carregar papiros/mercado.");
     });
   }, [refresh]);
+
+  useEffect(() => {
+    closePopupsWhere((entry) => {
+      if (entry.kind === "papyrus") {
+        return !papyri.some((item) => item.id === entry.papyrusId);
+      }
+      if (entry.kind === "note") {
+        return !notes.some((item) => item.id === entry.noteId);
+      }
+      return false;
+    });
+  }, [papyri, notes, closePopupsWhere]);
 
   function resetPapyrusForm() {
     setEditingId(null);
@@ -399,12 +430,23 @@ export function PapirosMasterSection({
           </section>
 
           <section className="space-y-2">
-            <h4
-              className="text-xs tracking-wide text-[var(--color-ink)]"
-              style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-            >
-              Biblioteca ({papyri.length})
-            </h4>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4
+                className="text-xs tracking-wide text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+              >
+                Biblioteca ({papyri.length})
+              </h4>
+              {papyri.length > 0 ? (
+                <RibbonButton
+                  type="button"
+                  className="shrink-0 px-2 py-1 text-[10px]"
+                  onClick={() => pushPopup({ kind: "papyri-list" })}
+                >
+                  Ver em popup
+                </RibbonButton>
+              ) : null}
+            </div>
             {papyri.length === 0 && (
               <p className="text-xs italic text-[var(--color-ink-soft)]">
                 Nenhum papiro ainda.
@@ -463,6 +505,16 @@ export function PapirosMasterSection({
                     style={fieldStyle}
                   >
                     Prévia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      pushPopup({ kind: "papyrus", papyrusId: papyrus.id })
+                    }
+                    className="border px-2 py-1 text-[10px]"
+                    style={fieldStyle}
+                  >
+                    Ampliar
                   </button>
                   <button
                     type="button"
@@ -602,16 +654,27 @@ export function PapirosMasterSection({
           </section>
 
           <section className="space-y-2">
-            <h4
-              className="text-xs tracking-wide text-[var(--color-ink)]"
-              style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-            >
-              Suas anotações (
-              {noteSearch.trim()
-                ? `${filteredNotes.length} de ${notes.length}`
-                : notes.length}
-              )
-            </h4>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h4
+                className="text-xs tracking-wide text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+              >
+                Suas anotações (
+                {noteSearch.trim()
+                  ? `${filteredNotes.length} de ${notes.length}`
+                  : notes.length}
+                )
+              </h4>
+              {notes.length > 0 ? (
+                <RibbonButton
+                  type="button"
+                  className="shrink-0 px-2 py-1 text-[10px]"
+                  onClick={() => pushPopup({ kind: "notes-list" })}
+                >
+                  Ver em popup
+                </RibbonButton>
+              ) : null}
+            </div>
             <input
               type="search"
               value={noteSearch}
@@ -666,6 +729,16 @@ export function PapirosMasterSection({
                   />
                 ) : null}
                 <div className="mt-2 flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      pushPopup({ kind: "note", noteId: note.id })
+                    }
+                    className="border px-2 py-1 text-[10px]"
+                    style={fieldStyle}
+                  >
+                    Ampliar
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -786,6 +859,134 @@ export function PapirosMasterSection({
           </section>
         </div>
       )}
+
+      {popupStack.map((entry) => {
+        const popupId = entry.id;
+        const zIndex = popupZIndex(popupId);
+        const stackIndex = popupStackIndex(popupId);
+        const onActivate = () => activatePopup(popupId);
+
+        if (entry.kind === "papyri-list") {
+          return (
+            <PapirosMasterModal
+              key={popupId}
+              papyri={papyri}
+              busy={busy}
+              zIndex={zIndex}
+              stackIndex={stackIndex}
+              onActivate={onActivate}
+              onClose={() => closePopup(popupId)}
+              onTogglePublish={(papyrus) => void handleTogglePublish(papyrus)}
+              onPreview={(papyrus) => onPreviewPapyrus?.(papyrus)}
+              onEdit={(papyrus) => {
+                closePopup(popupId);
+                setEditingId(papyrus.id);
+                setTitle(papyrus.title);
+                setBody(papyrus.body);
+                setImageUrl(papyrus.imageUrl ?? "");
+              }}
+              onDelete={(papyrus) => void handleDeletePapyrus(papyrus.id)}
+              onExpand={(papyrus) =>
+                pushPopup({ kind: "papyrus", papyrusId: papyrus.id })
+              }
+            />
+          );
+        }
+
+        if (entry.kind === "notes-list") {
+          return (
+            <NotesPlayerModal
+              key={popupId}
+              notes={notes}
+              title={`Suas anotações (${notes.length})`}
+              busy={busy}
+              zIndex={zIndex}
+              stackIndex={stackIndex}
+              onActivate={onActivate}
+              onClose={() => closePopup(popupId)}
+              onEdit={(note) => {
+                closePopup(popupId);
+                setNoteEditingId(note.id);
+                setNoteTitle(note.title);
+                setNoteBody(note.body);
+                setNoteImageUrl(note.imageUrl ?? "");
+              }}
+              onDelete={(note) => void handleDeleteNote(note.id)}
+              onExpand={(note) =>
+                pushPopup({ kind: "note", noteId: note.id })
+              }
+            />
+          );
+        }
+
+        if (entry.kind === "papyrus") {
+          const papyrus = papyri.find((item) => item.id === entry.papyrusId);
+          if (!papyrus) return null;
+          return (
+            <DocumentExpandModal
+              key={popupId}
+              title={papyrus.title}
+              subtitle="Pergaminho"
+              zIndex={zIndex}
+              stackIndex={stackIndex}
+              onActivate={onActivate}
+              onClose={() => closePopup(popupId)}
+            >
+              {papyrus.imageUrl ? (
+                <img
+                  src={papyrus.imageUrl}
+                  alt=""
+                  className="mb-4 max-h-[50vh] w-full rounded border object-contain"
+                  style={{
+                    borderColor: "var(--color-border)",
+                    backgroundColor: "var(--color-parchment-soft)",
+                  }}
+                />
+              ) : null}
+              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">
+                {papyrus.body.trim() || (
+                  <span className="italic text-[var(--color-ink-soft)]">
+                    Sem texto.
+                  </span>
+                )}
+              </div>
+            </DocumentExpandModal>
+          );
+        }
+
+        const note = notes.find((item) => item.id === entry.noteId);
+        if (!note) return null;
+        return (
+          <DocumentExpandModal
+            key={popupId}
+            title={note.title}
+            subtitle="Anotação"
+            zIndex={zIndex}
+            stackIndex={stackIndex}
+            onActivate={onActivate}
+            onClose={() => closePopup(popupId)}
+          >
+            {note.imageUrl ? (
+              <img
+                src={note.imageUrl}
+                alt=""
+                className="mb-4 max-h-[50vh] w-full rounded border object-contain"
+                style={{
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-parchment-soft)",
+                }}
+              />
+            ) : null}
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--color-ink-muted)] [overflow-wrap:anywhere]">
+              {note.body.trim() || (
+                <span className="italic text-[var(--color-ink-soft)]">
+                  Sem texto.
+                </span>
+              )}
+            </div>
+          </DocumentExpandModal>
+        );
+      })}
 
       {marketOpen ? (
         <MercadoMasterModal
