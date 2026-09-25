@@ -19,6 +19,7 @@ import {
     getResolvedSpeed,
     getSelectedSubrace,
 } from "../../data/dnd/raceResolution";
+import { sortTalentsByName } from "../../data/dnd/talents";
 import { readImageAsDataUrl } from "../../utils/imageUpload";
 import { formatMeters } from "../../utils/units";
 
@@ -924,7 +925,7 @@ export function CharacterIdentity({
                 >
                     <option value="">Selecione um talento</option>
 
-                    {talents.map((talent) => (
+                    {sortTalentsByName(talents).map((talent) => (
                         <option key={talent.id} value={talent.id}>
                             {talent.name}
                         </option>

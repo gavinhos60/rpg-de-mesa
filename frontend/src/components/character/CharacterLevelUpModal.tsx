@@ -4,6 +4,7 @@ import { DND_CLASSES } from "../../data/dnd/classes";
 import { CharacterAsiChoices } from "./CharacterAsiChoices";
 import { CharacterSpells } from "./CharacterSpells";
 import { CharacterWarlockChoices } from "./CharacterWarlockChoices";
+import { CharacterClassFeatureChoices } from "./CharacterClassFeatureChoices";
 import {
   applyClassLevelIncrease,
   applyNewClass,
@@ -360,6 +361,8 @@ export function CharacterLevelUpModal({
                   onChange={setDraft}
                 />
               )}
+
+              <CharacterClassFeatureChoices data={draft} onChange={setDraft} />
 
               {needsWarlockChoices && warlockSelection && (
                 <CharacterWarlockChoices

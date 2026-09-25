@@ -28,10 +28,12 @@ import {
 } from "../../data/dnd/classFeatures";
 import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
 import { CharacterWarlockChoices } from "./CharacterWarlockChoices";
+import { CharacterClassFeatureChoices } from "./CharacterClassFeatureChoices";
+import { getClassFeatureSummaryLines } from "../../data/dnd/classFeatureChoices";
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
 import {
-    getArmorClassFromEquipment,
+    getCharacterArmorClass,
     getCarryingCapacity,
     getInitialHitPoints,
     getInitiative,
@@ -71,6 +73,7 @@ import type { InventoryItemAction } from "../../services/character.service";
 import { CharacterXpBar } from "./CharacterXpBar";
 import { CharacterLevelUpModal } from "./CharacterLevelUpModal";
 import { InventoryEquipmentSection } from "./InventoryEquipmentSection";
+import { EquipmentCatalogImage } from "./EquipmentCatalogImage";
 import { buildCharacterInventory } from "../../utils/characterInventory";
 import { sumEquipmentBonuses, applyAbilityEquipmentBonus } from "../../utils/equipmentBonuses";
 import type { ActiveSlots, AttunedSlots } from "../../types/character";
@@ -79,6 +82,7 @@ import { StatBreakdownTooltip } from "./StatBreakdownTooltip";
 import {
     getAbilityStatBreakdown,
     getArmorClassBreakdown,
+    getSkillStatBreakdown,
 } from "../../utils/statBreakdown";
 
 interface CharacterSheetReviewProps {
@@ -269,14 +273,7 @@ export function CharacterSheetReview({
 
     const inventory = buildCharacterInventory(data);
     const wallet = resolveCharacterWallet(data);
-    const armorClass =
-        getArmorClassFromEquipment(
-            abilities.dexterity,
-            abilities.wisdom,
-            abilities.constitution,
-            primaryClass,
-            inventory.map((row) => row.itemId)
-        ) + equipmentBonuses.ac;
+    const armorClass = getCharacterArmorClass(data);
     const inventoryWeight = inventory.reduce((total, row) => {
         const item = getEquipmentItem(row.itemId);
         return total + (item?.weight ?? 0) *
@@ -298,6 +295,16 @@ export function CharacterSheetReview({
                     getAbilityStatBreakdown(data, ability.id),
                 ])
             ) as Record<Ability, ReturnType<typeof getAbilityStatBreakdown>>,
+        [data]
+    );
+    const skillBreakdownById = useMemo(
+        () =>
+            Object.fromEntries(
+                DND_SKILLS.map((skill) => [
+                    skill.id,
+                    getSkillStatBreakdown(data, skill.id),
+                ])
+            ) as Record<Skill, ReturnType<typeof getSkillStatBreakdown>>,
         [data]
     );
     const coinCount = totalCoinCount(wallet);
@@ -617,49 +624,92 @@ export function CharacterSheetReview({
                         )}
                         <div className="grid grid-cols-1 gap-1">
                             {DND_SKILLS.map((skill) => {
-                                const modifier = getAbilityModifier(abilities[skill.ability]) +
-                                    (proficientSkills.has(skill.id) ? proficiencyBonus : 0) +
+                                const abilityMod = getAbilityModifier(
+                                    abilities[skill.ability]
+                                );
+                                const proficient = proficientSkills.has(skill.id);
+                                const expertise = Boolean(
+                                    data.skills?.[skill.id]?.expertise
+                                );
+                                const profBonus = proficient ? proficiencyBonus : 0;
+                                const expertiseBonus = expertise
+                                    ? proficiencyBonus
+                                    : 0;
+                                const modifier =
+                                    abilityMod +
+                                    profBonus +
+                                    expertiseBonus +
                                     getSkillExtraBonus(data, skill.id, abilities);
-                                const ability = ABILITIES.find((item) => item.id === skill.ability);
+                                const ability = ABILITIES.find(
+                                    (item) => item.id === skill.ability
+                                );
+                                const breakdown =
+                                    skillBreakdownById[skill.id] ?? [];
                                 const row = (
                                     <>
                                         <span>
-                                            {proficientSkills.has(skill.id) ? "●" : "○"} {skill.name}
-                                            <span className="ml-1 text-xs text-[var(--color-ink-soft)]">{ability?.shortName}</span>
+                                            {proficient ? "●" : "○"} {skill.name}
+                                            <span className="ml-1 text-xs text-[var(--color-ink-soft)]">
+                                                {ability?.shortName}
+                                            </span>
                                         </span>
-                                        <span style={cinzel}>{formatModifier(modifier)}</span>
+                                        <span style={cinzel}>
+                                            {formatModifier(modifier)}
+                                        </span>
                                     </>
                                 );
 
                                 if (rollSkills) {
                                     return (
-                                        <button
+                                        <StatBreakdownTooltip
                                             key={skill.id}
-                                            type="button"
-                                            onClick={() =>
-                                                setPendingRoll({
-                                                    type: "skill",
-                                                    key: skill.id,
-                                                    label: skill.name,
-                                                })
-                                            }
-                                            title={`Rolar ${skill.name}`}
-                                            className="flex w-full items-center justify-between px-1 py-0.5 text-left text-sm transition hover:bg-[#E8D7AD]"
+                                            lines={breakdown}
+                                            className="w-full"
                                         >
-                                            {row}
-                                        </button>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setPendingRoll({
+                                                        type: "skill",
+                                                        key: skill.id,
+                                                        label: skill.name,
+                                                    })
+                                                }
+                                                title={`Rolar ${skill.name}`}
+                                                className="flex w-full items-center justify-between px-1 py-0.5 text-left text-sm transition hover:bg-[color-mix(in_srgb,var(--color-parchment-soft)_85%,var(--color-crimson)_15%)]"
+                                            >
+                                                {row}
+                                            </button>
+                                        </StatBreakdownTooltip>
                                     );
                                 }
 
                                 return (
-                                    <div key={skill.id} className="flex items-center justify-between px-1 py-0.5 text-sm">
-                                        {row}
-                                    </div>
+                                    <StatBreakdownTooltip
+                                        key={skill.id}
+                                        lines={breakdown}
+                                        className="w-full"
+                                    >
+                                        <div className="flex w-full items-center justify-between px-1 py-0.5 text-sm">
+                                            {row}
+                                        </div>
+                                    </StatBreakdownTooltip>
                                 );
                             })}
                         </div>
                     </section>
                 </div>
+
+                <section className="mb-6">
+                    <CharacterClassFeatureChoices data={data} readOnly />
+                    {getClassFeatureSummaryLines(data).length > 0 ? (
+                        <ul className="mt-2 text-xs text-[var(--color-ink-muted)]">
+                            {getClassFeatureSummaryLines(data).map((line) => (
+                                <li key={line}>{line}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </section>
 
                 {warlockLevel > 0 && (
                     <section className="mb-6">
@@ -877,7 +927,12 @@ export function CharacterSheetReview({
                                             const quantity = row.classQuantity + row.manualQuantity;
                                             return (
                                                 <li key={row.itemId} className="flex justify-between gap-3">
-                                                    <span>
+                                                    <span className="flex min-w-0 gap-2">
+                                                        <EquipmentCatalogImage
+                                                            itemId={row.itemId}
+                                                            className="h-10 w-10 shrink-0 rounded border object-cover"
+                                                        />
+                                                        <span className="min-w-0">
                                                         {item?.name ?? row.itemId} × {quantity}
                                                         <span className="block text-xs text-[var(--color-ink-soft)]">
                                                             {row.classQuantity > 0 ? "Inicial" : ""}
@@ -928,6 +983,7 @@ export function CharacterSheetReview({
                                                                 ) : null}
                                                             </span>
                                                         ) : null}
+                                                        </span>
                                                     </span>
                                                     <span className="shrink-0 text-xs text-[var(--color-ink-soft)]">
                                                         {formatMetricWeight((item?.weight ?? 0) * quantity)}
@@ -1738,7 +1794,11 @@ function collectSpells(data: CharacterFormData): Array<{ title: string; spells: 
         }
 
         const picked = data.spells.byClass[selection.classId];
-        const always = getAlwaysPreparedSpells(selection.subclassId, selection.level);
+        const always = getAlwaysPreparedSpells(
+            selection.subclassId,
+            selection.level,
+            { featureChoices: data.featureChoices }
+        );
         const ids = [
             ...(picked?.cantrips ?? []),
             ...(picked?.known ?? []),

@@ -30,6 +30,9 @@
   --color-crow: #2a303c;
   --color-crow-soft: #8a96a8;
   --color-overlay: rgba(0, 0, 0, 0.78);
+  --color-tooltip-bg: #f3e6cc;
+  --color-tooltip-ink: #2a1d14;
+  --color-tooltip-label: #6b4423;
 }
 
 [data-theme="dark"] {
@@ -56,6 +59,9 @@
   --color-crow: #3a4454;
   --color-crow-soft: #9aa8b8;
   --color-overlay: rgba(0, 0, 0, 0.88);
+  --color-tooltip-bg: #2e2838;
+  --color-tooltip-ink: #f0ebe3;
+  --color-tooltip-label: #c4a574;
 }
 
 :root {

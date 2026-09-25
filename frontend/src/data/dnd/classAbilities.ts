@@ -1812,11 +1812,41 @@ const MONK_ABILITIES: ClassAbility[] = [
     source: HOMEBREW,
   },
   {
-    id: "monk-monkey-celestial-journey",
-    name: "Jornada Celeste",
+    id: "monk-monkey-iron-staff",
+    name: "Bastão de Ferro",
     level: 3,
     description:
-      "Bastão de Ferro: cajados e bordões ganham a propriedade Alcance. Gêmeo Celestial: ação bônus e 2 Ki criam uma cópia a até 9 m por 1 minuto (PV = 2 × nível de monge + mod. de Sabedoria, CA igual à sua); enquanto você estiver a 1,5 m da cópia, ataques contra qualquer um dos dois têm desvantagem, e no início de cada turno você pode mover a cópia até 9 m. 72 Transformações Terrenas: gaste 1 Ki para conjurar disfarçar-se. Guiando as Nuvens: gaste 1 Ki para conjurar passo nebuloso.",
+      "Quando você usa cajados e bordões, eles recebem a propriedade Alcance.",
+    subclassId: "way-of-the-monkey",
+    category: "subclass",
+    source: HOMEBREW,
+  },
+  {
+    id: "monk-monkey-celestial-twin",
+    name: "Gêmeo Celestial",
+    level: 3,
+    description:
+      "Com uma ação bônus, você pode gastar 2 pontos de Ki e criar uma cópia exata sua a até 9 metros, que dura por 1 minuto. Sua cópia tem o dobro do seu nível de monge mais seu modificador de Sabedoria de pontos de vida e uma CA igual à sua. Enquanto você estiver a 1,5 metro de distância da sua cópia, todo ataque contra você ou sua cópia é feito com desvantagem. No começo de cada um de seus turnos, você pode mover a cópia para um local desocupado a até 9 metros de você.",
+    subclassId: "way-of-the-monkey",
+    category: "subclass",
+    source: HOMEBREW,
+  },
+  {
+    id: "monk-monkey-earthly-transformations",
+    name: "Transformações Terrenas",
+    level: 3,
+    description:
+      "Você pode invocar a magia Disfarçar por 1 ponto de Ki.",
+    subclassId: "way-of-the-monkey",
+    category: "subclass",
+    source: HOMEBREW,
+  },
+  {
+    id: "monk-monkey-guiding-clouds",
+    name: "Guiando as Nuvens",
+    level: 3,
+    description:
+      "Você pode invocar a magia Passo Nebuloso por 1 ponto de Ki.",
     subclassId: "way-of-the-monkey",
     category: "subclass",
     source: HOMEBREW,

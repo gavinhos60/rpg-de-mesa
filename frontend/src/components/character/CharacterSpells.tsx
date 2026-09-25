@@ -70,7 +70,11 @@ export function CharacterSpells({ data, onChange }: CharacterSpellsProps) {
                 abilityId,
                 name: characterClass?.name ?? selection.classId,
                 list: getClassSpellList(selection.classId, selection.subclassId),
-                alwaysPrepared: getAlwaysPreparedSpells(selection.subclassId, selection.level),
+                alwaysPrepared: getAlwaysPreparedSpells(
+                    selection.subclassId,
+                    selection.level,
+                    { featureChoices: data.featureChoices }
+                ),
             }];
         });
     }, [abilities, data.classes]);

@@ -23,6 +23,7 @@ import {
     getSelectedElementalDisciplines,
 } from "./elementalDisciplines";
 import { getPactBoon } from "./eldritchInvocations";
+import { getClassFeatureChoiceIssues } from "./classFeatureChoices";
 import { getAllWarlockChoicesIssues, getWarlockPactExtrasIssues } from "./warlockPact";
 
 function filled(value: string | null | undefined): boolean {
@@ -277,6 +278,8 @@ function combatIssues(data: CharacterFormData): string[] {
         issues.push(...getWarlockPactExtrasIssues(data, selection.level));
     });
 
+    issues.push(...getClassFeatureChoiceIssues(data));
+
     return issues;
 }
 
@@ -318,7 +321,11 @@ function spellIssues(data: CharacterFormData): string[] {
         const selected = data.spells.byClass[selection.classId] ?? emptyClassSelection();
         const characterClass = DND_CLASSES.find((item) => item.id === selection.classId);
         const name = characterClass?.name ?? selection.classId;
-        const alwaysPrepared = getAlwaysPreparedSpells(selection.subclassId, selection.level);
+        const alwaysPrepared = getAlwaysPreparedSpells(
+            selection.subclassId,
+            selection.level,
+            { featureChoices: data.featureChoices }
+        );
 
         if (selected.cantrips.length < limits.cantrips) {
             issues.push(`Escolha os truques de ${name}.`);

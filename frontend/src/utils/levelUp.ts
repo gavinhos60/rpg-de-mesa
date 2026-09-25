@@ -21,6 +21,7 @@ import {
   getSelectedElementalDisciplines,
 } from "../data/dnd/elementalDisciplines";
 import { getAllWarlockChoicesIssues } from "../data/dnd/warlockPact";
+import { getClassFeatureChoiceIssues } from "../data/dnd/classFeatureChoices";
 import {
   canAdvanceLevel,
   MAX_CHARACTER_LEVEL,
@@ -163,7 +164,11 @@ export function getLevelUpIssues(
     const selected = after.spells.byClass[selection.classId] ?? emptyClassSelection();
     const characterClass = DND_CLASSES.find((item) => item.id === selection.classId);
     const name = characterClass?.name ?? selection.classId;
-    const alwaysPrepared = getAlwaysPreparedSpells(selection.subclassId, selection.level);
+    const alwaysPrepared = getAlwaysPreparedSpells(
+      selection.subclassId,
+      selection.level,
+      { featureChoices: after.featureChoices }
+    );
 
     const prevCantrips = prev?.cantrips ?? 0;
     if (limits.cantrips > prevCantrips && selected.cantrips.length < limits.cantrips) {
@@ -242,6 +247,12 @@ export function getLevelUpIssues(
         issues.push(issue);
       }
     });
+  });
+
+  getClassFeatureChoiceIssues(after).forEach((issue) => {
+    if (!getClassFeatureChoiceIssues(before).includes(issue)) {
+      issues.push(issue);
+    }
   });
 
   if (getTotalLevel(after) > MAX_CHARACTER_LEVEL) {

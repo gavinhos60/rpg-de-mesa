@@ -15,8 +15,8 @@ import { getRaceDisplayName, getResolvedSpeed } from "../../data/dnd/raceResolut
 import { formatMeters } from "../../utils/units";
 
 import {
-    getBaseArmorClass,
     getCarryingCapacity,
+    getCharacterArmorClass,
     getInitialHitPoints,
     getInitiative,
     getPassivePerception,
@@ -27,6 +27,7 @@ import { getProficientSkills } from "../../data/dnd/skills";
 import { getFeatSavingThrowAbilities } from "../../data/dnd/classFeatures";
 import { CharacterAbilityTabs } from "./CharacterAbilityTabs";
 import { CharacterWarlockChoices } from "./CharacterWarlockChoices";
+import { CharacterClassFeatureChoices } from "./CharacterClassFeatureChoices";
 
 interface CharacterCombatProps {
     data: CharacterFormData;
@@ -69,12 +70,7 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
         : 0;
     const hitPoints = data.hitPoints ?? calculatedHitPoints;
 
-    const armorClass = getBaseArmorClass(
-        dexterity,
-        wisdom,
-        constitution,
-        selectedClass
-    );
+    const armorClass = getCharacterArmorClass(data);
     const initiative = getInitiative(dexterity);
     const movement = getResolvedSpeed(data);
     const carryingCapacity = getCarryingCapacity(strength);
@@ -321,6 +317,8 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                     </div>
                 </div>
             </section>
+
+            <CharacterClassFeatureChoices data={data} onChange={onChange} />
 
             {warlockLevel > 0 && (
                 <CharacterWarlockChoices

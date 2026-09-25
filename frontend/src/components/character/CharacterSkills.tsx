@@ -21,6 +21,8 @@ import {
 import { getProficiencyBonus } from "../../data/dnd/rules";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
 import { getAsiFeatSkills } from "../../data/dnd/classFeatures";
+import { getSkillStatBreakdown } from "../../utils/statBreakdown";
+import { StatBreakdownTooltip } from "./StatBreakdownTooltip";
 import {
     getRaceDisplayName,
     getResolvedSkillChoices,
@@ -106,10 +108,16 @@ export function CharacterSkills({
         const abilityModifier = getAbilityModifier(abilityValue);
         const isProficient = proficientSkills.has(skill);
         const skillProficiencyBonus = isProficient ? proficiencyBonus : 0;
+        const expertiseBonus = data.skills?.[skill]?.expertise
+            ? proficiencyBonus
+            : 0;
 
-        return abilityModifier +
+        return (
+            abilityModifier +
             skillProficiencyBonus +
-            getSkillExtraBonus(data, skill, finalAbilities);
+            expertiseBonus +
+            getSkillExtraBonus(data, skill, finalAbilities)
+        );
     }
 
     const passivePerception = 10 + getSkillModifier("perception");
@@ -316,47 +324,50 @@ export function CharacterSkills({
 
         const ability = ABILITIES.find((item) => item.id === skillData.ability);
         const modifier = getSkillModifier(skill);
+        const breakdown = getSkillStatBreakdown(data, skill);
 
         return (
-            <button
-                type="button"
-                disabled={!available}
-                onClick={onClick}
-                className="flex w-full items-center justify-between border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-30"
-                style={{
-                    backgroundColor: selected ? "var(--color-surface)" : "var(--color-parchment)",
-                    borderColor: selected ? "var(--color-crimson)" : "var(--color-border)",
-                }}
-            >
-                <div className="flex items-center gap-3">
-                    <div
-                        className="flex h-8 w-8 shrink-0 items-center justify-center border text-sm"
-                        style={{
-                            ...cinzel,
-                            borderColor: selected ? "var(--color-crimson-deep)" : "var(--color-border)",
-                            backgroundColor: selected ? "var(--color-crimson)" : "transparent",
-                            color: selected
-                                ? "var(--color-ink-inverse)"
-                                : "var(--color-ink-soft)",
-                        }}
-                    >
-                        {selected ? "✓" : ""}
-                    </div>
-
-                    <div>
-                        <p className="text-[var(--color-ink)]" style={cinzel}>{skillData.name}</p>
-                        <p className="text-xs text-[var(--color-ink-soft)]">{ability?.shortName}</p>
-                    </div>
-                </div>
-
-                <p
-                    className="text-lg"
-                    style={{ ...cinzel, color: modifier >= 0 ? "var(--color-green)" : "#8B3A2E" }}
+            <StatBreakdownTooltip lines={breakdown} className="w-full">
+                <button
+                    type="button"
+                    disabled={!available}
+                    onClick={onClick}
+                    className="flex w-full items-center justify-between border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-30"
+                    style={{
+                        backgroundColor: selected ? "var(--color-surface)" : "var(--color-parchment)",
+                        borderColor: selected ? "var(--color-crimson)" : "var(--color-border)",
+                    }}
                 >
-                    {modifier >= 0 ? "+" : ""}
-                    {modifier}
-                </p>
-            </button>
+                    <div className="flex items-center gap-3">
+                        <div
+                            className="flex h-8 w-8 shrink-0 items-center justify-center border text-sm"
+                            style={{
+                                ...cinzel,
+                                borderColor: selected ? "var(--color-crimson-deep)" : "var(--color-border)",
+                                backgroundColor: selected ? "var(--color-crimson)" : "transparent",
+                                color: selected
+                                    ? "var(--color-ink-inverse)"
+                                    : "var(--color-ink-soft)",
+                            }}
+                        >
+                            {selected ? "✓" : ""}
+                        </div>
+
+                        <div>
+                            <p className="text-[var(--color-ink)]" style={cinzel}>{skillData.name}</p>
+                            <p className="text-xs text-[var(--color-ink-soft)]">{ability?.shortName}</p>
+                        </div>
+                    </div>
+
+                    <p
+                        className="text-lg"
+                        style={{ ...cinzel, color: modifier >= 0 ? "var(--color-green)" : "#8B3A2E" }}
+                    >
+                        {modifier >= 0 ? "+" : ""}
+                        {modifier}
+                    </p>
+                </button>
+            </StatBreakdownTooltip>
         );
     }
 

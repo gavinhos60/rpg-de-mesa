@@ -14,6 +14,15 @@ import {
 } from "../../data/dnd/equipment";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
 import { getCarryingCapacity } from "../../data/dnd/combat";
+import {
+    ensureClassEquipmentDefaults,
+    ensureStarterEquipmentEquipped,
+    normalizeActiveSlots,
+    normalizeAttunedSlots,
+} from "../../utils/equipmentSlots";
+import { InventoryEquipmentSection } from "./InventoryEquipmentSection";
+import { EquipmentCatalogImage } from "./EquipmentCatalogImage";
+import type { ActiveSlots, AttunedSlots } from "../../types/character";
 
 interface CharacterEquipmentProps {
     data: CharacterFormData;
@@ -43,26 +52,13 @@ export function CharacterEquipment({
     const startingEquipment = selectedClass?.startingEquipment;
 
     useEffect(() => {
-        if (!startingEquipment || data.equipment.classId === primaryClassId) {
-            return;
-        }
-
-        const defaults = Object.fromEntries(
-            startingEquipment.choices.map((choice) => [
-                choice.id,
-                choice.alternatives[0]?.id ?? "",
-            ])
-        );
-
-        onChange((previous) => ({
-            ...previous,
-            equipment: {
-                ...previous.equipment,
-                classId: primaryClassId,
-                choiceSelections: defaults,
-            },
-        }));
-    }, [data.equipment.classId, onChange, primaryClassId, startingEquipment]);
+        onChange((previous) => ensureClassEquipmentDefaults(previous));
+    }, [
+        data.backgroundChoices.tools,
+        data.backgroundId,
+        onChange,
+        primaryClassId,
+    ]);
 
     const classItems = useMemo(() => {
         if (!startingEquipment) {
@@ -125,16 +121,18 @@ export function CharacterEquipment({
         ?? (matchingItems.length === 1 ? matchingItems[0] : undefined);
 
     function choose(choiceId: string, alternativeId: string) {
-        onChange((previous) => ({
-            ...previous,
-            equipment: {
-                ...previous.equipment,
-                choiceSelections: {
-                    ...previous.equipment.choiceSelections,
-                    [choiceId]: alternativeId,
+        onChange((previous) =>
+            ensureStarterEquipmentEquipped({
+                ...previous,
+                equipment: {
+                    ...previous.equipment,
+                    choiceSelections: {
+                        ...previous.equipment.choiceSelections,
+                        [choiceId]: alternativeId,
+                    },
                 },
-            },
-        }));
+            })
+        );
     }
 
     function changeManualItem(itemId: string, amount: number) {
@@ -147,7 +145,7 @@ export function CharacterEquipment({
                 (entry) => entry.itemId !== itemId
             );
 
-            return {
+            return ensureStarterEquipmentEquipped({
                 ...previous,
                 equipment: {
                     ...previous.equipment,
@@ -155,7 +153,7 @@ export function CharacterEquipment({
                         ? [...withoutItem, { itemId, quantity }]
                         : withoutItem,
                 },
-            };
+            });
         });
     }
 
@@ -170,6 +168,26 @@ export function CharacterEquipment({
                 </p>
             </div>
         );
+    }
+
+    async function updateActiveSlots(slots: ActiveSlots) {
+        onChange((previous) => ({
+            ...previous,
+            equipment: {
+                ...previous.equipment,
+                activeSlots: normalizeActiveSlots(slots),
+            },
+        }));
+    }
+
+    async function updateAttunedSlots(slots: AttunedSlots) {
+        onChange((previous) => ({
+            ...previous,
+            equipment: {
+                ...previous.equipment,
+                attunedSlots: normalizeAttunedSlots(slots),
+            },
+        }));
     }
 
     return (
@@ -189,6 +207,22 @@ export function CharacterEquipment({
                 <SummaryCard label="Peso carregado" value={formatMetricWeight(weight)} />
                 <SummaryCard label="Capacidade" value={formatMetricWeight(carryingCapacity)} />
             </div>
+
+            <section className="mb-8 border p-4" style={card}>
+                <h3 className="mb-2 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
+                    Itens equipados
+                </h3>
+                <p className="mb-4 text-sm text-[var(--color-ink-muted)]">
+                    O equipamento inicial entra nos slots ativos (não sintonizados).
+                    A classe de armadura considera apenas o que estiver equipado.
+                </p>
+                <InventoryEquipmentSection
+                    data={data}
+                    editable
+                    onUpdateActiveSlots={updateActiveSlots}
+                    onUpdateAttunedSlots={updateAttunedSlots}
+                />
+            </section>
 
             <section className="mb-8">
                 <h3 className="mb-4 text-lg text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
@@ -281,6 +315,10 @@ export function CharacterEquipment({
                                                 setIsListOpen(false);
                                             }}
                                         >
+                                            <EquipmentCatalogImage
+                                                itemId={equipment.id}
+                                                className="h-8 w-8 shrink-0 rounded border object-cover"
+                                            />
                                             <span>{equipment.name}</span>
                                             <span className="text-xs text-[var(--color-ink-soft)]">
                                                 {formatMetricWeight(equipment.weight)}
@@ -332,6 +370,8 @@ export function CharacterEquipment({
                                 className="flex flex-wrap items-center justify-between gap-4 border p-4"
                                 style={card}
                             >
+                                <div className="flex min-w-0 flex-1 items-center gap-3">
+                                    <EquipmentCatalogImage itemId={row.itemId} />
                                 <div>
                                     <p className="text-[var(--color-ink)]" style={cinzel}>{equipment.name}</p>
                                     <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
@@ -340,6 +380,7 @@ export function CharacterEquipment({
                                         {row.manualQuantity > 0 && `${row.manualQuantity} manual`}
                                         {" • "}{formatMetricWeight(equipment.weight * total)}
                                     </p>
+                                </div>
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {row.manualQuantity > 0 && (

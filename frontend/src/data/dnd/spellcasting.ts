@@ -5,6 +5,7 @@ import type {
     SpellcasterClassId,
 } from "../../types/character";
 import { DND_SPELLS, getSpell } from "./spells";
+import { getLandCirclePreparedSpells, getLandTerrainId } from "./landCircle";
 
 export type CasterKind = "full" | "half" | "third" | "pact" | "none";
 
@@ -271,13 +272,25 @@ const ALWAYS_PREPARED: Record<string, Array<{ minLevel: number; spells: string[]
 
 export function getAlwaysPreparedSpells(
     subclassId: string,
-    classLevel: number
+    classLevel: number,
+    options?: { featureChoices?: Record<string, string[]> }
 ): string[] {
     const groups = ALWAYS_PREPARED[subclassId] ?? [];
-
-    return groups
+    const fromSubclass = groups
         .filter((group) => classLevel >= group.minLevel)
         .flatMap((group) => group.spells);
+
+    if (subclassId === "circle-of-the-land") {
+        const terrain = getLandTerrainId(options?.featureChoices);
+        if (terrain) {
+            return [
+                ...fromSubclass,
+                ...getLandCirclePreparedSpells(terrain, classLevel),
+            ];
+        }
+    }
+
+    return fromSubclass;
 }
 
 export function getClassSpellList(classId: string, subclassId: string): Spell[] {

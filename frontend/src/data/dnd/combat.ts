@@ -1,9 +1,16 @@
 import type {
     Ability,
     CharacterClass,
+    CharacterFormData,
 } from "../../types/character";
 
 import { getAbilityModifier } from "./abilities";
+import {
+    getEquippedCatalogItemIds,
+    sumEquipmentBonuses,
+} from "../../utils/equipmentBonuses";
+import { getFinalAbilities } from "./characterStats";
+import { DND_CLASSES } from "./classes";
 
 export function getHitDie(
     characterClass: CharacterClass
@@ -96,6 +103,24 @@ export function getArmorClassFromEquipment(
 
     // Escudo sempre +2 quando empunhado.
     return armorClass + (hasShield ? 2 : 0);
+}
+
+export function getCharacterArmorClass(data: CharacterFormData): number {
+    const primaryClass = data.classes[0]
+        ? DND_CLASSES.find((item) => item.id === data.classes[0].classId)
+        : undefined;
+    const abilities = getFinalAbilities(data);
+    const equippedIds = getEquippedCatalogItemIds(data);
+    const equipmentBonuses = sumEquipmentBonuses(data);
+    return (
+        getArmorClassFromEquipment(
+            abilities.dexterity,
+            abilities.wisdom,
+            abilities.constitution,
+            primaryClass,
+            equippedIds
+        ) + equipmentBonuses.ac
+    );
 }
 
 export function getSavingThrowModifier(

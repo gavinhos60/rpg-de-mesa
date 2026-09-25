@@ -19,6 +19,16 @@ const ZERO_BONUSES: Record<ItemBonusStat, number> = {
     charisma: 0,
 };
 
+export function getEquippedCatalogItemIds(
+    data: CharacterFormData
+): string[] {
+    return getEquippedSlotRefs(data)
+        .filter((ref): ref is Extract<EquipmentSlotRef, { kind: "catalog" }> =>
+            ref.kind === "catalog"
+        )
+        .map((ref) => ref.itemId);
+}
+
 export function getEquippedSlotRefs(data: CharacterFormData): EquipmentSlotRef[] {
     const attuned = normalizeAttunedSlots(data.equipment.attunedSlots);
     const active = normalizeActiveSlots(data.equipment.activeSlots);

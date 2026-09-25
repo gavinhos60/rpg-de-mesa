@@ -2,6 +2,7 @@ import type { Ability, CharacterFormData, Skill } from "../../types/character";
 
 import { getResolvedSkillProficiencies } from "./raceResolution";
 import { getAsiFeatSkills } from "./classFeatures";
+import { getClassFeatureBonusSkills } from "./classFeatureChoices";
 import { getAbilityModifier } from "./abilities";
 
 export interface DndSkill {
@@ -122,6 +123,7 @@ export function getProficientSkills(data: CharacterFormData): Set<Skill> {
         ...(data.skillProficiencies?.background ?? []),
         ...(data.skillProficiencies?.talent ?? []),
         ...getAsiFeatSkills(data),
+        ...getClassFeatureBonusSkills(data),
         ...(monkeyPath ? ["deception" as Skill] : []),
         ...flagged,
     ]);

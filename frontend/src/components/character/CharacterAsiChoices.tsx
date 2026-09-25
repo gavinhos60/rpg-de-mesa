@@ -3,7 +3,7 @@ import { ABILITIES } from "../../data/dnd/abilities";
 import { DND_CLASSES } from "../../data/dnd/classes";
 import { getAsiMilestones } from "../../data/dnd/classFeatures";
 import { getFinalAbilities } from "../../data/dnd/characterStats";
-import { DND_TALENTS } from "../../data/dnd/talents";
+import { DND_TALENTS, sortTalentsByName } from "../../data/dnd/talents";
 import { CharacterTalentChoices } from "./CharacterTalentChoices";
 
 interface CharacterAsiChoicesProps {
@@ -220,7 +220,7 @@ export function CharacterAsiChoices({
                                             style={nested}
                                         >
                                             <option value="">Selecione um talento</option>
-                                            {DND_TALENTS.map((talent) => (
+                                            {sortTalentsByName(DND_TALENTS).map((talent) => (
                                                 <option
                                                     key={talent.id}
                                                     value={talent.id}

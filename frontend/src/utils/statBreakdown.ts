@@ -1,17 +1,30 @@
-import { getAbilityModifier } from "../data/dnd/abilities";
-import { getAsiMilestones } from "../data/dnd/classFeatures";
+import { ABILITIES, getAbilityModifier } from "../data/dnd/abilities";
+import { getAsiMilestones, getAsiFeatSkills } from "../data/dnd/classFeatures";
 import { getFinalAbilities } from "../data/dnd/characterStats";
 import { DND_CLASSES } from "../data/dnd/classes";
+import { getClassFeatureBonusSkills } from "../data/dnd/classFeatureChoices";
+import { getProficiencyBonus } from "../data/dnd/rules";
+import {
+    DND_SKILLS,
+    getProficientSkills,
+    getSkillExtraBonus,
+} from "../data/dnd/skills";
+import { getResolvedSkillProficiencies } from "../data/dnd/raceResolution";
 import {
     getRaceById,
     getSelectedSubrace,
     getResolvedAbilityScoreChoices,
 } from "../data/dnd/raceResolution";
 import { DND_TALENTS } from "../data/dnd/talents";
-import type { Ability, AsiSelection, CharacterFormData } from "../types/character";
-import { buildCharacterInventory } from "./characterInventory";
+import type {
+    Ability,
+    AsiSelection,
+    CharacterFormData,
+    Skill,
+} from "../types/character";
 import {
     applyAbilityEquipmentBonus,
+    getEquippedCatalogItemIds,
     resolveSlotItemBonus,
     sumEquipmentBonuses,
     getEquippedSlotRefs,
@@ -181,7 +194,7 @@ export function getAbilityStatBreakdown(
     return lines;
 }
 
-function effectiveAbilities(data: CharacterFormData) {
+export function getEffectiveAbilities(data: CharacterFormData) {
     const base = getFinalAbilities(data);
     const equipmentBonuses = sumEquipmentBonuses(data);
     return {
@@ -226,9 +239,8 @@ export function getArmorClassBreakdown(
     const primaryClass = data.classes[0]
         ? DND_CLASSES.find((item) => item.id === data.classes[0].classId)
         : undefined;
-    const inventory = buildCharacterInventory(data);
-    const itemIds = inventory.map((row) => row.itemId);
-    const { dexterity, wisdom, constitution } = effectiveAbilities(data);
+    const itemIds = getEquippedCatalogItemIds(data);
+    const { dexterity, wisdom, constitution } = getEffectiveAbilities(data);
 
     const dexMod = getAbilityModifier(dexterity);
     const wisMod = getAbilityModifier(wisdom);
@@ -321,6 +333,112 @@ export function getArmorClassBreakdown(
             kind: "delta",
             label: entry?.name ? `Item ${entry.name}` : "Item equipado",
             delta: bonus.value,
+        });
+    }
+
+    return lines;
+}
+
+function getSkillProficiencySourceLabels(
+    data: CharacterFormData,
+    skillId: Skill
+): string[] {
+    const sources: string[] = [];
+
+    const add = (label: string) => {
+        if (!sources.includes(label)) sources.push(label);
+    };
+
+    if (getResolvedSkillProficiencies(data).includes(skillId)) {
+        add("Raça");
+    }
+    if (data.skillProficiencies?.race?.includes(skillId)) {
+        add("Raça");
+    }
+    if (data.skillProficiencies?.class?.includes(skillId)) {
+        add("Classe");
+    }
+    if (data.skillProficiencies?.background?.includes(skillId)) {
+        add("Antecedente");
+    }
+    if (data.skillProficiencies?.talent?.includes(skillId)) {
+        add("Talento inicial");
+    }
+    if (getAsiFeatSkills(data).includes(skillId)) {
+        add("Talento (Habilidoso)");
+    }
+    if (getClassFeatureBonusSkills(data).includes(skillId)) {
+        add("Classe (característica)");
+    }
+
+    const monkeyPath = data.classes.some(
+        (selection) =>
+            selection.classId === "monk" &&
+            selection.subclassId === "way-of-the-monkey" &&
+            selection.level >= 3
+    );
+    if (monkeyPath && skillId === "deception") {
+        add("Caminho do Macaco");
+    }
+
+    if (data.skills?.[skillId]?.proficient) {
+        add("Perícia (ficha)");
+    }
+
+    return sources;
+}
+
+export function getSkillStatBreakdown(
+    data: CharacterFormData,
+    skillId: Skill
+): StatBreakdownLine[] {
+    const skillDef = DND_SKILLS.find((entry) => entry.id === skillId);
+    if (!skillDef) return [];
+
+    const abilities = getEffectiveAbilities(data);
+    const abilityMeta = ABILITIES.find((entry) => entry.id === skillDef.ability);
+    const abilityMod = getAbilityModifier(abilities[skillDef.ability]);
+
+    const lines: StatBreakdownLine[] = [
+        {
+            kind: "delta",
+            label: abilityMeta?.name ?? skillDef.ability,
+            delta: abilityMod,
+        },
+    ];
+
+    const totalLevel =
+        data.classes.reduce((total, selection) => total + selection.level, 0) ||
+        1;
+    const proficiencyBonus = getProficiencyBonus(totalLevel);
+    const proficient = getProficientSkills(data).has(skillId);
+    const expertise = Boolean(data.skills?.[skillId]?.expertise);
+
+    if (proficient && proficiencyBonus !== 0) {
+        const sources = getSkillProficiencySourceLabels(data, skillId);
+        lines.push({
+            kind: "delta",
+            label: sources.length
+                ? `Proficiência (${sources.join(", ")})`
+                : "Proficiência",
+            delta: proficiencyBonus,
+        });
+    }
+
+    if (expertise && proficiencyBonus !== 0) {
+        lines.push({
+            kind: "delta",
+            label: "Expertise",
+            delta: proficiencyBonus,
+        });
+    }
+
+    const extra = getSkillExtraBonus(data, skillId, abilities);
+    if (extra !== 0) {
+        lines.push({
+            kind: "delta",
+            label: "Caminho do Macaco (Sabedoria)",
+            delta: extra,
         });
     }
 

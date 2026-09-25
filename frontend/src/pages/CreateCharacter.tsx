@@ -26,6 +26,7 @@ import {
     canEnterStep,
     getStepIssues,
 } from "../data/dnd/characterCreation";
+import { ensureClassEquipmentDefaults } from "../utils/equipmentSlots";
 import {
     createCharacterFromForm,
     getCharacterById,
@@ -260,6 +261,13 @@ function CreateCharacterForm({ editId }: { editId: number | null }) {
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: "smooth" });
     }, [currentStep]);
+
+    const primaryClassId = data.classes[0]?.classId ?? "";
+    const backgroundToolsKey = data.backgroundChoices.tools.join("|");
+
+    useEffect(() => {
+        setData((previous) => ensureClassEquipmentDefaults(previous));
+    }, [primaryClassId, data.backgroundId, backgroundToolsKey]);
 
     useEffect(() => {
         if (!editId) return;

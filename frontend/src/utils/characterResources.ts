@@ -10,6 +10,7 @@ import {
   getCombinedSpellSlots,
   getSpellLimits,
 } from "../data/dnd/spellcasting";
+import { superiorityDiceMax } from "../data/dnd/battleMasterManeuvers";
 
 export interface ResourcePoolDef {
   id: string;
@@ -211,6 +212,27 @@ export function listResourcePools(data: CharacterFormData): ResolvedResourcePool
         current,
       });
     }
+
+    if (
+      selection.classId === "fighter" &&
+      selection.subclassId === "battle-master" &&
+      level >= 3
+    ) {
+      const max = superiorityDiceMax(level);
+      const stored = state.pools["fighter-superiority"];
+      const current =
+        typeof stored === "number" && Number.isFinite(stored)
+          ? Math.min(max, Math.max(0, stored))
+          : max;
+      result.push({
+        id: "fighter-superiority",
+        classId: "fighter",
+        name: "Dados de Superioridade",
+        recovery: "short",
+        max,
+        current,
+      });
+    }
   }
 
   return result;
@@ -361,6 +383,15 @@ export function resolveFeatureSpend(
     return classIds.has("fighter")
       ? { resourceId: "fighter-indomitable", cost: 1 }
       : null;
+  }
+
+  if (
+    classIds.has("fighter") &&
+    (id.includes("battlemaster") ||
+      id.includes("superiority") ||
+      /manobra|superioridade/i.test(label))
+  ) {
+    return { resourceId: "fighter-superiority", cost: 1 };
   }
 
   if (id.includes("lay-on-hands") || /cura pelas mãos/i.test(name)) {

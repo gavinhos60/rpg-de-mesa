@@ -615,3 +615,11 @@ export const DND_TALENTS: CharacterTalent[] = [
             "Você aumenta Força ou Destreza em 1 e ganha proficiência com quatro armas simples ou marciais à sua escolha.",
     },
 ];
+
+export function sortTalentsByName(
+    talents: CharacterTalent[]
+): CharacterTalent[] {
+    return [...talents].sort((a, b) =>
+        a.name.localeCompare(b.name, "pt-BR", { sensitivity: "base" })
+    );
+}
