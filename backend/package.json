@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "postinstall": "prisma generate",
-    "migrate:deploy": "prisma migrate deploy"
+    "db:dev": "prisma dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "db:migrate": "prisma migrate deploy"
   },
   "keywords": [],
   "author": "",

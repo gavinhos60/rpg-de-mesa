@@ -43,7 +43,9 @@ export function filterVisibleToUser<
   T extends { audienceUserIds?: number[] | null },
 >(items: T[], userId: number | undefined): T[] {
   if (!userId) return [];
-  return items.filter((item) =>
-    (item.audienceUserIds ?? []).includes(userId)
-  );
+  return items.filter((item) => {
+    const audience = item.audienceUserIds ?? [];
+    if (audience.length === 0) return true;
+    return audience.includes(userId);
+  });
 }

@@ -667,6 +667,12 @@ export function GameBoard({
     return { x: snapToGrid(x, gridSize), y: snapToGrid(y, gridSize) };
   }
 
+  /** Centro geométrico do footprint (x/y do token são o canto superior esquerdo). */
+  function tokenCenterPoint(token: BoardToken): { x: number; y: number } {
+    const size = tokenFootprintPx(token, gridSize);
+    return { x: token.x + size / 2, y: token.y + size / 2 };
+  }
+
   function measureCells(
     from: { x: number; y: number },
     to: { x: number; y: number }
@@ -2262,7 +2268,7 @@ export function GameBoard({
                     if (tool === "ruler") {
                       if (measureSettings.shape === "ping") {
                         const origin = applyMeasureSnap(
-                          { x: token.x, y: token.y },
+                          tokenCenterPoint(token),
                           gridSize,
                           measureSettings.snap,
                           isHex
@@ -2279,7 +2285,7 @@ export function GameBoard({
                         return;
                       }
                       const origin = applyMeasureSnap(
-                        { x: token.x, y: token.y },
+                        tokenCenterPoint(token),
                         gridSize,
                         measureSettings.snap,
                         isHex
@@ -2482,10 +2488,7 @@ export function GameBoard({
           })}
 
           <svg
-            className="absolute inset-0 z-[25] h-full w-full overflow-visible"
-            style={{
-              pointerEvents: tool === "select" ? "auto" : "none",
-            }}
+            className="pointer-events-none absolute inset-0 z-[25] h-full w-full overflow-visible"
           >
             {mapBoard.rulers
               .filter((ruler) => !ruler.live)

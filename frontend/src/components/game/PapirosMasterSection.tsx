@@ -342,9 +342,19 @@ export function PapirosMasterSection({
       }
       setPublishTarget(null);
       await refresh();
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
-      setMessage("Erro ao publicar. Selecione ao menos um jogador.");
+      const apiMsg =
+        err &&
+        typeof err === "object" &&
+        "response" in err &&
+        (err as { response?: { data?: { error?: string } } }).response?.data
+          ?.error;
+      setMessage(
+        typeof apiMsg === "string" && apiMsg.trim()
+          ? apiMsg
+          : "Erro ao publicar. Selecione ao menos um jogador."
+      );
     } finally {
       setBusy(false);
     }
@@ -1094,6 +1104,11 @@ export function PapirosMasterSection({
 
       <PublishAudienceModal
         open={publishTarget != null}
+        sessionKey={
+          publishTarget
+            ? `${publishTarget.kind}-${publishTarget.item.id}`
+            : ""
+        }
         itemKind={publishTarget?.kind === "note" ? "note" : "papyrus"}
         itemTitle={
           publishTarget?.kind === "note"

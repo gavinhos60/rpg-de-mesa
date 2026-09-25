@@ -57,7 +57,10 @@ export async function listPublishedNotesForPlayer(
     where: {
       campaignId,
       published: true,
-      audienceUserIds: { has: authenticatedUserId },
+      OR: [
+        { audienceUserIds: { has: authenticatedUserId } },
+        { audienceUserIds: { equals: [] } },
+      ],
     },
     orderBy: { updatedAt: "desc" },
   });

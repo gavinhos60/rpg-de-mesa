@@ -52,7 +52,10 @@ export async function listPapyri(
     where: {
       campaignId,
       published: true,
-      audienceUserIds: { has: authenticatedUserId },
+      OR: [
+        { audienceUserIds: { has: authenticatedUserId } },
+        { audienceUserIds: { equals: [] } },
+      ],
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -74,10 +77,11 @@ export async function getPapyrus(
   }
 
   if (member.role !== "MASTER") {
-    if (
-      !papyrus.published ||
-      !papyrus.audienceUserIds.includes(authenticatedUserId)
-    ) {
+    const audience = papyrus.audienceUserIds ?? [];
+    const visible =
+      papyrus.published &&
+      (audience.length === 0 || audience.includes(authenticatedUserId));
+    if (!visible) {
       throw new Error("PAPYRUS_NOT_FOUND");
     }
   }

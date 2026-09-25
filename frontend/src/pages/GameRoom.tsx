@@ -446,7 +446,7 @@ export function GameRoom() {
 
         currentSocket.on("papyrus:state", (items: Papyrus[]) => {
           const raw = Array.isArray(items) ? items : [];
-          const uid = user?.id;
+          const uid = userIdRef.current;
           const next =
             roleRef.current === "MASTER"
               ? raw
@@ -460,7 +460,7 @@ export function GameRoom() {
 
         currentSocket.on("note:state", (items: PlayerNote[]) => {
           const raw = Array.isArray(items) ? items : [];
-          const uid = user?.id;
+          const uid = userIdRef.current;
           const next =
             roleRef.current === "MASTER"
               ? raw

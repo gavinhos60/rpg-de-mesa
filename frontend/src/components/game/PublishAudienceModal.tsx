@@ -3,8 +3,21 @@ import { createPortal } from "react-dom";
 import type { CampaignPlayerOption } from "../../utils/campaignPlayers";
 import { RibbonButton } from "../icons/MedievalIcons";
 
+function buildInitialSelection(
+  players: CampaignPlayerOption[],
+  initialAudienceUserIds: number[]
+): Set<number> {
+  const next = new Set(initialAudienceUserIds);
+  if (next.size === 0 && players.length > 0) {
+    for (const player of players) next.add(player.userId);
+  }
+  return next;
+}
+
 interface PublishAudienceModalProps {
   open: boolean;
+  /** Muda ao abrir outro item — reinicia a seleção uma vez. */
+  sessionKey: string;
   itemTitle: string;
   itemKind: "papyrus" | "note";
   players: CampaignPlayerOption[];
@@ -16,6 +29,7 @@ interface PublishAudienceModalProps {
 
 export function PublishAudienceModal({
   open,
+  sessionKey,
   itemTitle,
   itemKind,
   players,
@@ -24,16 +38,16 @@ export function PublishAudienceModal({
   onCancel,
   onConfirm,
 }: PublishAudienceModalProps) {
-  const [selected, setSelected] = useState<Set<number>>(() => new Set());
+  const [selected, setSelected] = useState<Set<number>>(() =>
+    buildInitialSelection(players, initialAudienceUserIds)
+  );
 
   useEffect(() => {
-    if (!open) return;
-    const next = new Set(initialAudienceUserIds);
-    if (next.size === 0 && players.length > 0) {
-      for (const player of players) next.add(player.userId);
-    }
-    setSelected(next);
-  }, [open, initialAudienceUserIds, players]);
+    if (!open || !sessionKey) return;
+    setSelected(buildInitialSelection(players, initialAudienceUserIds));
+    // Reinicia só ao abrir outro item (sessionKey), não a cada render do pai.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionKey]);
 
   const allSelected = useMemo(
     () => players.length > 0 && players.every((p) => selected.has(p.userId)),
@@ -92,7 +106,8 @@ export function PublishAudienceModal({
 
         {players.length === 0 ? (
           <p className="mb-4 text-sm italic text-[var(--color-ink-soft)]">
-            Nenhum jogador na campanha. Adicione jogadores ao grupo primeiro.
+            Nenhum jogador na campanha. Adicione personagens/jogadores ao grupo
+            primeiro.
           </p>
         ) : (
           <div
@@ -107,6 +122,7 @@ export function PublishAudienceModal({
                 type="checkbox"
                 checked={allSelected}
                 onChange={toggleAll}
+                onClick={(event) => event.stopPropagation()}
               />
               <span style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}>
                 Todos os jogadores
@@ -120,6 +136,7 @@ export function PublishAudienceModal({
                       type="checkbox"
                       checked={selected.has(player.userId)}
                       onChange={() => toggle(player.userId)}
+                      onClick={(event) => event.stopPropagation()}
                     />
                     {player.label}
                   </label>

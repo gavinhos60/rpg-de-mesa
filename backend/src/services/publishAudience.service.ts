@@ -12,15 +12,27 @@ export async function normalizePlayerAudience(
     throw new Error("AUDIENCE_REQUIRED");
   }
 
-  const members = await prisma.campaignMember.findMany({
-    where: {
-      campaignId,
-      role: "PLAYER",
-      userId: { in: unique },
-    },
-    select: { userId: true },
-  });
-  const allowed = new Set(members.map((m) => m.userId));
+  const [members, characters] = await Promise.all([
+    prisma.campaignMember.findMany({
+      where: {
+        campaignId,
+        role: "PLAYER",
+        userId: { in: unique },
+      },
+      select: { userId: true },
+    }),
+    prisma.character.findMany({
+      where: {
+        campaignId,
+        playerId: { in: unique },
+      },
+      select: { playerId: true },
+    }),
+  ]);
+  const allowed = new Set<number>([
+    ...members.map((m) => m.userId),
+    ...characters.map((c) => c.playerId),
+  ]);
   const filtered = unique.filter((id) => allowed.has(id));
   if (filtered.length === 0) {
     throw new Error("AUDIENCE_REQUIRED");
