@@ -177,6 +177,9 @@ export async function grantCustomItem(
     category?: string;
     imageUrl?: string;
     itemBonus?: ItemBonus;
+    itemKind?: string;
+    armorTypeId?: string;
+    magicBonus?: number;
     requiresAttunement?: boolean;
   }
 ): Promise<SavedCharacter> {

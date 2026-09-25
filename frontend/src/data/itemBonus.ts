@@ -1,4 +1,6 @@
-import type { ItemBonusStat } from "../types/character";
+import type { CustomInventoryItem, ItemBonusStat } from "../types/character";
+import type { ShopItem } from "../types/mercado";
+import { getArmorTypeById } from "./dnd/armorCatalog";
 
 export const ITEM_BONUS_OPTIONS: Array<{
     value: ItemBonusStat;
@@ -26,6 +28,46 @@ export function formatItemBonusLabel(
     const label = ITEM_BONUS_OPTIONS.find((o) => o.value === stat)?.label;
     if (!label) return null;
     return `${label} +${Math.floor(value)}`;
+}
+
+export function formatShopItemBonusLabel(item: ShopItem): string | null {
+    const magic = Math.floor(Number(item.magicBonus) || 0);
+    if (item.itemKind === "weapon" && magic > 0) {
+        return `Arma +${magic}`;
+    }
+    if (
+        (item.itemKind === "armor" || item.itemKind === "shield") &&
+        item.armorTypeId
+    ) {
+        const def = getArmorTypeById(item.armorTypeId);
+        const name = def?.name ?? item.armorTypeId;
+        return magic > 0 ? `${name} +${magic}` : name;
+    }
+    return formatItemBonusLabel(
+        item.bonusStat as ItemBonusStat | undefined,
+        item.bonusValue ?? undefined
+    );
+}
+
+export function formatCustomInventoryBonusLabel(
+    item: Pick<
+        CustomInventoryItem,
+        "itemKind" | "armorTypeId" | "magicBonus" | "itemBonus"
+    >
+): string | null {
+    const magic = Math.floor(Number(item.magicBonus) || 0);
+    if (item.itemKind === "weapon" && magic > 0) {
+        return `Arma +${magic}`;
+    }
+    if (
+        (item.itemKind === "armor" || item.itemKind === "shield") &&
+        item.armorTypeId
+    ) {
+        const def = getArmorTypeById(item.armorTypeId);
+        const name = def?.name ?? item.armorTypeId;
+        return magic > 0 ? `${name} +${magic}` : name;
+    }
+    return formatItemBonusLabel(item.itemBonus?.stat, item.itemBonus?.value);
 }
 
 export function parseItemBonusFields(

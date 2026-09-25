@@ -8,6 +8,7 @@ import {
     normalizeActiveSlots,
     normalizeAttunedSlots,
 } from "./equipmentSlots";
+import { customItemHasStructuredArmor } from "./equippedArmor";
 
 const ZERO_BONUSES: Record<ItemBonusStat, number> = {
     ac: 0,
@@ -45,6 +46,7 @@ export function resolveSlotItemBonus(
         const item = (data.equipment.customItems ?? []).find(
             (entry) => entry.id === ref.customItemId
         );
+        if (customItemHasStructuredArmor(item)) return null;
         if (!item?.itemBonus?.stat || !item.itemBonus.value) return null;
         return item.itemBonus;
     }

@@ -27,8 +27,17 @@ import { monsterPortraitUrl } from "../../data/dnd/monsterPortrait";
 import { hitPointsFromSheet } from "../../utils/characterCombat";
 import { kilogramsToPounds } from "../../data/dnd/equipment";
 import { grantCustomItem } from "../../services/character.service";
-import { parseItemBonusFields } from "../../data/itemBonus";
+import { buildMasterItemPayload } from "../../data/masterItemPayload";
+import {
+  getArmorTypeById,
+  suggestMasterItemName,
+} from "../../data/dnd/armorCatalog";
+import { poundsToKilograms } from "../../data/dnd/equipment";
 import { ItemBonusFields } from "../character/ItemBonusFields";
+import {
+  MasterItemTypeFields,
+  type MasterItemTypeFieldValues,
+} from "../character/MasterItemTypeFields";
 import { RequiresAttunementField } from "../character/RequiresAttunementField";
 import type { ItemBonusStat } from "../../types/character";
 import type { BoardTool } from "./GameBoard";
@@ -247,6 +256,12 @@ export function MasterPanel({
   const [itemImageUrl, setItemImageUrl] = useState("");
   const [itemBonusStat, setItemBonusStat] = useState<ItemBonusStat | "">("");
   const [itemBonusValue, setItemBonusValue] = useState("");
+  const [masterItemFields, setMasterItemFields] =
+    useState<MasterItemTypeFieldValues>({
+      itemKind: "accessory",
+      armorTypeId: "",
+      magicBonus: 0,
+    });
   const [itemRequiresAttunement, setItemRequiresAttunement] = useState(false);
   const [grantingItem, setGrantingItem] = useState(false);
   const [grantItemMessage, setGrantItemMessage] = useState("");
@@ -657,7 +672,18 @@ export function MasterPanel({
         : undefined;
     setGrantingItem(true);
     setGrantItemMessage("");
-    const parsedBonus = parseItemBonusFields(itemBonusStat, itemBonusValue);
+    let masterPayload;
+    try {
+      masterPayload = buildMasterItemPayload({
+        ...masterItemFields,
+        accessoryBonusStat: itemBonusStat,
+        accessoryBonusValue: itemBonusValue,
+      });
+    } catch {
+      window.alert("Selecione o modelo de armadura.");
+      setGrantingItem(false);
+      return;
+    }
 
     try {
       const imageUrl = itemImageUrl.trim() || undefined;
@@ -667,7 +693,15 @@ export function MasterPanel({
         quantity,
         ...(weight != null ? { weight } : {}),
         ...(imageUrl ? { imageUrl } : {}),
-        ...(parsedBonus ? { itemBonus: parsedBonus } : {}),
+        ...(masterPayload.category ? { category: masterPayload.category } : {}),
+        ...(masterPayload.itemKind ? { itemKind: masterPayload.itemKind } : {}),
+        ...(masterPayload.armorTypeId
+          ? { armorTypeId: masterPayload.armorTypeId }
+          : {}),
+        ...(masterPayload.magicBonus != null
+          ? { magicBonus: masterPayload.magicBonus }
+          : {}),
+        ...(masterPayload.itemBonus ? { itemBonus: masterPayload.itemBonus } : {}),
         ...(itemRequiresAttunement ? { requiresAttunement: true } : {}),
       });
       onCharacterUpdated?.({
@@ -688,6 +722,11 @@ export function MasterPanel({
       setItemImageUrl("");
       setItemBonusStat("");
       setItemBonusValue("");
+      setMasterItemFields({
+        itemKind: "accessory",
+        armorTypeId: "",
+        magicBonus: 0,
+      });
       setItemRequiresAttunement(false);
       setGrantItemMessage(`“${name}” adicionado ao inventário de ${updated.name}.`);
     } catch (error: unknown) {
@@ -2134,13 +2173,48 @@ export function MasterPanel({
                   />
                 </label>
               </div>
-              <ItemBonusFields
-                stat={itemBonusStat}
-                value={itemBonusValue}
-                onStatChange={setItemBonusStat}
-                onValueChange={setItemBonusValue}
+              <MasterItemTypeFields
+                values={masterItemFields}
+                onChange={(patch) => {
+                  setMasterItemFields((prev) => {
+                    const next = { ...prev, ...patch };
+                    if (
+                      (next.itemKind === "armor" || next.itemKind === "shield") &&
+                      next.armorTypeId
+                    ) {
+                      const suggested = suggestMasterItemName(
+                        next.armorTypeId,
+                        next.magicBonus
+                      );
+                      if (suggested) {
+                        setItemName((current) =>
+                          current.trim() === "" ? suggested : current
+                        );
+                      }
+                      const def = getArmorTypeById(next.armorTypeId);
+                      if (def?.weightLb != null) {
+                        const kg = poundsToKilograms(def.weightLb);
+                        setItemWeight((current) =>
+                          current.trim() === ""
+                            ? String(Math.round(kg * 10) / 10)
+                            : current
+                        );
+                      }
+                    }
+                    return next;
+                  });
+                }}
                 className="mb-2"
               />
+              {masterItemFields.itemKind === "accessory" ? (
+                <ItemBonusFields
+                  stat={itemBonusStat}
+                  value={itemBonusValue}
+                  onStatChange={setItemBonusStat}
+                  onValueChange={setItemBonusValue}
+                  className="mb-2"
+                />
+              ) : null}
               <RequiresAttunementField
                 checked={itemRequiresAttunement}
                 onChange={setItemRequiresAttunement}

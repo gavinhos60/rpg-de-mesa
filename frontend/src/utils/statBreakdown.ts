@@ -24,16 +24,21 @@ import type {
 } from "../types/character";
 import {
     applyAbilityEquipmentBonus,
-    getEquippedCatalogItemIds,
     resolveSlotItemBonus,
     sumEquipmentBonuses,
     getEquippedSlotRefs,
 } from "./equipmentBonuses";
 import { resolveSlotEntry } from "./equipmentSlots";
+import {
+    customItemHasStructuredArmor,
+    getEquippedArmorStealthDisadvantage,
+    resolveEquippedArmorState,
+} from "./equippedArmor";
 
 export type StatBreakdownLine =
     | { kind: "base"; label: string; value: number }
-    | { kind: "delta"; label: string; delta: number };
+    | { kind: "delta"; label: string; delta: number }
+    | { kind: "note"; label: string };
 
 function formatSigned(delta: number): string {
     return delta >= 0 ? `+${delta}` : `${delta}`;
@@ -43,7 +48,19 @@ export function formatBreakdownLine(line: StatBreakdownLine): string {
     if (line.kind === "base") {
         return `${line.label}: ${line.value}`;
     }
+    if (line.kind === "note") {
+        return line.label;
+    }
     return `${line.label}: ${formatSigned(line.delta)}`;
+}
+
+export function sumStatBreakdownLines(lines: StatBreakdownLine[]): number {
+    let total = 0;
+    for (const line of lines) {
+        if (line.kind === "base") total += line.value;
+        else if (line.kind === "delta") total += line.delta;
+    }
+    return total;
 }
 
 function addFeatBonusLines(
@@ -239,37 +256,39 @@ export function getArmorClassBreakdown(
     const primaryClass = data.classes[0]
         ? DND_CLASSES.find((item) => item.id === data.classes[0].classId)
         : undefined;
-    const itemIds = getEquippedCatalogItemIds(data);
     const { dexterity, wisdom, constitution } = getEffectiveAbilities(data);
 
     const dexMod = getAbilityModifier(dexterity);
     const wisMod = getAbilityModifier(wisdom);
     const conMod = getAbilityModifier(constitution);
-    const hasShield =
-        itemIds.includes("shield") || itemIds.includes("wooden-shield");
 
-    if (itemIds.includes("chain-mail")) {
-        lines.push({ kind: "base", label: "Cota de malha", value: 16 });
-    } else if (itemIds.includes("scale-mail")) {
-        lines.push({ kind: "base", label: "Brunea (base 14)", value: 14 });
-        const dexPart = Math.min(2, dexMod);
-        if (dexPart !== 0) {
+    const { body, shield, monkShieldBlocksUnarmored } =
+        resolveEquippedArmorState(data, primaryClass, dexMod);
+
+    if (body) {
+        lines.push({
+            kind: "base",
+            label: `${body.label} (base ${body.def.baseAc})`,
+            value: body.def.baseAc,
+        });
+        if (body.dexPart !== 0) {
             lines.push({
                 kind: "delta",
-                label: "Modificador de Destreza (máx. +2)",
-                delta: dexPart,
+                label:
+                    body.def.dexMode === "max2"
+                        ? "Modificador de Destreza (máx. +2)"
+                        : "Modificador de Destreza",
+                delta: body.dexPart,
             });
         }
-    } else if (itemIds.includes("leather-armor")) {
-        lines.push({ kind: "base", label: "Armadura de couro (base 11)", value: 11 });
-        if (dexMod !== 0) {
+        if (body.magicBonus > 0) {
             lines.push({
                 kind: "delta",
-                label: "Modificador de Destreza",
-                delta: dexMod,
+                label: `Bônus mágico (+${body.magicBonus})`,
+                delta: body.magicBonus,
             });
         }
-    } else if (primaryClass?.id === "monk" && hasShield) {
+    } else if (monkShieldBlocksUnarmored) {
         lines.push({ kind: "base", label: "Sem armadura (escudo anula monge)", value: 10 });
         if (dexMod !== 0) {
             lines.push({
@@ -321,13 +340,26 @@ export function getArmorClassBreakdown(
         }
     }
 
-    if (hasShield) {
-        lines.push({ kind: "delta", label: "Escudo", delta: 2 });
+    if (shield) {
+        lines.push({ kind: "delta", label: "Escudo (base +2)", delta: 2 });
+        if (shield.magicBonus > 0) {
+            lines.push({
+                kind: "delta",
+                label: `Bônus mágico do escudo (+${shield.magicBonus})`,
+                delta: shield.magicBonus,
+            });
+        }
     }
 
     for (const ref of getEquippedSlotRefs(data)) {
         const bonus = resolveSlotItemBonus(data, ref);
         if (!bonus || bonus.stat !== "ac") continue;
+        if (ref.kind === "custom") {
+            const custom = (data.equipment.customItems ?? []).find(
+                (entry) => entry.id === ref.customItemId
+            );
+            if (customItemHasStructuredArmor(custom)) continue;
+        }
         const entry = resolveSlotEntry(data, ref);
         lines.push({
             kind: "delta",
@@ -436,6 +468,16 @@ export function getSkillStatBreakdown(
             label: "Caminho do Macaco (Sabedoria)",
             delta: extra,
         });
+    }
+
+    if (skillId === "stealth") {
+        const stealthPenalty = getEquippedArmorStealthDisadvantage(data);
+        if (stealthPenalty) {
+            lines.push({
+                kind: "note",
+                label: `Desvantagem em testes de Furtividade (${stealthPenalty.armorLabel})`,
+            });
+        }
     }
 
     return lines;

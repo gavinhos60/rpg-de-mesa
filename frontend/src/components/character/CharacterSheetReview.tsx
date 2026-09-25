@@ -87,6 +87,7 @@ import {
     getArmorClassBreakdown,
     getSkillStatBreakdown,
 } from "../../utils/statBreakdown";
+import { getEquippedArmorStealthDisadvantage } from "../../utils/equippedArmor";
 
 interface CharacterSheetReviewProps {
     data: CharacterFormData;
@@ -308,6 +309,10 @@ export function CharacterSheetReview({
                     getSkillStatBreakdown(data, skill.id),
                 ])
             ) as Record<Skill, ReturnType<typeof getSkillStatBreakdown>>,
+        [data]
+    );
+    const stealthArmorDisadvantage = useMemo(
+        () => getEquippedArmorStealthDisadvantage(data),
         [data]
     );
     const coinCount = totalCoinCount(wallet);
@@ -627,6 +632,13 @@ export function CharacterSheetReview({
                                 proficientSkills.has("perception"),
                                 proficiencyBonus
                             )} • Carga {formatMetricWeight(carryingCapacity)}
+                            {stealthArmorDisadvantage ? (
+                                <>
+                                    {" "}
+                                    • Furtividade com desvantagem (
+                                    {stealthArmorDisadvantage.armorLabel})
+                                </>
+                            ) : null}
                         </p>
                     </section>
 
@@ -667,6 +679,18 @@ export function CharacterSheetReview({
                                             <span className="ml-1 text-xs text-[var(--color-ink-soft)]">
                                                 {ability?.shortName}
                                             </span>
+                                            {skill.id === "stealth" &&
+                                            stealthArmorDisadvantage ? (
+                                                <span
+                                                    className="ml-1.5 text-[10px] uppercase tracking-wide"
+                                                    style={{
+                                                        color: "var(--color-crimson)",
+                                                    }}
+                                                    title={`Desvantagem por ${stealthArmorDisadvantage.armorLabel}`}
+                                                >
+                                                    Desv.
+                                                </span>
+                                            ) : null}
                                         </span>
                                         <span style={cinzel}>
                                             {formatModifier(modifier)}

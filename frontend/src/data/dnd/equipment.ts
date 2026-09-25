@@ -179,6 +179,11 @@ export function kilogramsToPounds(kg: number): number {
   return kg / KG_PER_POUND;
 }
 
+export function poundsToKilograms(pounds: number): number {
+  if (!Number.isFinite(pounds) || pounds <= 0) return 0;
+  return pounds * KG_PER_POUND;
+}
+
 export function formatMetricWeight(pounds: number): string {
     const grams = pounds * GRAMS_PER_POUND;
 

@@ -1,4 +1,4 @@
-import { formatItemBonusLabel } from "../data/itemBonus";
+import { formatCustomInventoryBonusLabel } from "../data/itemBonus";
 import { DND_CLASSES } from "../data/dnd/classes";
 import { getEquipmentItem } from "../data/dnd/equipment";
 import { getEquipmentImageUrl } from "../data/dnd/equipmentImages";
@@ -137,10 +137,7 @@ export function buildPickableInventory(
             name: item.name,
             quantity: item.quantity,
             imageUrl: item.imageUrl,
-            bonusLabel: formatItemBonusLabel(
-                item.itemBonus?.stat,
-                item.itemBonus?.value
-            ),
+            bonusLabel: formatCustomInventoryBonusLabel(item),
             requiresAttunement: Boolean(item.requiresAttunement),
         }));
     return [...catalog, ...custom];

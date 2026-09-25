@@ -9,9 +9,22 @@ import {
   updateShop,
   updateShopItem,
 } from "../../services/mercado.service";
-import { kilogramsToPounds, formatMetricWeight } from "../../data/dnd/equipment";
-import { formatItemBonusLabel, parseItemBonusFields } from "../../data/itemBonus";
+import {
+  kilogramsToPounds,
+  poundsToKilograms,
+  formatMetricWeight,
+} from "../../data/dnd/equipment";
+import { buildMasterItemPayload } from "../../data/masterItemPayload";
+import {
+  getArmorTypeById,
+  suggestMasterItemName,
+} from "../../data/dnd/armorCatalog";
+import { formatShopItemBonusLabel } from "../../data/itemBonus";
 import { ItemBonusFields } from "../character/ItemBonusFields";
+import {
+  MasterItemTypeFields,
+  type MasterItemTypeFieldValues,
+} from "../character/MasterItemTypeFields";
 import { RequiresAttunementField } from "../character/RequiresAttunementField";
 import type { ItemBonusStat } from "../../types/character";
 import { DeliverItemModal } from "./DeliverItemModal";
@@ -22,18 +35,6 @@ const fieldStyle = {
   borderColor: "var(--color-border)",
   color: "var(--color-ink)",
 } as const;
-
-const CATEGORIES = [
-  { value: "weapon", label: "Arma" },
-  { value: "armor", label: "Armadura" },
-  { value: "shield", label: "Escudo" },
-  { value: "ammunition", label: "Munição" },
-  { value: "pack", label: "Pacote" },
-  { value: "tool", label: "Ferramenta" },
-  { value: "focus", label: "Foco" },
-  { value: "gear", label: "Equipamento" },
-  { value: "accessory", label: "Acessório" },
-] as const;
 
 interface MercadoMasterModalProps {
   campaignId: number;
@@ -66,7 +67,12 @@ export function MercadoMasterModal({
 
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("50 PO");
-  const [itemCategory, setItemCategory] = useState<string>("gear");
+  const [masterItemFields, setMasterItemFields] =
+    useState<MasterItemTypeFieldValues>({
+      itemKind: "accessory",
+      armorTypeId: "",
+      magicBonus: 0,
+    });
   const [itemDescription, setItemDescription] = useState("");
   const [itemQty, setItemQty] = useState("1");
   const [itemUnlimited, setItemUnlimited] = useState(false);
@@ -144,20 +150,40 @@ export function MercadoMasterModal({
         ? kilogramsToPounds(weightParsed)
         : undefined;
 
-    const parsedBonus = parseItemBonusFields(itemBonusStat, itemBonusValue);
+    let masterPayload;
+    try {
+      masterPayload = buildMasterItemPayload({
+        ...masterItemFields,
+        accessoryBonusStat: itemBonusStat,
+        accessoryBonusValue: itemBonusValue,
+      });
+    } catch {
+      onMessage?.("Selecione o modelo de armadura.");
+      return;
+    }
 
     try {
       setBusy(true);
       await createShopItem(campaignId, selectedShop.id, {
         name: itemName.trim(),
         price: itemPrice.trim() || "—",
-        category: itemCategory,
+        category: masterPayload.category ?? "gear",
         description: itemDescription.trim() || null,
         imageUrl: itemImageUrl.trim() || null,
         ...(weight != null ? { weight } : {}),
-        ...(parsedBonus
-          ? { bonusStat: parsedBonus.stat, bonusValue: parsedBonus.value }
+        ...(masterPayload.itemBonus
+          ? {
+              bonusStat: masterPayload.itemBonus.stat,
+              bonusValue: masterPayload.itemBonus.value,
+            }
           : { bonusStat: null, bonusValue: null }),
+        ...(masterPayload.itemKind ? { itemKind: masterPayload.itemKind } : {}),
+        ...(masterPayload.armorTypeId
+          ? { armorTypeId: masterPayload.armorTypeId }
+          : {}),
+        ...(masterPayload.magicBonus != null
+          ? { magicBonus: masterPayload.magicBonus }
+          : {}),
         requiresAttunement: itemRequiresAttunement,
         unlimitedStock: itemUnlimited,
         quantity: itemUnlimited
@@ -169,6 +195,11 @@ export function MercadoMasterModal({
       setItemDescription("");
       setItemBonusStat("");
       setItemBonusValue("");
+      setMasterItemFields({
+        itemKind: "accessory",
+        armorTypeId: "",
+        magicBonus: 0,
+      });
       setItemRequiresAttunement(false);
       setItemWeight("");
       setItemImageUrl("");
@@ -422,27 +453,46 @@ export function MercadoMasterModal({
                         className="w-full border px-2 py-1 text-sm outline-none"
                         style={fieldStyle}
                       />
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <input
-                          value={itemPrice}
-                          onChange={(e) => setItemPrice(e.target.value)}
-                          placeholder="Preço"
-                          className="border px-2 py-1 text-sm outline-none"
-                          style={fieldStyle}
-                        />
-                        <select
-                          value={itemCategory}
-                          onChange={(e) => setItemCategory(e.target.value)}
-                          className="border px-2 py-1 text-sm outline-none"
-                          style={fieldStyle}
-                        >
-                          {CATEGORIES.map((c) => (
-                            <option key={c.value} value={c.value}>
-                              {c.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <input
+                        value={itemPrice}
+                        onChange={(e) => setItemPrice(e.target.value)}
+                        placeholder="Preço"
+                        className="w-full border px-2 py-1 text-sm outline-none"
+                        style={fieldStyle}
+                      />
+                      <MasterItemTypeFields
+                        values={masterItemFields}
+                        onChange={(patch) => {
+                          setMasterItemFields((prev) => {
+                            const next = { ...prev, ...patch };
+                            if (
+                              (next.itemKind === "armor" ||
+                                next.itemKind === "shield") &&
+                              next.armorTypeId
+                            ) {
+                              const suggested = suggestMasterItemName(
+                                next.armorTypeId,
+                                next.magicBonus
+                              );
+                              if (suggested) {
+                                setItemName((current) =>
+                                  current.trim() === "" ? suggested : current
+                                );
+                              }
+                              const def = getArmorTypeById(next.armorTypeId);
+                              if (def?.weightLb != null) {
+                                const kg = poundsToKilograms(def.weightLb);
+                                setItemWeight((current) =>
+                                  current.trim() === ""
+                                    ? String(Math.round(kg * 10) / 10)
+                                    : current
+                                );
+                              }
+                            }
+                            return next;
+                          });
+                        }}
+                      />
                       <label className="block text-[10px] text-[var(--color-ink-soft)]">
                         Peso (kg)
                         <input
@@ -487,13 +537,15 @@ export function MercadoMasterModal({
                         className="w-full border px-2 py-1 text-sm outline-none"
                         style={fieldStyle}
                       />
-                      <ItemBonusFields
-                        stat={itemBonusStat}
-                        value={itemBonusValue}
-                        onStatChange={setItemBonusStat}
-                        onValueChange={setItemBonusValue}
-                        className="mt-1.5"
-                      />
+                      {masterItemFields.itemKind === "accessory" ? (
+                        <ItemBonusFields
+                          stat={itemBonusStat}
+                          value={itemBonusValue}
+                          onStatChange={setItemBonusStat}
+                          onValueChange={setItemBonusValue}
+                          className="mt-1.5"
+                        />
+                      ) : null}
                       <RequiresAttunementField
                         checked={itemRequiresAttunement}
                         onChange={setItemRequiresAttunement}
@@ -577,15 +629,9 @@ export function MercadoMasterModal({
                                 {item.description}
                               </p>
                             ) : null}
-                            {formatItemBonusLabel(
-                              item.bonusStat as ItemBonusStat | undefined,
-                              item.bonusValue ?? undefined
-                            ) ? (
+                            {formatShopItemBonusLabel(item) ? (
                               <p className="text-[10px] text-[var(--color-crimson)]">
-                                {formatItemBonusLabel(
-                                  item.bonusStat as ItemBonusStat | undefined,
-                                  item.bonusValue ?? undefined
-                                )}
+                                {formatShopItemBonusLabel(item)}
                               </p>
                             ) : null}
                             <div className="mt-1.5 flex flex-wrap gap-1">

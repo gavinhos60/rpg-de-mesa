@@ -335,6 +335,9 @@ export async function grantCustomItemToCharacter(
     category?: string;
     imageUrl?: string;
     itemBonus?: ItemBonus;
+    itemKind?: string;
+    armorTypeId?: string;
+    magicBonus?: number;
     requiresAttunement?: boolean;
   },
   options?: {
@@ -384,6 +387,9 @@ export async function grantCustomItemToCharacter(
       ? weightRaw
       : undefined;
   const itemBonus = parseItemBonus(item.itemBonus);
+  const itemKind = parseOptionalItemKind(item.itemKind);
+  const armorTypeId = parseOptionalArmorTypeId(item.armorTypeId);
+  const magicBonus = parseMagicBonus(item.magicBonus);
   const requiresAttunement = Boolean(item.requiresAttunement);
 
   const master = await prisma.user.findUnique({
@@ -439,6 +445,9 @@ export async function grantCustomItemToCharacter(
     if (category) merged.category = category;
     if (imageUrl) merged.imageUrl = imageUrl;
     if (itemBonus) merged.itemBonus = itemBonus;
+    if (itemKind) merged.itemKind = itemKind;
+    if (armorTypeId) merged.armorTypeId = armorTypeId;
+    if (magicBonus != null) merged.magicBonus = magicBonus;
     if (requiresAttunement) merged.requiresAttunement = true;
     if (master?.name) merged.grantedByName = master.name;
     const nextCustom = [...existingCustom];
@@ -455,6 +464,9 @@ export async function grantCustomItemToCharacter(
     if (category) customItem.category = category;
     if (imageUrl) customItem.imageUrl = imageUrl;
     if (itemBonus) customItem.itemBonus = itemBonus;
+    if (itemKind) customItem.itemKind = itemKind;
+    if (armorTypeId) customItem.armorTypeId = armorTypeId;
+    if (magicBonus != null) customItem.magicBonus = magicBonus;
     if (requiresAttunement) customItem.requiresAttunement = true;
     if (master?.name) customItem.grantedByName = master.name;
     equipment.customItems = [...existingCustom, customItem];
@@ -505,6 +517,9 @@ type CustomItem = {
   category?: string;
   imageUrl?: string;
   itemBonus?: ItemBonus;
+  itemKind?: string;
+  armorTypeId?: string;
+  magicBonus?: number;
   requiresAttunement?: boolean;
   grantedByName?: string;
 };
@@ -527,6 +542,30 @@ function parseItemBonus(raw: unknown): ItemBonus | undefined {
   if (!VALID_ITEM_BONUS_STATS.has(stat)) return undefined;
   if (!Number.isFinite(value) || value < 1 || value > 10) return undefined;
   return { stat, value };
+}
+
+const VALID_ITEM_KINDS = new Set([
+  "weapon",
+  "armor",
+  "shield",
+  "accessory",
+]);
+
+function parseOptionalItemKind(raw: unknown): string | undefined {
+  const value = String(raw ?? "").trim();
+  return VALID_ITEM_KINDS.has(value) ? value : undefined;
+}
+
+function parseOptionalArmorTypeId(raw: unknown): string | undefined {
+  const value = String(raw ?? "").trim();
+  return value || undefined;
+}
+
+function parseMagicBonus(raw: unknown): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  const value = Math.floor(Number(raw));
+  if (!Number.isFinite(value) || value < 0 || value > 3) return undefined;
+  return value;
 }
 
 const characterInclude = {
@@ -602,6 +641,12 @@ function asCustomItems(value: unknown): CustomItem[] {
       if (grantedByName) next.grantedByName = grantedByName;
       const itemBonus = parseItemBonus(row.itemBonus);
       if (itemBonus) next.itemBonus = itemBonus;
+      const itemKind = parseOptionalItemKind(row.itemKind);
+      if (itemKind) next.itemKind = itemKind;
+      const armorTypeId = parseOptionalArmorTypeId(row.armorTypeId);
+      if (armorTypeId) next.armorTypeId = armorTypeId;
+      const magicBonus = parseMagicBonus(row.magicBonus);
+      if (magicBonus != null) next.magicBonus = magicBonus;
       if (row.requiresAttunement === true) {
         next.requiresAttunement = true;
       }

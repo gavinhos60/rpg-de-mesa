@@ -29,6 +29,7 @@ import {
     getSkillProficiencySourceLabels,
     getSkillStatBreakdown,
 } from "../../utils/statBreakdown";
+import { getEquippedArmorStealthDisadvantage } from "../../utils/equippedArmor";
 import { getLanguageOptions } from "./CharacterTalentChoices";
 import { StatBreakdownTooltip } from "./StatBreakdownTooltip";
 import {
@@ -128,6 +129,8 @@ export function CharacterSkills({
     }
 
     const passivePerception = 10 + getSkillModifier("perception");
+    const stealthArmorDisadvantage =
+        getEquippedArmorStealthDisadvantage(data);
 
     function toggleClassSkill(skill: Skill) {
         if (!classSkillOptions) {
@@ -291,7 +294,17 @@ export function CharacterSkills({
                         </div>
 
                         <div>
-                            <p className="text-[var(--color-ink)]" style={cinzel}>{skillData.name}</p>
+                            <p className="text-[var(--color-ink)]" style={cinzel}>
+                                {skillData.name}
+                                {skill === "stealth" && stealthArmorDisadvantage ? (
+                                    <span
+                                        className="ml-1.5 text-[10px] uppercase text-[var(--color-crimson)]"
+                                        title={`Desvantagem por ${stealthArmorDisadvantage.armorLabel}`}
+                                    >
+                                        Desv.
+                                    </span>
+                                ) : null}
+                            </p>
                             <p className="text-xs text-[var(--color-ink-soft)]">{ability?.shortName}</p>
                         </div>
                     </div>

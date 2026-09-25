@@ -294,6 +294,12 @@ export async function grantCustomItemController(req: Request, res: Response) {
         category: req.body.category,
         imageUrl: req.body.imageUrl,
         itemBonus: req.body.itemBonus,
+        itemKind: req.body.itemKind,
+        armorTypeId: req.body.armorTypeId,
+        magicBonus:
+          req.body.magicBonus != null
+            ? Number(req.body.magicBonus)
+            : undefined,
         requiresAttunement: req.body.requiresAttunement,
       }
     );

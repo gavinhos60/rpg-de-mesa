@@ -298,6 +298,12 @@ export interface CharacterEquipmentData {
     removedItems?: EquipmentStack[];
 }
 
+export type MasterItemKind =
+    | "weapon"
+    | "armor"
+    | "shield"
+    | "accessory";
+
 export interface CustomInventoryItem {
     id: string;
     name: string;
@@ -309,6 +315,12 @@ export interface CustomInventoryItem {
     /** Quem concedeu o item (opcional). */
     grantedByName?: string;
     itemBonus?: ItemBonus;
+    /** Tipo escolhido pelo mestre (mercado / painel). */
+    itemKind?: MasterItemKind;
+    /** Id em `armorCatalog` (armadura ou escudo). */
+    armorTypeId?: string;
+    /** Bônus mágico +1 / +2 / +3 (armadura, escudo, arma). */
+    magicBonus?: number;
     /** Só pode ir em equipamentos mágicos sintonizados. */
     requiresAttunement?: boolean;
 }

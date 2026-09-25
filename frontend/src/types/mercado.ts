@@ -11,6 +11,9 @@ export interface ShopItem {
   extraInfo?: string | null;
   bonusStat?: string | null;
   bonusValue?: number | null;
+  itemKind?: string | null;
+  armorTypeId?: string | null;
+  magicBonus?: number | null;
   requiresAttunement?: boolean;
   weight?: number | null;
   available: boolean;
@@ -65,6 +68,9 @@ export interface ShopItemInput {
   extraInfo?: string | null;
   bonusStat?: string | null;
   bonusValue?: number | null;
+  itemKind?: string | null;
+  armorTypeId?: string | null;
+  magicBonus?: number | null;
   requiresAttunement?: boolean;
   weight?: number | null;
   available?: boolean;

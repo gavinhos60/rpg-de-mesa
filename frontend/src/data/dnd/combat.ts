@@ -6,11 +6,9 @@ import type {
 
 import { getAbilityModifier } from "./abilities";
 import {
-    getEquippedCatalogItemIds,
-    sumEquipmentBonuses,
-} from "../../utils/equipmentBonuses";
-import { getFinalAbilities } from "./characterStats";
-import { DND_CLASSES } from "./classes";
+    getArmorClassBreakdown,
+    sumStatBreakdownLines,
+} from "../../utils/statBreakdown";
 
 export function getHitDie(
     characterClass: CharacterClass
@@ -106,21 +104,7 @@ export function getArmorClassFromEquipment(
 }
 
 export function getCharacterArmorClass(data: CharacterFormData): number {
-    const primaryClass = data.classes[0]
-        ? DND_CLASSES.find((item) => item.id === data.classes[0].classId)
-        : undefined;
-    const abilities = getFinalAbilities(data);
-    const equippedIds = getEquippedCatalogItemIds(data);
-    const equipmentBonuses = sumEquipmentBonuses(data);
-    return (
-        getArmorClassFromEquipment(
-            abilities.dexterity,
-            abilities.wisdom,
-            abilities.constitution,
-            primaryClass,
-            equippedIds
-        ) + equipmentBonuses.ac
-    );
+    return sumStatBreakdownLines(getArmorClassBreakdown(data));
 }
 
 export function getSavingThrowModifier(

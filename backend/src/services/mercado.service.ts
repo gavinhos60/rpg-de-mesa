@@ -64,6 +64,13 @@ function parseItemWeight(value: unknown): number | null | undefined {
   return n;
 }
 
+function parseShopMagicBonus(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n < 0 || n > 3) return null;
+  return n;
+}
+
 async function broadcastShops(campaignId: number) {
   const shops = await prisma.shop.findMany({
     where: { campaignId, isOpen: true },
@@ -259,6 +266,9 @@ export async function createShopItem(
     extraInfo?: string | null;
     bonusStat?: string | null;
     bonusValue?: number | null;
+    itemKind?: string | null;
+    armorTypeId?: string | null;
+    magicBonus?: number | null;
     requiresAttunement?: boolean;
     weight?: number | null;
     available?: boolean;
@@ -309,6 +319,15 @@ export async function createShopItem(
           : null,
       bonusStat: bonus?.bonusStat ?? null,
       bonusValue: bonus?.bonusValue ?? null,
+      itemKind:
+        data.itemKind != null
+          ? String(data.itemKind).trim() || null
+          : null,
+      armorTypeId:
+        data.armorTypeId != null
+          ? String(data.armorTypeId).trim() || null
+          : null,
+      magicBonus: parseShopMagicBonus(data.magicBonus),
       requiresAttunement: Boolean(data.requiresAttunement),
       ...(weight !== undefined ? { weight } : {}),
       available: data.available != null ? Boolean(data.available) : true,
@@ -338,6 +357,9 @@ export async function updateShopItem(
     extraInfo?: string | null;
     bonusStat?: string | null;
     bonusValue?: number | null;
+    itemKind?: string | null;
+    armorTypeId?: string | null;
+    magicBonus?: number | null;
     requiresAttunement?: boolean;
     weight?: number | null;
     available?: boolean;
@@ -391,6 +413,19 @@ export async function updateShopItem(
     );
     update.bonusStat = bonus?.bonusStat ?? null;
     update.bonusValue = bonus?.bonusValue ?? null;
+  }
+  if (data.itemKind !== undefined) {
+    update.itemKind =
+      data.itemKind == null ? null : String(data.itemKind).trim() || null;
+  }
+  if (data.armorTypeId !== undefined) {
+    update.armorTypeId =
+      data.armorTypeId == null
+        ? null
+        : String(data.armorTypeId).trim() || null;
+  }
+  if (data.magicBonus !== undefined) {
+    update.magicBonus = parseShopMagicBonus(data.magicBonus);
   }
   if (data.weight !== undefined) {
     update.weight = parseItemWeight(data.weight);
@@ -529,6 +564,9 @@ export async function deliverShopItem(
             },
           }
         : {}),
+      ...(item.itemKind ? { itemKind: item.itemKind } : {}),
+      ...(item.armorTypeId ? { armorTypeId: item.armorTypeId } : {}),
+      ...(item.magicBonus != null ? { magicBonus: item.magicBonus } : {}),
       ...(item.requiresAttunement ? { requiresAttunement: true } : {}),
     },
     { skipMasterCheck: true }

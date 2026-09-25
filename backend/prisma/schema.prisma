@@ -133,6 +133,9 @@ model ShopItem {
   extraInfo      String?
   bonusStat      String?
   bonusValue     Int?
+  itemKind       String?
+  armorTypeId    String?
+  magicBonus     Int?
   requiresAttunement Boolean @default(false)
   weight         Float?
   available      Boolean        @default(true)
