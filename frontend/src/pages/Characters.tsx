@@ -5,6 +5,7 @@ import {
     ScrollIcon,
     RibbonButton,
 } from "../components/icons/MedievalIcons";
+import { GenerateCharacterModal } from "../components/GenerateCharacterModal";
 import {
     deleteCharacter,
     getMyCharacters,
@@ -16,6 +17,7 @@ export function Characters() {
     const [characters, setCharacters] = useState<SavedCharacter[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [showGenerateModal, setShowGenerateModal] = useState(false);
 
     async function load() {
         try {
@@ -76,10 +78,34 @@ export function Characters() {
                         </p>
                     </div>
 
-                    <RibbonButton onClick={() => navigate("/characters/new")}>
-                        Novo personagem
-                    </RibbonButton>
+                    <div className="flex flex-wrap gap-2">
+                        <RibbonButton onClick={() => navigate("/characters/new")}>
+                            Novo personagem
+                        </RibbonButton>
+                        <button
+                            type="button"
+                            onClick={() => setShowGenerateModal(true)}
+                            className="border px-4 py-2 text-sm text-[var(--color-ink)] transition-colors hover:border-[var(--color-crimson)]"
+                            style={{
+                                fontFamily: "'Cinzel', serif",
+                                borderColor: "var(--color-border-strong)",
+                                backgroundColor: "var(--color-parchment)",
+                            }}
+                        >
+                            Gerar personagem
+                        </button>
+                    </div>
                 </div>
+
+                {showGenerateModal ? (
+                    <GenerateCharacterModal
+                        onClose={() => setShowGenerateModal(false)}
+                        onCreated={(characterId) => {
+                            void load();
+                            navigate(`/characters/${characterId}`);
+                        }}
+                    />
+                ) : null}
 
                 {loading && (
                     <p className="text-[var(--color-ink-muted)]">Carregando fichas...</p>
