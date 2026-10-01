@@ -423,6 +423,8 @@ export interface CharacterFormData {
     hitPoints: number | null;
     asiSelections: Record<string, AsiSelection>;
     featureChoices: Record<string, string[]>;
+    /** Nomes exibidos customizados para traços/habilidades (chave = id estável da habilidade). */
+    abilityDisplayNames?: Record<string, string>;
     /** XP acumulado do personagem. */
     xp?: number;
     /** Recursos de combate: ki, fúrias, espaços gastos etc. */

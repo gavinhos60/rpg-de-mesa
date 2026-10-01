@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type {
     Ability,
     CharacterBackground,
@@ -115,6 +115,10 @@ interface CharacterSheetReviewProps {
         onUpdateXp: (xp: number) => Promise<void>;
         onLevelUp: (data: CharacterFormData) => Promise<void>;
     };
+    /** Renomear traços/habilidades na ficha (persistido na sheet). */
+    onChange?: Dispatch<SetStateAction<CharacterFormData>>;
+    allowAbilityNameEdit?: boolean;
+    onPersistAbilityNames?: (data: CharacterFormData) => Promise<void>;
 }
 
 const ALIGNMENT_NAMES: Record<string, string> = {
@@ -162,7 +166,36 @@ export function CharacterSheetReview({
     canRoll = false,
     inventoryManage,
     xpManage,
+    onChange,
+    allowAbilityNameEdit = false,
+    onPersistAbilityNames,
 }: CharacterSheetReviewProps) {
+    const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    function handleAbilityDataChange(updater: SetStateAction<CharacterFormData>) {
+        if (!onChange) return;
+        onChange((previous) => {
+            const next =
+                typeof updater === "function"
+                    ? (updater as (value: CharacterFormData) => CharacterFormData)(previous)
+                    : updater;
+            if (onPersistAbilityNames) {
+                if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+                persistTimerRef.current = setTimeout(() => {
+                    persistTimerRef.current = null;
+                    void onPersistAbilityNames(next);
+                }, 400);
+            }
+            return next;
+        });
+    }
+
+    useEffect(
+        () => () => {
+            if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+        },
+        []
+    );
     const [levelUpOpen, setLevelUpOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<
         "summary" | "combat" | "spells" | "inventory" | "story"
@@ -766,6 +799,12 @@ export function CharacterSheetReview({
                         data={data}
                         variant="sheet"
                         onUseFeature={useFeatures ? onUseFeature : undefined}
+                        onChange={
+                            allowAbilityNameEdit && onChange
+                                ? handleAbilityDataChange
+                                : undefined
+                        }
+                        allowAbilityNameEdit={allowAbilityNameEdit && Boolean(onChange)}
                     />
                 </section>
             </div>

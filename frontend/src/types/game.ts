@@ -26,6 +26,8 @@ export type BoardToken = {
   hpCurrent?: number;
   /** Campo livre do mestre (círculo do meio). */
   customValue?: string;
+  /** Nomes customizados de ações/traços do monstro (chave ex.: actions:0). */
+  featureDisplayNames?: Record<string, string>;
   /** IDs de condições D&D 5e ativas no token. */
   conditions?: string[];
   /** Só o mestre vê (camada secreta). */

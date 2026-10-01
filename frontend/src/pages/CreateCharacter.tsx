@@ -214,6 +214,7 @@ function mergeSheet(
         },
         asiSelections: sheet.asiSelections ?? {},
         featureChoices: sheet.featureChoices ?? {},
+        abilityDisplayNames: sheet.abilityDisplayNames,
         classes: Array.isArray(sheet.classes) ? sheet.classes : [],
     };
 

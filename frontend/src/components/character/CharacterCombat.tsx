@@ -336,7 +336,12 @@ export function CharacterCombat({ data, onChange }: CharacterCombatProps) {
                     Separe por raça e por cada classe do personagem. As habilidades
                     aparecem ordenadas por nível.
                 </p>
-                <CharacterAbilityTabs data={data} onChange={onChange} variant="wizard" />
+                <CharacterAbilityTabs
+                    data={data}
+                    onChange={onChange}
+                    variant="wizard"
+                    allowAbilityNameEdit
+                />
             </section>
         </div>
     );

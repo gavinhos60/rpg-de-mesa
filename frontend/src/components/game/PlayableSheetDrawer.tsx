@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   Ability,
   ActiveSlots,
@@ -48,6 +48,7 @@ interface PlayableSheetDrawerProps {
   xpBusy?: boolean;
   onUpdateXp?: (xp: number) => Promise<void>;
   onLevelUp?: (data: CharacterFormData) => Promise<void>;
+  onPersistAbilityNames?: (data: CharacterFormData) => Promise<void>;
 }
 
 function formatMod(value: number) {
@@ -78,8 +79,14 @@ export function PlayableSheetDrawer({
   xpBusy = false,
   onUpdateXp,
   onLevelUp,
+  onPersistAbilityNames,
 }: PlayableSheetDrawerProps) {
-  const sheet = asFormData(character);
+  const sheetFromCharacter = asFormData(character);
+  const [sheet, setSheet] = useState<CharacterFormData | null>(sheetFromCharacter);
+
+  useEffect(() => {
+    setSheet(sheetFromCharacter);
+  }, [character.id, character.sheet]);
   const [pendingRoll, setPendingRoll] = useState<{
     type: "skill" | "ability";
     key: Ability | Skill;
@@ -224,6 +231,9 @@ export function PlayableSheetDrawer({
             onRollSkill={onRollSkill}
             onUseFeature={onUseFeature}
             onCastSpell={onCastSpell}
+            onChange={readOnly ? undefined : setSheet}
+            allowAbilityNameEdit={!readOnly}
+            onPersistAbilityNames={readOnly ? undefined : onPersistAbilityNames}
             inventoryManage={
               (!readOnly || allowInventoryEdit) &&
               onUpdateWallet &&

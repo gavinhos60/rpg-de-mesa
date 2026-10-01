@@ -2,6 +2,13 @@ import { useState } from "react";
 import type { Monster, MonsterAction } from "../../data/dnd/monsters";
 import { monsterPortraitUrl } from "../../data/dnd/monsterPortrait";
 import { translateMonsterText as t } from "../../data/dnd/monsterTranslate";
+import { EditableFeatureName } from "../character/EditableFeatureName";
+import {
+  monsterActionKey,
+  resolveAbilityDisplayName,
+  type MonsterActionSection,
+} from "../../utils/abilityDisplayNames";
+import { shouldIgnoreFeatureCardActivation } from "../../utils/featureEditClick";
 
 export type MonsterSheetActionPayload = {
   monsterName: string;
@@ -23,6 +30,13 @@ interface MonsterSheetDrawerProps {
   hpCurrent?: number;
   hpMax?: number;
   canRoll?: boolean;
+  featureDisplayNames?: Record<string, string>;
+  canEditActionNames?: boolean;
+  onFeatureDisplayNameChange?: (
+    key: string,
+    defaultName: string,
+    customLabel: string
+  ) => void;
   onAction?: (payload: MonsterSheetActionPayload) => void;
   onClose: () => void;
 }
@@ -81,15 +95,23 @@ function AbilityRow({
 }
 
 function ActionBlock({
+  section,
   title,
   items,
   clickable,
   onUse,
+  featureDisplayNames,
+  canEditActionNames,
+  onRename,
 }: {
+  section: MonsterActionSection;
   title: string;
   items: MonsterAction[];
   clickable?: boolean;
-  onUse?: (item: MonsterAction) => void;
+  onUse?: (item: MonsterAction, actionName: string) => void;
+  featureDisplayNames?: Record<string, string>;
+  canEditActionNames?: boolean;
+  onRename?: (key: string, defaultName: string, customLabel: string) => void;
 }) {
   if (!items.length) return null;
   return (
@@ -101,13 +123,25 @@ function ActionBlock({
         {title}
       </h4>
       <div className="space-y-3">
-        {items.map((item) => {
+        {items.map((item, index) => {
+          const actionKey = monsterActionKey(section, index);
+          const defaultName = t(item.name);
+          const shownName = resolveAbilityDisplayName(
+            actionKey,
+            defaultName,
+            featureDisplayNames
+          );
           const rollable =
             item.attackBonus != null || Boolean(item.damage?.match(/\d*d\d+/i));
           const body = (
             <>
-              <p className="text-sm font-semibold text-[var(--color-crimson)]">
-                {t(item.name)}
+              <div className="text-sm font-semibold text-[var(--color-crimson)]">
+                <EditableFeatureName
+                  displayName={shownName}
+                  defaultName={defaultName}
+                  editable={canEditActionNames}
+                  onSave={(label) => onRename?.(actionKey, defaultName, label)}
+                />
                 {item.attackBonus != null && (
                   <span className="ml-2 font-normal text-[var(--color-ink-muted)]">
                     +{item.attackBonus} para acertar
@@ -123,7 +157,7 @@ function ActionBlock({
                     {rollable ? "clique para rolar" : "clique para chat"}
                   </span>
                 )}
-              </p>
+              </div>
               <p className="mt-1 text-sm leading-relaxed text-[var(--color-ink-muted)]">
                 {t(item.description)}
               </p>
@@ -132,22 +166,32 @@ function ActionBlock({
 
           if (clickable && onUse) {
             return (
-              <button
-                key={`${title}-${item.name}`}
-                type="button"
-                onClick={() => onUse(item)}
-                className="block w-full border px-2 py-2 text-left transition hover:border-[var(--color-crimson)] hover:bg-[var(--color-parchment)]"
+              <article
+                key={actionKey}
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                  if (shouldIgnoreFeatureCardActivation(event)) return;
+                  onUse(item, shownName);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  if (shouldIgnoreFeatureCardActivation(event)) return;
+                  event.preventDefault();
+                  onUse(item, shownName);
+                }}
+                className="block w-full cursor-pointer border px-2 py-2 text-left transition hover:border-[var(--color-crimson)] hover:bg-[var(--color-parchment)]"
                 style={{
                   borderColor: "var(--color-border)",
                   backgroundColor: "var(--color-parchment-soft)",
                 }}
               >
                 {body}
-              </button>
+              </article>
             );
           }
 
-          return <div key={`${title}-${item.name}`}>{body}</div>;
+          return <div key={actionKey}>{body}</div>;
         })}
       </div>
     </div>
@@ -160,6 +204,9 @@ export function MonsterSheetDrawer({
   hpCurrent,
   hpMax,
   canRoll = false,
+  featureDisplayNames,
+  canEditActionNames = false,
+  onFeatureDisplayNameChange,
   onAction,
   onClose,
 }: MonsterSheetDrawerProps) {
@@ -179,8 +226,16 @@ export function MonsterSheetDrawer({
     setPending(null);
   }
 
-  function useMonsterAction(item: MonsterAction) {
-    const actionName = t(item.name);
+  function renameMonsterAction(
+    key: string,
+    defaultName: string,
+    customLabel: string
+  ) {
+    if (!onFeatureDisplayNameChange) return;
+    onFeatureDisplayNameChange(key, defaultName, customLabel);
+  }
+
+  function useMonsterAction(item: MonsterAction, actionName: string) {
     const rollable =
       item.attackBonus != null || Boolean(item.damage?.match(/\d*d\d+/i));
     const bits = [
@@ -372,28 +427,44 @@ export function MonsterSheetDrawer({
           </div>
 
           <ActionBlock
+            section="traits"
             title="Traços"
             items={monster.traits}
             clickable={canRoll}
             onUse={useMonsterAction}
+            featureDisplayNames={featureDisplayNames}
+            canEditActionNames={canEditActionNames}
+            onRename={renameMonsterAction}
           />
           <ActionBlock
+            section="actions"
             title="Ações"
             items={monster.actions}
             clickable={canRoll}
             onUse={useMonsterAction}
+            featureDisplayNames={featureDisplayNames}
+            canEditActionNames={canEditActionNames}
+            onRename={renameMonsterAction}
           />
           <ActionBlock
+            section="reactions"
             title="Reações"
             items={monster.reactions}
             clickable={canRoll}
             onUse={useMonsterAction}
+            featureDisplayNames={featureDisplayNames}
+            canEditActionNames={canEditActionNames}
+            onRename={renameMonsterAction}
           />
           <ActionBlock
+            section="legendaryActions"
             title="Ações lendárias"
             items={monster.legendaryActions}
             clickable={canRoll}
             onUse={useMonsterAction}
+            featureDisplayNames={featureDisplayNames}
+            canEditActionNames={canEditActionNames}
+            onRename={renameMonsterAction}
           />
         </div>
       </aside>

@@ -57,6 +57,11 @@ export function CharacterSheet() {
     const reviewData: CharacterFormData | null = sheet
         ? { ...sheet, avatar: sheet.avatar ?? character?.avatar ?? null }
         : null;
+    const [formData, setFormData] = useState<CharacterFormData | null>(reviewData);
+
+    useEffect(() => {
+        setFormData(reviewData);
+    }, [character?.id, reviewData]);
 
     return (
         <div
@@ -140,23 +145,32 @@ export function CharacterSheet() {
                     </div>
                 )}
 
-                {!loading && character && reviewData && (
+                {!loading && character && formData && (
                     <div
                         className="mt-6 border border-[var(--color-border-strong)] p-6 md:p-8"
                         style={{ backgroundColor: "var(--color-surface)" }}
                     >
                         <CharacterSheetReview
-                            data={reviewData}
+                            data={formData}
                             backgrounds={DND_BACKGROUNDS}
+                            onChange={setFormData}
+                            allowAbilityNameEdit
+                            onPersistAbilityNames={async (updated) => {
+                                const saved = await updateCharacterFromForm(
+                                    character.id,
+                                    updated
+                                );
+                                setCharacter(saved);
+                            }}
                             xpManage={{
                                 busy: xpBusy,
                                 onUpdateXp: async (xp) => {
-                                    if (!character || !reviewData) return;
+                                    if (!character || !formData) return;
                                     setXpBusy(true);
                                     try {
                                         const saved = await updateCharacterFromForm(
                                             character.id,
-                                            { ...reviewData, xp }
+                                            { ...formData, xp }
                                         );
                                         setCharacter(saved);
                                     } finally {

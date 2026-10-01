@@ -1,4 +1,28 @@
-import type { CharacterRace } from "../../types/character";
+import type { CharacterRace, CharacterSubrace } from "../../types/character";
+import {
+    DRACONIC_ANCESTRIES,
+    formatDraconicBreathWeapon,
+} from "./draconicAncestry";
+
+function dragonbornAncestrySubraces(): CharacterSubrace[] {
+    return DRACONIC_ANCESTRIES.map((ancestry) => ({
+        id: ancestry.id,
+        name: ancestry.name,
+        description: `Ancestralidade dracônica ligada ao ${ancestry.name.toLowerCase()}.`,
+        traits: [
+            {
+                id: `dragonborn-breath-${ancestry.id}`,
+                name: "Arma de Sopro",
+                description: `${formatDraconicBreathWeapon(ancestry)} Dano de ${ancestry.damageType}. Recarga: descanso curto ou longo.`,
+            },
+            {
+                id: `dragonborn-damage-resistance-${ancestry.id}`,
+                name: "Resistência a Dano",
+                description: `Você tem resistência a dano de ${ancestry.damageType}.`,
+            },
+        ],
+    }));
+}
 
 export const DND_RACES: CharacterRace[] = [
     {
@@ -251,9 +275,10 @@ export const DND_RACES: CharacterRace[] = [
                 id: "draconic-ancestry",
                 name: "Ancestralidade Dracônica",
                 description:
-                    "Você possui uma ancestralidade ligada a um tipo de dragão.",
+                    "Escolha o tipo de dragão de que você descende; isso define seu sopro e resistência a dano.",
             },
         ],
+        subraces: dragonbornAncestrySubraces(),
     },
 
     {

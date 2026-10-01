@@ -6,6 +6,7 @@ import type {
     RaceTrait,
     Skill,
 } from "../../types/character";
+import { getDraconicAncestryById } from "./draconicAncestry";
 import { DND_RACES } from "./races";
 
 export function getRaceById(raceId: string): CharacterRace | undefined {
@@ -97,7 +98,16 @@ export function getRaceDisplayName(
     const race = getRaceById(data.raceId);
     if (!race) return "";
     const subrace = getSubrace(race, data.subraceId);
-    return subrace ? `${race.name} (${subrace.name})` : race.name;
+    if (!subrace) return race.name;
+    return `${race.name} (${subrace.name})`;
+}
+
+/** Ancestralidade dracônica do draconato (subraceId) ou undefined. */
+export function getDragonbornAncestry(
+    data: Pick<CharacterFormData, "raceId" | "subraceId">
+) {
+    if (data.raceId !== "dragonborn" || !data.subraceId) return undefined;
+    return getDraconicAncestryById(data.subraceId);
 }
 
 /** Deslocamento em pés: subraça sobrescreve a raça base. */

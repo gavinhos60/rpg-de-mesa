@@ -45,6 +45,8 @@ export type BoardToken = {
   hpMax?: number;
   hpCurrent?: number;
   customValue?: string;
+  /** Nomes customizados de ações/traços (chave ex.: actions:0). */
+  featureDisplayNames?: Record<string, string>;
   conditions?: string[];
   secret?: boolean;
   /** Token no cenário congelado dos jogadores. */

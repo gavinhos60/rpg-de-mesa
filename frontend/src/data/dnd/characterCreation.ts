@@ -114,7 +114,11 @@ function identityIssues(data: CharacterFormData): string[] {
     if (!filled(data.raceId)) issues.push("Selecione uma raça.");
     const race = DND_RACES.find((item) => item.id === data.raceId);
     if (race?.subraces?.length && !filled(data.subraceId)) {
-        issues.push("Selecione uma subraça.");
+        issues.push(
+            race.id === "dragonborn"
+                ? "Selecione a ancestralidade dracônica."
+                : "Selecione uma subraça."
+        );
     }
     if (!filled(data.backgroundId)) issues.push("Selecione um antecedente.");
     if (!filled(data.alignment)) issues.push("Selecione um alinhamento.");

@@ -8,12 +8,14 @@ import {
   getActiveGameSession,
 } from "../services/game.service";
 import { getMyCharacters, getCharacterById } from "../services/character.service";
+import { applyAbilityDisplayName } from "../utils/abilityDisplayNames";
 import {
   updateCharacterWallet,
   updateCharacterAttunedSlots,
   updateCharacterActiveSlots,
   updateCharacterResources,
   updateCharacterProgressFromForm,
+  updateCharacterFromForm,
   updateCharacterXp,
   discardCharacterItem,
   transferCharacterItem,
@@ -1099,6 +1101,37 @@ export function GameRoom() {
     });
   }
 
+  async function handlePersistAbilityNames(updated: CharacterFormData) {
+    if (!openCharacter || sheetReadOnly) return;
+    try {
+      const saved = await updateCharacterFromForm(openCharacter.id, updated);
+      await syncCharacterProgress(saved);
+    } catch (err) {
+      console.error(err);
+      alert(apiErrorMessage(err, "Não foi possível salvar o nome da habilidade."));
+    }
+  }
+
+  function handleMonsterFeatureDisplayNameChange(
+    key: string,
+    defaultName: string,
+    customLabel: string
+  ) {
+    if (!monsterTokenId || !isMaster) return;
+    const featureDisplayNames = applyAbilityDisplayName(
+      board.tokens.find((token) => token.id === monsterTokenId)?.featureDisplayNames,
+      key,
+      defaultName,
+      customLabel
+    );
+    handleBoardChange({
+      ...board,
+      tokens: board.tokens.map((token) =>
+        token.id === monsterTokenId ? { ...token, featureDisplayNames } : token
+      ),
+    });
+  }
+
   async function handleLevelUp(updated: CharacterFormData) {
     if (!openCharacter) return;
     await withActionBusy("Subindo de nível…", async () => {
@@ -1975,6 +2008,9 @@ export function GameRoom() {
           xpBusy={xpBusy}
           onUpdateXp={handleUpdateXp}
           onLevelUp={handleLevelUp}
+          onPersistAbilityNames={
+            sheetReadOnly ? undefined : handlePersistAbilityNames
+          }
         />
       )}
 
@@ -1985,6 +2021,14 @@ export function GameRoom() {
           hpCurrent={monsterTokenHp.current}
           hpMax={monsterTokenHp.max}
           canRoll={isMaster}
+          featureDisplayNames={
+            monsterTokenId
+              ? board.tokens.find((token) => token.id === monsterTokenId)
+                  ?.featureDisplayNames
+              : undefined
+          }
+          canEditActionNames={isMaster}
+          onFeatureDisplayNameChange={handleMonsterFeatureDisplayNameChange}
           onAction={handleMonsterAction}
           onClose={() => {
             setOpenMonster(null);

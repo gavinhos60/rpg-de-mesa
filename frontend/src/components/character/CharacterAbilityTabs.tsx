@@ -17,6 +17,12 @@ import {
     getUnlockedClassAbilities,
     type ClassAbility,
 } from "../../data/dnd/classAbilities";
+import { EditableFeatureName } from "./EditableFeatureName";
+import {
+    applyAbilityDisplayName,
+    resolveAbilityDisplayName,
+} from "../../utils/abilityDisplayNames";
+import { shouldIgnoreFeatureCardActivation } from "../../utils/featureEditClick";
 import { listResourcePools } from "../../utils/characterResources";
 import {
     FOUR_ELEMENTS_DISCIPLINE_KEY,
@@ -38,6 +44,8 @@ interface AbilityTabsProps {
     variant?: "wizard" | "sheet";
     /** Clique em traço/habilidade (ficha em jogo). */
     onUseFeature?: (name: string, description: string, abilityId?: string) => void;
+    /** Permite renomear habilidades (não afeta magias). */
+    allowAbilityNameEdit?: boolean;
 }
 
 export function CharacterAbilityTabs({
@@ -45,7 +53,23 @@ export function CharacterAbilityTabs({
     onChange,
     variant = "wizard",
     onUseFeature,
+    allowAbilityNameEdit = false,
 }: AbilityTabsProps) {
+    const canRename = allowAbilityNameEdit && Boolean(onChange);
+    const displayNames = data.abilityDisplayNames;
+
+    function renameFeature(featureId: string, defaultName: string, customLabel: string) {
+        if (!onChange) return;
+        onChange((previous) => ({
+            ...previous,
+            abilityDisplayNames: applyAbilityDisplayName(
+                previous.abilityDisplayNames,
+                featureId,
+                defaultName,
+                customLabel
+            ),
+        }));
+    }
     const race = DND_RACES.find((item) => item.id === data.raceId);
     const subrace = getSelectedSubrace(data);
     const classTabs = data.classes.map((selection, index) => {
@@ -141,6 +165,9 @@ export function CharacterAbilityTabs({
                     subraceName={subrace?.name}
                     card={card}
                     onUseFeature={onUseFeature}
+                    displayNames={displayNames}
+                    canRename={canRename}
+                    onRename={renameFeature}
                 />
             ) : (
                 classTabs
@@ -158,6 +185,9 @@ export function CharacterAbilityTabs({
                             card={card}
                             variant={variant}
                             onUseFeature={onUseFeature}
+                            displayNames={displayNames}
+                            canRename={canRename}
+                            onRename={renameFeature}
                         />
                     ))
             )}
@@ -171,12 +201,18 @@ function RaceAbilitiesPanel({
     subraceName,
     card,
     onUseFeature,
+    displayNames,
+    canRename,
+    onRename,
 }: {
     data: CharacterFormData;
     race: CharacterRace | undefined;
     subraceName?: string;
     card: { borderColor: string; backgroundColor: string };
     onUseFeature?: (name: string, description: string, abilityId?: string) => void;
+    displayNames?: Record<string, string>;
+    canRename?: boolean;
+    onRename?: (featureId: string, defaultName: string, customLabel: string) => void;
 }) {
     if (!race) {
         return (
@@ -218,12 +254,24 @@ function RaceAbilitiesPanel({
             ) : (
                 <div className="space-y-3">
                     {traits.map((trait) => {
+                        const featureId = trait.id;
+                        const defaultName = trait.name;
+                        const shownName = resolveAbilityDisplayName(
+                            featureId,
+                            defaultName,
+                            displayNames
+                        );
                         const body = (
                             <>
                                 <div className="mb-2 flex items-center justify-between gap-2">
-                                    <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
-                                        {trait.name}
-                                    </p>
+                                    <EditableFeatureName
+                                        displayName={shownName}
+                                        defaultName={defaultName}
+                                        editable={canRename}
+                                        onSave={(label) =>
+                                            onRename?.(featureId, defaultName, label)
+                                        }
+                                    />
                                     <span
                                         className="px-2 py-1 text-xs"
                                         style={{ ...cinzel, backgroundColor: "#5C4A1E", color: "var(--color-ink-inverse)" }}
@@ -241,15 +289,25 @@ function RaceAbilitiesPanel({
                         );
                         if (onUseFeature) {
                             return (
-                                <button
+                                <article
                                     key={trait.id}
-                                    type="button"
-                                    onClick={() => onUseFeature(trait.name, trait.description)}
-                                    className="block w-full border p-4 text-left transition hover:border-[var(--color-crimson)]"
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(event) => {
+                                        if (shouldIgnoreFeatureCardActivation(event)) return;
+                                        onUseFeature(shownName, trait.description, featureId);
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key !== "Enter" && event.key !== " ") return;
+                                        if (shouldIgnoreFeatureCardActivation(event)) return;
+                                        event.preventDefault();
+                                        onUseFeature(shownName, trait.description, featureId);
+                                    }}
+                                    className="block w-full cursor-pointer border p-4 text-left transition hover:border-[var(--color-crimson)]"
                                     style={card}
                                 >
                                     {body}
-                                </button>
+                                </article>
                             );
                         }
                         return (
@@ -275,6 +333,9 @@ function ClassAbilitiesPanel({
     card,
     variant,
     onUseFeature,
+    displayNames,
+    canRename,
+    onRename,
 }: {
     data: CharacterFormData;
     onChange?: Dispatch<SetStateAction<CharacterFormData>>;
@@ -286,6 +347,9 @@ function ClassAbilitiesPanel({
     card: { borderColor: string; backgroundColor: string };
     variant: "wizard" | "sheet";
     onUseFeature?: (name: string, description: string, abilityId?: string) => void;
+    displayNames?: Record<string, string>;
+    canRename?: boolean;
+    onRename?: (featureId: string, defaultName: string, customLabel: string) => void;
 }) {
     const abilities = getUnlockedClassAbilities(classId, subclassId, level)
         .filter((ability) => !ability.id.includes("-asi-"))
@@ -358,6 +422,9 @@ function ClassAbilitiesPanel({
                     monkLevel={level}
                     card={card}
                     readOnly={!onChange || variant === "sheet"}
+                    displayNames={displayNames}
+                    canRename={canRename}
+                    onRename={onRename}
                 />
             )}
 
@@ -375,6 +442,9 @@ function ClassAbilitiesPanel({
                             subclassName={subclassName}
                             card={card}
                             onUseFeature={onUseFeature}
+                            displayNames={displayNames}
+                            canRename={canRename}
+                            onRename={onRename}
                         />
                     ))}
                 </div>
@@ -389,12 +459,18 @@ function FourElementsPicker({
     monkLevel,
     card,
     readOnly,
+    displayNames,
+    canRename,
+    onRename,
 }: {
     data: CharacterFormData;
     onChange?: Dispatch<SetStateAction<CharacterFormData>>;
     monkLevel: number;
     card: { borderColor: string; backgroundColor: string };
     readOnly: boolean;
+    displayNames?: Record<string, string>;
+    canRename?: boolean;
+    onRename?: (featureId: string, defaultName: string, customLabel: string) => void;
 }) {
     const limit = getFourElementsDisciplineLimit(monkLevel);
     const selected = getSelectedElementalDisciplines(data.featureChoices);
@@ -447,23 +523,42 @@ function FourElementsPicker({
             </div>
 
             <div className="mb-4 space-y-2">
-                {fixed.map((discipline) => (
-                    <div
-                        key={discipline.id}
-                        className="border px-3 py-2"
-                        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-parchment)" }}
-                    >
-                        <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
-                                {discipline.name}
+                {fixed.map((discipline) => {
+                    const defaultName = discipline.name;
+                    const shownName = resolveAbilityDisplayName(
+                        discipline.id,
+                        defaultName,
+                        displayNames
+                    );
+                    return (
+                        <div
+                            key={discipline.id}
+                            className="border px-3 py-2"
+                            style={{
+                                borderColor: "var(--color-border)",
+                                backgroundColor: "var(--color-parchment)",
+                            }}
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <EditableFeatureName
+                                    displayName={shownName}
+                                    defaultName={defaultName}
+                                    editable={canRename}
+                                    onSave={(label) =>
+                                        onRename?.(discipline.id, defaultName, label)
+                                    }
+                                    className="text-sm"
+                                />
+                                <span className="text-xs text-[var(--color-ink-soft)]">
+                                    Fixa · Ki {discipline.kiCost}
+                                </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
+                                {discipline.description}
                             </p>
-                            <span className="text-xs text-[var(--color-ink-soft)]">Fixa · Ki {discipline.kiCost}</span>
                         </div>
-                        <p className="mt-1 text-xs leading-5 text-[var(--color-ink-muted)]">
-                            {discipline.description}
-                        </p>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
             {readOnly ? (
@@ -476,6 +571,12 @@ function FourElementsPicker({
                         selected.map((id) => {
                             const discipline = getElementalDiscipline(id);
                             if (!discipline) return null;
+                            const defaultName = discipline.name;
+                            const shownName = resolveAbilityDisplayName(
+                                discipline.id,
+                                defaultName,
+                                displayNames
+                            );
                             return (
                                 <li
                                     key={id}
@@ -484,7 +585,7 @@ function FourElementsPicker({
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <p className="text-sm text-[var(--color-ink)]" style={cinzel}>
-                                            {discipline.name}
+                                            {shownName}
                                         </p>
                                         <span className="text-xs text-[var(--color-ink-soft)]">
                                             Nv. {discipline.minLevel}+ · Ki {discipline.kiCost}
@@ -503,6 +604,13 @@ function FourElementsPicker({
                     {options.map((discipline) => {
                         const isSelected = selected.includes(discipline.id);
                         const disabled = !isSelected && selected.length >= limit;
+                        const featureId = discipline.id;
+                        const defaultName = discipline.name;
+                        const shownName = resolveAbilityDisplayName(
+                            featureId,
+                            defaultName,
+                            displayNames
+                        );
 
                         return (
                             <button
@@ -518,7 +626,7 @@ function FourElementsPicker({
                             >
                                 <div className="flex items-start justify-between gap-2">
                                     <span className="text-sm text-[var(--color-ink)]" style={cinzel}>
-                                        {discipline.name}
+                                        {shownName}
                                     </span>
                                     <span className="text-xs text-[var(--color-crimson)]">
                                         {isSelected ? "✓" : "+"}
@@ -545,20 +653,35 @@ function AbilityCard({
     subclassName,
     card,
     onUseFeature,
+    displayNames,
+    canRename,
+    onRename,
 }: {
     ability: ClassAbility;
     className: string;
     subclassName?: string;
     card: { borderColor: string; backgroundColor: string };
     onUseFeature?: (name: string, description: string, abilityId?: string) => void;
+    displayNames?: Record<string, string>;
+    canRename?: boolean;
+    onRename?: (featureId: string, defaultName: string, customLabel: string) => void;
 }) {
+    const defaultName = ability.name;
+    const shownName = resolveAbilityDisplayName(
+        ability.id,
+        defaultName,
+        displayNames
+    );
     const body = (
         <>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <p className="text-[var(--color-ink)]" style={{ ...cinzel, fontWeight: 600 }}>
-                        {ability.name}
-                    </p>
+                    <EditableFeatureName
+                        displayName={shownName}
+                        defaultName={defaultName}
+                        editable={canRename}
+                        onSave={(label) => onRename?.(ability.id, defaultName, label)}
+                    />
                     <p className="text-xs text-[var(--color-ink-soft)]">
                         {className}
                         {ability.subclassId && subclassName ? ` · ${subclassName}` : ""}
@@ -587,14 +710,24 @@ function AbilityCard({
 
     if (onUseFeature) {
         return (
-            <button
-                type="button"
-                onClick={() => onUseFeature(ability.name, ability.description, ability.id)}
-                className="block w-full border p-4 text-left transition hover:border-[var(--color-crimson)]"
+            <article
+                role="button"
+                tabIndex={0}
+                onClick={(event) => {
+                    if (shouldIgnoreFeatureCardActivation(event)) return;
+                    onUseFeature(shownName, ability.description, ability.id);
+                }}
+                onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    if (shouldIgnoreFeatureCardActivation(event)) return;
+                    event.preventDefault();
+                    onUseFeature(shownName, ability.description, ability.id);
+                }}
+                className="block w-full cursor-pointer border p-4 text-left transition hover:border-[var(--color-crimson)]"
                 style={card}
             >
                 {body}
-            </button>
+            </article>
         );
     }
 

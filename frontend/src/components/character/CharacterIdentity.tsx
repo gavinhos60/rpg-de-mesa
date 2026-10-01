@@ -435,7 +435,11 @@ export function CharacterIdentity({
 
                     {selectedRace?.subraces && selectedRace.subraces.length > 0 && (
                         <div>
-                            <label className={labelClass} style={cinzel}>Subraça *</label>
+                            <label className={labelClass} style={cinzel}>
+                                {selectedRace.id === "dragonborn"
+                                    ? "Ancestralidade dracônica *"
+                                    : "Subraça *"}
+                            </label>
 
                             <select
                                 required
@@ -444,7 +448,11 @@ export function CharacterIdentity({
                                 className={inputClass}
                                 style={nested}
                             >
-                                <option value="">Selecione uma subraça</option>
+                                <option value="">
+                                    {selectedRace.id === "dragonborn"
+                                        ? "Selecione a ancestralidade"
+                                        : "Selecione uma subraça"}
+                                </option>
 
                                 {selectedRace.subraces.map((subrace) => (
                                     <option key={subrace.id} value={subrace.id}>
@@ -650,7 +658,12 @@ export function CharacterIdentity({
 
                         <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
                             Características recebidas pela escolha da raça
-                            {selectedSubrace ? ` e da ${selectedSubrace.name}` : ""}.
+                            {selectedSubrace
+                                ? selectedRace.id === "dragonborn"
+                                    ? ` e da ancestralidade ${selectedSubrace.name}`
+                                    : ` e da ${selectedSubrace.name}`
+                                : ""}
+                            .
                         </p>
                     </div>
 
