@@ -388,6 +388,13 @@ export async function updateResourcesController(req: Request, res: Response) {
       return;
     }
 
+    const abilityDisplayNames =
+      req.body.abilityDisplayNames &&
+      typeof req.body.abilityDisplayNames === "object" &&
+      !Array.isArray(req.body.abilityDisplayNames)
+        ? (req.body.abilityDisplayNames as Record<string, string>)
+        : undefined;
+
     const character = await updateCharacterResources(
       Number(req.params.id),
       req.user.userId,
@@ -398,6 +405,7 @@ export async function updateResourcesController(req: Request, res: Response) {
           req.body.pactSlotsSpent != null
             ? Number(req.body.pactSlotsSpent)
             : undefined,
+        abilityDisplayNames,
       }
     );
 

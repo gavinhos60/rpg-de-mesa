@@ -225,11 +225,17 @@ export async function updateCharacterActiveSlots(
 
 export async function updateCharacterResources(
   characterId: number,
-  resources: CharacterResourcesState
+  resources: CharacterResourcesState,
+  options?: { abilityDisplayNames?: Record<string, string> }
 ): Promise<SavedCharacter> {
   const response = await api.patch<SavedCharacter>(
     `/characters/${characterId}/resources`,
-    resources
+    {
+      ...resources,
+      ...(options?.abilityDisplayNames
+        ? { abilityDisplayNames: options.abilityDisplayNames }
+        : {}),
+    }
   );
   return response.data;
 }

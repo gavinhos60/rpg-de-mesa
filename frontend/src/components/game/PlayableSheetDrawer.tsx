@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
 import type {
   Ability,
   ActiveSlots,
@@ -49,6 +49,8 @@ interface PlayableSheetDrawerProps {
   onUpdateXp?: (xp: number) => Promise<void>;
   onLevelUp?: (data: CharacterFormData) => Promise<void>;
   onPersistAbilityNames?: (data: CharacterFormData) => Promise<void>;
+  /** Mantém a ficha aberta sincronizada (renomear habilidade antes de usar). */
+  onSheetSync?: (data: CharacterFormData) => void;
 }
 
 function formatMod(value: number) {
@@ -80,9 +82,28 @@ export function PlayableSheetDrawer({
   onUpdateXp,
   onLevelUp,
   onPersistAbilityNames,
+  onSheetSync,
 }: PlayableSheetDrawerProps) {
   const sheetFromCharacter = asFormData(character);
   const [sheet, setSheet] = useState<CharacterFormData | null>(sheetFromCharacter);
+
+  const updateSheet = useCallback(
+    (updater: SetStateAction<CharacterFormData | null>) => {
+      setSheet((previous) => {
+        const next =
+          typeof updater === "function"
+            ? (
+                updater as (
+                  value: CharacterFormData | null
+                ) => CharacterFormData | null
+              )(previous)
+            : updater;
+        if (next) onSheetSync?.(next);
+        return next;
+      });
+    },
+    [onSheetSync]
+  );
 
   useEffect(() => {
     setSheet(sheetFromCharacter);
@@ -231,7 +252,7 @@ export function PlayableSheetDrawer({
             onRollSkill={onRollSkill}
             onUseFeature={onUseFeature}
             onCastSpell={onCastSpell}
-            onChange={readOnly ? undefined : setSheet}
+            onChange={readOnly ? undefined : updateSheet}
             allowAbilityNameEdit={!readOnly}
             onPersistAbilityNames={readOnly ? undefined : onPersistAbilityNames}
             inventoryManage={

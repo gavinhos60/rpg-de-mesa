@@ -1031,6 +1031,7 @@ export async function updateCharacterResources(
     pools?: Record<string, number>;
     spellSlotsSpent?: number[];
     pactSlotsSpent?: number;
+    abilityDisplayNames?: Record<string, string>;
   }
 ) {
   const character = await prisma.character.findUnique({
@@ -1095,6 +1096,20 @@ export async function updateCharacterResources(
   );
 
   sheetRoot.resources = { pools, spellSlotsSpent, pactSlotsSpent };
+
+  if (
+    resources.abilityDisplayNames &&
+    typeof resources.abilityDisplayNames === "object" &&
+    !Array.isArray(resources.abilityDisplayNames)
+  ) {
+    const names: Record<string, string> = {};
+    for (const [key, value] of Object.entries(resources.abilityDisplayNames)) {
+      const label = String(value ?? "").trim();
+      if (key.trim() && label) names[key.trim()] = label;
+    }
+    sheetRoot.abilityDisplayNames =
+      Object.keys(names).length > 0 ? names : undefined;
+  }
 
   return prisma.character.update({
     where: { id: characterId },

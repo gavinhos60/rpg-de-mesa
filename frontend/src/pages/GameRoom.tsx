@@ -171,7 +171,23 @@ export function GameRoom() {
   const [error, setError] = useState("");
   const [openCharacter, setOpenCharacter] =
     useState<CampaignCharacterLite | null>(null);
+  const openCharacterSheetRef = useRef<CharacterFormData | null>(null);
   const [sheetReadOnly, setSheetReadOnly] = useState(false);
+
+  function getOpenCharacterSheet(): CharacterFormData | null {
+    if (openCharacterSheetRef.current) return openCharacterSheetRef.current;
+    if (openCharacter?.sheet && typeof openCharacter.sheet === "object") {
+      return openCharacter.sheet as CharacterFormData;
+    }
+    return null;
+  }
+
+  function handleOpenCharacterSheetSync(sheet: CharacterFormData) {
+    openCharacterSheetRef.current = sheet;
+    setOpenCharacter((current) =>
+      current ? { ...current, sheet } : current
+    );
+  }
   const [inventoryBusy, setInventoryBusy] = useState(false);
   const [xpBusy, setXpBusy] = useState(false);
   const [pendingCheck, setPendingCheck] = useState<CheckRequest | null>(null);
@@ -797,7 +813,13 @@ export function GameRoom() {
   ): Promise<CampaignCharacterLite | null> {
     const synced = ensureResourcesSynced(sheet);
     const resources = normalizeResourcesState(synced.resources);
-    const saved = await updateCharacterResources(characterId, resources);
+    const saved = await updateCharacterResources(characterId, resources, {
+      abilityDisplayNames: synced.abilityDisplayNames,
+    });
+    const savedSheet =
+      saved.sheet && typeof saved.sheet === "object"
+        ? (saved.sheet as CharacterFormData)
+        : synced;
     const lite: CampaignCharacterLite = {
       id: saved.id,
       name: saved.name,
@@ -805,10 +827,17 @@ export function GameRoom() {
       race: saved.race,
       level: saved.level,
       avatar: saved.avatar,
-      sheet: saved.sheet,
+      sheet: {
+        ...savedSheet,
+        abilityDisplayNames:
+          synced.abilityDisplayNames ?? savedSheet.abilityDisplayNames,
+      },
       playerId: saved.playerId,
       player: saved.player,
     };
+    if (lite.sheet && typeof lite.sheet === "object") {
+      openCharacterSheetRef.current = lite.sheet as CharacterFormData;
+    }
     applyCharacterUpdate(lite);
     if (socket && sessionId) {
       await emitCharacterUpdated(socket, sessionId, lite);
@@ -823,10 +852,7 @@ export function GameRoom() {
   ) {
     if (!socket || !sessionId || !user || !openCharacter) return;
     await withActionBusy("Enviando ação…", async () => {
-      const sheet =
-        openCharacter.sheet && typeof openCharacter.sheet === "object"
-          ? (openCharacter.sheet as CharacterFormData)
-          : null;
+      const sheet = getOpenCharacterSheet();
       if (!sheet) {
         alert("Ficha incompleta.");
         return;
@@ -860,10 +886,7 @@ export function GameRoom() {
     options?: { advantage?: boolean }
   ) {
     if (!socket || !sessionId || !user || !openCharacter) return;
-    const sheet =
-      openCharacter.sheet && typeof openCharacter.sheet === "object"
-        ? (openCharacter.sheet as CharacterFormData)
-        : null;
+    const sheet = getOpenCharacterSheet();
     if (!sheet) {
       alert("Ficha incompleta para conjurar magia.");
       return;
@@ -1104,6 +1127,7 @@ export function GameRoom() {
   async function handlePersistAbilityNames(updated: CharacterFormData) {
     if (!openCharacter || sheetReadOnly) return;
     try {
+      openCharacterSheetRef.current = updated;
       const saved = await updateCharacterFromForm(openCharacter.id, updated);
       await syncCharacterProgress(saved);
     } catch (err) {
@@ -2011,6 +2035,7 @@ export function GameRoom() {
           onPersistAbilityNames={
             sheetReadOnly ? undefined : handlePersistAbilityNames
           }
+          onSheetSync={sheetReadOnly ? undefined : handleOpenCharacterSheetSync}
         />
       )}
 
