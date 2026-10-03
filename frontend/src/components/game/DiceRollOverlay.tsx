@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import DiceBox from "@3d-dice/dice-box";
+import "@3d-dice/dice-box/dist/style.css";
 
 export type DiceFxDie = {
   sides: number;
@@ -9,134 +11,56 @@ interface DiceRollOverlayProps {
   visible: boolean;
   label?: string;
   total?: number;
-  /** Faces finais de cada dado (ex.: 5d10 → 5 valores). */
   dice?: DiceFxDie[];
-  /** Face natural do d20 principal (crítico / falha). */
   natural?: number | null;
   onDone?: () => void;
 }
 
-type FlyingDie = DiceFxDie & {
-  id: string;
-  startX: number;
-  endX: number;
-  endY: number;
-  spin: number;
-  delayMs: number;
-  durationMs: number;
-  size: number;
-};
-
+const DICE_HOST_ID = "rpg-dice-box-host";
 const MAX_VISIBLE_DICE = 12;
+const ASSET_PATH = `${import.meta.env.BASE_URL}assets/`;
 
-function buildFlyingDice(dice: DiceFxDie[]): FlyingDie[] {
-  const list = dice.slice(0, MAX_VISIBLE_DICE);
-  const n = Math.max(1, list.length);
-  return list.map((die, index) => {
-    const lane = (index + 0.5) / n;
-    const jitter = (Math.random() - 0.5) * 12;
-    return {
-      ...die,
-      id: `die-${index}`,
-      startX: 8 + Math.random() * 84,
-      endX: Math.min(90, Math.max(10, lane * 80 + 10 + jitter)),
-      endY: 42 + Math.random() * 22,
-      spin: 540 + Math.floor(Math.random() * 540),
-      delayMs: index * 90 + Math.floor(Math.random() * 40),
-      durationMs: 1100 + Math.floor(Math.random() * 350),
-      size: list.length >= 8 ? 48 : list.length >= 4 ? 56 : 72,
-    };
+function clearDiceHost() {
+  const host = document.getElementById(DICE_HOST_ID);
+  host?.querySelectorAll("canvas").forEach((node) => node.remove());
+}
+
+/** DiceBox só redimensiona no evento resize — força layout após show/init. */
+function bumpDiceBoxLayout() {
+  requestAnimationFrame(() => {
+    window.dispatchEvent(new Event("resize"));
   });
 }
 
-function dieTone(
-  die: DiceFxDie,
-  settled: boolean
+function buildRollNotation(dice: DiceFxDie[]): string {
+  const limited = dice.slice(0, MAX_VISIBLE_DICE);
+  const bySide = new Map<number, number>();
+  for (const die of limited) {
+    const sides = die.sides >= 2 ? die.sides : 20;
+    bySide.set(sides, (bySide.get(sides) ?? 0) + 1);
+  }
+  const parts = [...bySide.entries()].map(([sides, qty]) => `${qty}d${sides}`);
+  return parts.length > 0 ? parts.join("+") : "1d20";
+}
+
+function critTone(
+  dice: DiceFxDie[],
+  natural?: number | null
 ): "crit" | "fumble" | null {
-  if (!settled || die.sides !== 20) return null;
-  if (die.value === 20) return "crit";
-  if (die.value === 1) return "fumble";
+  if (typeof natural === "number") {
+    if (natural === 20) return "crit";
+    if (natural === 1) return "fumble";
+  }
+  for (const die of dice) {
+    if (die.sides === 20) {
+      if (die.value === 20) return "crit";
+      if (die.value === 1) return "fumble";
+    }
+  }
   return null;
 }
 
-function dieColors(tone: "crit" | "fumble" | null) {
-  if (tone === "crit") {
-    return {
-      bg: "#2F6B38",
-      border: "#7AD48A",
-      text: "#F3F8F0",
-      glow: "0 0 18px rgba(63,143,74,0.55)",
-    };
-  }
-  if (tone === "fumble") {
-    return {
-      bg: "#8F2E3A",
-      border: "#E06A72",
-      text: "#F8F0F0",
-      glow: "0 0 18px rgba(196,74,85,0.55)",
-    };
-  }
-  return {
-    bg: "var(--color-parchment)",
-    border: "var(--color-crimson)",
-    text: "var(--color-crimson)",
-    glow: "0 8px 18px rgba(0,0,0,0.35)",
-  };
-}
-
-function FlyingDieView({
-  die,
-  face,
-  settled,
-}: {
-  die: FlyingDie;
-  face: number;
-  settled: boolean;
-}) {
-  const tone = dieTone(die, settled);
-  const colors = dieColors(tone);
-
-  return (
-    <div
-      className="dice-fall-anim absolute will-change-transform"
-      style={{
-        width: die.size,
-        height: die.size,
-        // Variáveis só no wrapper da animação — não mudam a cada face.
-        ["--sx" as string]: `${die.startX}vw`,
-        ["--mx" as string]: `${(die.startX + die.endX) / 2}vw`,
-        ["--ex" as string]: `${die.endX}vw`,
-        ["--ey" as string]: `${die.endY}vh`,
-        ["--spin" as string]: `${die.spin}deg`,
-        animationDuration: `${die.durationMs}ms`,
-        animationDelay: `${die.delayMs}ms`,
-      }}
-    >
-      <div
-        className="flex h-full w-full items-center justify-center border-2 font-bold shadow-lg"
-        style={{
-          fontSize: die.size >= 64 ? 28 : die.size >= 52 ? 22 : 18,
-          fontFamily: "'Cinzel', serif",
-          backgroundColor: colors.bg,
-          borderColor: colors.border,
-          color: colors.text,
-          boxShadow: colors.glow,
-          borderRadius: die.sides <= 4 ? 4 : die.sides >= 20 ? "18%" : "12%",
-        }}
-      >
-        {face}
-      </div>
-      <span
-        className="absolute -bottom-4 left-1/2 -translate-x-1/2 text-[9px] tracking-wide opacity-80"
-        style={{ fontFamily: "'Cinzel', serif", color: colors.text }}
-      >
-        d{die.sides}
-      </span>
-    </div>
-  );
-}
-
-/** Animação de dados caindo e rolando pela tela. */
+/** Dados 3D (estilo Roll20 / Fantastic Dice) + resultado da rolagem do chat. */
 export function DiceRollOverlay({
   visible,
   label,
@@ -147,6 +71,13 @@ export function DiceRollOverlay({
 }: DiceRollOverlayProps) {
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+
+  const boxRef = useRef<DiceBox | null>(null);
+  const initPromiseRef = useRef<Promise<void> | null>(null);
+  const initOkRef = useRef(false);
+  const initStartedRef = useRef(false);
+  const runIdRef = useRef(0);
+  const doneTimerRef = useRef<number | null>(null);
 
   const diceKey = useMemo(() => {
     if (dice && dice.length > 0) {
@@ -166,186 +97,294 @@ export function DiceRollOverlay({
     return [{ sides: 20, value: 1 }];
   }, [dice, natural, total]);
 
-  const [flying, setFlying] = useState<FlyingDie[]>([]);
-  const [faces, setFaces] = useState<number[]>([]);
   const [settled, setSettled] = useState(false);
-  const runIdRef = useRef(0);
+  const [engineReady, setEngineReady] = useState(false);
+  const [useFallbackFx, setUseFallbackFx] = useState(false);
+
+  function scheduleDone(ms: number) {
+    if (doneTimerRef.current != null) {
+      window.clearTimeout(doneTimerRef.current);
+    }
+    doneTimerRef.current = window.setTimeout(() => {
+      doneTimerRef.current = null;
+      onDoneRef.current?.();
+    }, ms);
+  }
+
+  useEffect(() => {
+    if (!visible || initStartedRef.current) return;
+    initStartedRef.current = true;
+
+    let cancelled = false;
+    clearDiceHost();
+
+    const box = new DiceBox({
+      container: `#${DICE_HOST_ID}`,
+      assetPath: ASSET_PATH,
+      theme: "default",
+      themeColor: "#7A2530",
+      sounds: false,
+      soundVolume: 0,
+      onRollComplete: () => {
+        if (cancelled) return;
+        setSettled(true);
+        scheduleDone(1200);
+      },
+    });
+
+    boxRef.current = box;
+    initPromiseRef.current = box
+      .init()
+      .then(() => {
+        if (cancelled) return;
+        initOkRef.current = true;
+        setEngineReady(true);
+        box.show();
+        bumpDiceBoxLayout();
+      })
+      .catch((err) => {
+        console.error("DiceBox init failed:", err);
+        if (cancelled) return;
+        initOkRef.current = false;
+        setUseFallbackFx(true);
+      });
+
+    return () => {
+      cancelled = true;
+      initStartedRef.current = false;
+      initOkRef.current = false;
+      if (doneTimerRef.current != null) {
+        window.clearTimeout(doneTimerRef.current);
+      }
+      try {
+        box.clear();
+        box.hide();
+      } catch {
+        /* ignore teardown */
+      }
+      clearDiceHost();
+      boxRef.current = null;
+      initPromiseRef.current = null;
+      setEngineReady(false);
+    };
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) {
-      setFlying([]);
-      setFaces([]);
       setSettled(false);
+      setUseFallbackFx(false);
+      setEngineReady(false);
+      boxRef.current?.clear();
+      boxRef.current?.hide();
+      if (doneTimerRef.current != null) {
+        window.clearTimeout(doneTimerRef.current);
+        doneTimerRef.current = null;
+      }
       return;
     }
 
     const runId = ++runIdRef.current;
-    const next = buildFlyingDice(sourceDice);
-    setFlying(next);
-    setFaces(next.map((die) => 1 + Math.floor(Math.random() * die.sides)));
     setSettled(false);
 
-    const tumble = window.setInterval(() => {
-      if (runIdRef.current !== runId) return;
-      setFaces((prev) =>
-        prev.map((_, index) => {
-          const sides = next[index]?.sides ?? 20;
-          return 1 + Math.floor(Math.random() * sides);
-        })
-      );
-    }, 70);
+    void (async () => {
+      try {
+        await initPromiseRef.current;
+        if (runIdRef.current !== runId) return;
 
-    const maxDuration =
-      Math.max(...next.map((die) => die.delayMs + die.durationMs), 1200) + 80;
+        const box = boxRef.current;
+        if (!box || !initOkRef.current) {
+          setUseFallbackFx(true);
+          scheduleDone(2200);
+          return;
+        }
 
-    const settleTimer = window.setTimeout(() => {
-      if (runIdRef.current !== runId) return;
-      window.clearInterval(tumble);
-      setFaces(next.map((die) => die.value));
-      setSettled(true);
-    }, maxDuration);
-
-    const doneTimer = window.setTimeout(() => {
-      if (runIdRef.current !== runId) return;
-      onDoneRef.current?.();
-    }, maxDuration + 1100);
-
-    return () => {
-      window.clearInterval(tumble);
-      window.clearTimeout(settleTimer);
-      window.clearTimeout(doneTimer);
-    };
-    // Só reinicia quando a rolagem muda / fica visível — não a cada render do pai.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        box.show();
+        bumpDiceBoxLayout();
+        await box.roll(buildRollNotation(sourceDice));
+        bumpDiceBoxLayout();
+      } catch (err) {
+        console.error("DiceBox roll failed:", err);
+        setUseFallbackFx(true);
+        setSettled(true);
+        scheduleDone(1800);
+      }
+    })();
   }, [visible, diceKey]);
 
-  if (!visible || flying.length === 0) return null;
-
-  const anyCrit = settled && flying.some((die) => dieTone(die, true) === "crit");
-  const anyFumble =
-    settled && flying.some((die) => dieTone(die, true) === "fumble");
+  const tone = settled ? critTone(sourceDice, natural) : null;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[90] overflow-hidden">
+    <>
+      {/* Host sempre no DOM — DiceBox exige seletor CSS e init na montagem. */}
       <div
-        className="absolute inset-0"
+        id={DICE_HOST_ID}
+        className="rpg-dice-box-host pointer-events-none fixed inset-0 z-[100]"
         style={{
-          background: settled
-            ? anyCrit
-              ? "radial-gradient(ellipse at center, rgba(47,107,56,0.28), transparent 65%)"
-              : anyFumble
-                ? "radial-gradient(ellipse at center, rgba(143,46,58,0.32), transparent 65%)"
-                : "radial-gradient(ellipse at center, rgba(0,0,0,0.2), transparent 70%)"
-            : "radial-gradient(ellipse at center, rgba(0,0,0,0.18), transparent 70%)",
-          transition: "background 0.35s ease",
+          opacity: visible ? 1 : 0,
+          pointerEvents: "none",
+          transition: "opacity 0.25s ease",
         }}
+        aria-hidden={!visible}
       />
 
-      {flying.map((die, index) => (
-        <FlyingDieView
-          key={die.id}
-          die={die}
-          face={faces[index] ?? die.value}
-          settled={settled}
+      {visible && (useFallbackFx || !engineReady) ? (
+        <FallbackDiceFx
+          key={diceKey}
+          dice={sourceDice}
+          onSettled={() => {
+            if (useFallbackFx || !initOkRef.current) setSettled(true);
+          }}
+          onDone={() => {
+            if (useFallbackFx || !initOkRef.current) scheduleDone(900);
+          }}
         />
+      ) : null}
+
+      {visible ? (
+        <div className="pointer-events-none fixed inset-0 z-[101] overflow-hidden">
+          <div
+            className="absolute inset-0 transition-colors duration-300"
+            style={{
+              background: settled
+                ? tone === "crit"
+                  ? "radial-gradient(ellipse at center, rgba(47,107,56,0.22), transparent 70%)"
+                  : tone === "fumble"
+                    ? "radial-gradient(ellipse at center, rgba(143,46,58,0.26), transparent 70%)"
+                    : "radial-gradient(ellipse at center, rgba(0,0,0,0.15), transparent 72%)"
+                : "radial-gradient(ellipse at center, rgba(0,0,0,0.12), transparent 75%)",
+            }}
+          />
+
+          <div
+            className="absolute bottom-10 left-1/2 w-[min(92vw,28rem)] -translate-x-1/2 border-2 px-4 py-3 text-center shadow-xl"
+            style={{
+              backgroundColor: "var(--color-surface)",
+              borderColor:
+                tone === "crit"
+                  ? "#5CB86A"
+                  : tone === "fumble"
+                    ? "#E06A72"
+                    : "var(--color-border-strong)",
+              animation: "dice-label-in 0.4s ease-out 0.35s both",
+            }}
+          >
+            {label ? (
+              <p
+                className="text-sm text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+              >
+                {label}
+              </p>
+            ) : null}
+            {typeof total === "number" && (
+              <p
+                className="mt-1 text-2xl text-[var(--color-crimson)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 700 }}
+              >
+                {total}
+              </p>
+            )}
+            {sourceDice.length > 1 && (
+              <p className="mt-1 text-[11px] text-[var(--color-ink-soft)]">
+                {sourceDice.length} dados
+                {sourceDice.length > MAX_VISIBLE_DICE
+                  ? ` (mostrando ${MAX_VISIBLE_DICE})`
+                  : ""}
+              </p>
+            )}
+            {tone === "crit" && (
+              <p
+                className="mt-1 text-xs uppercase tracking-[0.16em] text-[#5CB86A]"
+                style={{ fontFamily: "'Cinzel', serif" }}
+              >
+                Crítico
+              </p>
+            )}
+            {tone === "fumble" && (
+              <p
+                className="mt-1 text-xs uppercase tracking-[0.16em] text-[#E06A72]"
+                style={{ fontFamily: "'Cinzel', serif" }}
+              >
+                Falha crítica
+              </p>
+            )}
+          </div>
+
+          <style>{`
+            .rpg-dice-box-host,
+            .rpg-dice-box-host canvas,
+            .rpg-dice-box-host .dice-box-canvas {
+              width: 100% !important;
+              height: 100% !important;
+              display: block;
+            }
+            @keyframes dice-label-in {
+              from { opacity: 0; transform: translate(-50%, 12px); }
+              to { opacity: 1; transform: translate(-50%, 0); }
+            }
+          `}</style>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function FallbackDiceFx({
+  dice,
+  onSettled,
+  onDone,
+}: {
+  dice: DiceFxDie[];
+  onSettled: () => void;
+  onDone: () => void;
+}) {
+  useEffect(() => {
+    const settle = window.setTimeout(() => onSettled(), 1100);
+    const done = window.setTimeout(() => onDone(), 2000);
+    return () => {
+      window.clearTimeout(settle);
+      window.clearTimeout(done);
+    };
+  }, [dice, onDone, onSettled]);
+
+  const show = dice.slice(0, 6);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-[100] overflow-hidden">
+      {show.map((die, index) => (
+        <div
+          key={`${die.sides}-${index}`}
+          className="dice-fallback-tumble absolute flex items-center justify-center border-2 font-bold shadow-lg"
+          style={{
+            width: 64,
+            height: 64,
+            left: `${15 + index * 12}%`,
+            ["--spin" as string]: `${480 + index * 90}deg`,
+            animationDelay: `${index * 80}ms`,
+            fontFamily: "'Cinzel', serif",
+            fontSize: 24,
+            color: "var(--color-crimson)",
+            backgroundColor: "var(--color-parchment)",
+            borderColor: "var(--color-crimson)",
+            borderRadius: die.sides >= 20 ? "18%" : "12%",
+          }}
+        >
+          {die.value}
+        </div>
       ))}
-
-      <div
-        className="absolute bottom-10 left-1/2 w-[min(92vw,28rem)] -translate-x-1/2 border-2 px-4 py-3 text-center shadow-xl"
-        style={{
-          backgroundColor: "var(--color-surface)",
-          borderColor: anyCrit
-            ? "#5CB86A"
-            : anyFumble
-              ? "#E06A72"
-              : "var(--color-border-strong)",
-          animation: "dice-label-in 0.4s ease-out 0.55s both",
-        }}
-      >
-        {label ? (
-          <p
-            className="text-sm text-[var(--color-ink)]"
-            style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
-          >
-            {label}
-          </p>
-        ) : null}
-        {typeof total === "number" && (
-          <p
-            className="mt-1 text-2xl text-[var(--color-crimson)]"
-            style={{ fontFamily: "'Cinzel', serif", fontWeight: 700 }}
-          >
-            {total}
-          </p>
-        )}
-        {flying.length > 1 && (
-          <p className="mt-1 text-[11px] text-[var(--color-ink-soft)]">
-            {flying.length} dados
-            {sourceDice.length > MAX_VISIBLE_DICE
-              ? ` (mostrando ${MAX_VISIBLE_DICE})`
-              : ""}
-          </p>
-        )}
-        {anyCrit && (
-          <p
-            className="mt-1 text-xs uppercase tracking-[0.16em] text-[#5CB86A]"
-            style={{ fontFamily: "'Cinzel', serif" }}
-          >
-            Crítico
-          </p>
-        )}
-        {anyFumble && !anyCrit && (
-          <p
-            className="mt-1 text-xs uppercase tracking-[0.16em] text-[#E06A72]"
-            style={{ fontFamily: "'Cinzel', serif" }}
-          >
-            Falha crítica
-          </p>
-        )}
-      </div>
-
       <style>{`
-        .dice-fall-anim {
-          animation-name: dice-fall-roll;
-          animation-timing-function: cubic-bezier(0.22, 0.82, 0.28, 1);
-          animation-fill-mode: both;
+        .dice-fallback-tumble {
+          animation: dice-fallback-drop 1.1s cubic-bezier(0.22, 0.82, 0.28, 1) both;
         }
-        @keyframes dice-fall-roll {
-          0% {
-            transform: translate(var(--sx), -18vh) rotate(0deg) scale(0.7);
-            opacity: 0;
-          }
-          8% {
-            opacity: 1;
-          }
-          55% {
-            transform: translate(var(--mx), calc(var(--ey) + 8vh))
-              rotate(calc(var(--spin) * 0.75)) scale(1.05);
-          }
-          72% {
-            transform: translate(var(--ex), calc(var(--ey) - 4vh))
-              rotate(calc(var(--spin) * 0.9)) scale(0.96);
-          }
-          84% {
-            transform: translate(var(--ex), calc(var(--ey) + 2vh))
-              rotate(calc(var(--spin) * 0.97)) scale(1.02);
-          }
-          100% {
-            transform: translate(var(--ex), var(--ey)) rotate(var(--spin))
-              scale(1);
-            opacity: 1;
-          }
-        }
-        @keyframes dice-label-in {
-          from { opacity: 0; transform: translate(-50%, 12px); }
-          to { opacity: 1; transform: translate(-50%, 0); }
+        @keyframes dice-fallback-drop {
+          0% { transform: translateY(-20vh) rotate(0deg); opacity: 0; }
+          12% { opacity: 1; }
+          100% { transform: translateY(38vh) rotate(var(--spin)); opacity: 1; }
         }
       `}</style>
     </div>
   );
 }
 
-/** Monta a lista de dados visuais a partir de uma rolagem do chat. */
 export function diceFromChatRoll(roll: {
   formula: string;
   rolls: number[];

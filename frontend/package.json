@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "postinstall": "node -e \"const fs=require('fs');const path=require('path');const src=path.join('node_modules','@3d-dice','dice-box','dist','assets');const dest=path.join('public','assets');if(fs.existsSync(src)){fs.cpSync(src,dest,{recursive:true});}\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@3d-dice/dice-box": "^1.1.4",
     "@tailwindcss/vite": "^4.3.3",
     "axios": "^1.20.0",
     "react": "^19.2.8",
