@@ -78,7 +78,8 @@ export function MasterItemTypeFields({
                 />
             ) : null}
 
-            {values.itemKind !== "accessory" ? (
+            {values.itemKind !== "accessory" &&
+            values.itemKind !== "food" ? (
                 <label className="block text-[10px] text-[var(--color-ink-soft)]">
                     Bônus mágico
                     <select

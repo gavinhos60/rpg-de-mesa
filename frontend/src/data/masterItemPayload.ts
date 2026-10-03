@@ -51,6 +51,13 @@ export function buildMasterItemPayload(input: {
         };
     }
 
+    if (input.itemKind === "food") {
+        return {
+            category,
+            itemKind: "food",
+        };
+    }
+
     const parsedBonus = parseItemBonusFields(
         input.accessoryBonusStat,
         input.accessoryBonusValue

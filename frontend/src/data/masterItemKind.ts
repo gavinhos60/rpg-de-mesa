@@ -13,6 +13,7 @@ export const MASTER_ITEM_KIND_OPTIONS: Array<{
     { value: "armor", label: "Armadura" },
     { value: "shield", label: "Escudo" },
     { value: "accessory", label: "Acessório" },
+    { value: "food", label: "Comida" },
 ];
 
 export const MAGIC_BONUS_OPTIONS = [0, 1, 2, 3] as const;
@@ -30,6 +31,8 @@ export function masterItemCategoryFromKind(
             return "shield";
         case "accessory":
             return "accessory";
+        case "food":
+            return "food";
     }
 }
 

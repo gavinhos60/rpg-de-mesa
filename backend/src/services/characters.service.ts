@@ -549,6 +549,7 @@ const VALID_ITEM_KINDS = new Set([
   "armor",
   "shield",
   "accessory",
+  "food",
 ]);
 
 function parseOptionalItemKind(raw: unknown): string | undefined {

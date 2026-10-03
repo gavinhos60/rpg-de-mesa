@@ -302,7 +302,8 @@ export type MasterItemKind =
     | "weapon"
     | "armor"
     | "shield"
-    | "accessory";
+    | "accessory"
+    | "food";
 
 export interface CustomInventoryItem {
     id: string;
