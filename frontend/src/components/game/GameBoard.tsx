@@ -640,13 +640,30 @@ export function GameBoard({
       color: string;
     }>
   >([]);
+  /** Segmentos ancorados (botão direito) ainda não confirmados no mapa. */
+  const [pendingRulerLegs, setPendingRulerLegs] = useState<
+    Array<{
+      from: { x: number; y: number };
+      to: { x: number; y: number };
+    }>
+  >([]);
 
   useEffect(() => {
     if (localAnnotationResetKey > 0) {
       setLocalStickyMeasures([]);
       setLocalStickyEffects([]);
+      setPendingRulerLegs([]);
     }
   }, [localAnnotationResetKey]);
+
+  useEffect(() => {
+    if (tool !== "ruler") {
+      setPendingRulerLegs([]);
+      setRulerStart(null);
+      setRulerPreview(null);
+      setRulerAwaitAnchor(false);
+    }
+  }, [tool]);
 
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -1307,6 +1324,13 @@ export function GameBoard({
   const isHexRef = useRef(isHex);
   const onMoveTokenRef = useRef(onMoveToken);
   const onMoveTokensRef = useRef(onMoveTokens);
+  const pendingRulerLegsRef = useRef(pendingRulerLegs);
+  const rulerStartRef = useRef(rulerStart);
+  const rulerPreviewRef = useRef(rulerPreview);
+  const rulerAwaitAnchorRef = useRef(rulerAwaitAnchor);
+  const measureSettingsRef = useRef(measureSettings);
+  const commitRulerSessionRef = useRef<(forceStay?: boolean) => void>(() => {});
+  const clearRulerSessionRef = useRef<() => void>(() => {});
   dragTokenIdsRef.current = dragTokenIds;
   dragOriginRef.current = dragOrigin;
   dragStartsRef.current = dragStarts;
@@ -1427,8 +1451,20 @@ export function GameBoard({
       }
     }
 
-    function onPointerUp() {
+    function onPointerUp(event: PointerEvent) {
       resizeRef.current = null;
+      if (
+        event.buttons === 0 &&
+        toolRef.current === "ruler" &&
+        (pendingRulerLegsRef.current.length > 0 ||
+          rulerAwaitAnchorRef.current)
+      ) {
+        if (measureSettingsRef.current.fade === "stay") {
+          commitRulerSessionRef.current();
+        } else {
+          clearRulerSessionRef.current();
+        }
+      }
       if (pendingDragRef.current) {
         pendingDragRef.current = null;
       }
@@ -1522,11 +1558,17 @@ export function GameBoard({
     return () => document.removeEventListener("selectstart", preventSelect);
   }, [marquee, isPanning, dragTokenIds.length]);
 
+  function shouldPersistRuler(forceStay?: boolean) {
+    return measureSettings.fade === "stay" || Boolean(forceStay);
+  }
+
   function stickRulerLeg(
     from: { x: number; y: number },
-    to: { x: number; y: number }
+    to: { x: number; y: number },
+    forceStay?: boolean
   ) {
     if (Math.hypot(to.x - from.x, to.y - from.y) < 2) return;
+    if (!shouldPersistRuler(forceStay)) return;
     if (measureSettings.broadcast) {
       onRuler(from, to, {
         sticky: true,
@@ -1548,22 +1590,67 @@ export function GameBoard({
     }
   }
 
-  function finalizeRulerMeasurement() {
-    if (!rulerStart || !rulerPreview) return;
-    if (Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) >= 2) {
-      stickRulerLeg(rulerStart, rulerPreview);
-    }
+  function clearRulerSession() {
+    pendingRulerLegsRef.current = [];
+    rulerStartRef.current = null;
+    rulerPreviewRef.current = null;
+    rulerAwaitAnchorRef.current = false;
+    setPendingRulerLegs([]);
     setRulerStart(null);
     setRulerPreview(null);
     setRulerAwaitAnchor(false);
   }
 
-  function anchorRulerAndContinue() {
-    if (!rulerStart || !rulerPreview) return;
-    if (Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) < 2) {
+  function commitRulerSession(forceStay?: boolean) {
+    const legs = [...pendingRulerLegs];
+    if (rulerStart && rulerPreview) {
+      if (
+        Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) >=
+        2
+      ) {
+        legs.push({ from: rulerStart, to: rulerPreview });
+      }
+    }
+    if (shouldPersistRuler(forceStay)) {
+      for (const leg of legs) {
+        stickRulerLeg(leg.from, leg.to, forceStay);
+      }
+    }
+    clearRulerSession();
+  }
+
+  function finalizeRulerMeasurement(forceStay?: boolean) {
+    if (!rulerStart || !rulerPreview) {
+      clearRulerSession();
       return;
     }
-    stickRulerLeg(rulerStart, rulerPreview);
+    if (
+      Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) < 2
+    ) {
+      clearRulerSession();
+      return;
+    }
+    if (pendingRulerLegs.length > 0) {
+      commitRulerSession(forceStay);
+      return;
+    }
+    stickRulerLeg(rulerStart, rulerPreview, forceStay);
+    clearRulerSession();
+  }
+
+  function anchorRulerAndContinue() {
+    if (!rulerStart || !rulerPreview) return;
+    if (
+      Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) < 2
+    ) {
+      return;
+    }
+    const nextPending = [
+      ...pendingRulerLegs,
+      { from: rulerStart, to: rulerPreview },
+    ];
+    pendingRulerLegsRef.current = nextPending;
+    setPendingRulerLegs(nextPending);
     const end = rulerPreview;
     setRulerStart(end);
     setRulerPreview(end);
@@ -1576,6 +1663,14 @@ export function GameBoard({
       anchorRulerAndContinue();
     }
   }
+
+  pendingRulerLegsRef.current = pendingRulerLegs;
+  rulerStartRef.current = rulerStart;
+  rulerPreviewRef.current = rulerPreview;
+  rulerAwaitAnchorRef.current = rulerAwaitAnchor;
+  measureSettingsRef.current = measureSettings;
+  commitRulerSessionRef.current = commitRulerSession;
+  clearRulerSessionRef.current = clearRulerSession;
 
   function handleBoardPointerDown(event: React.PointerEvent) {
     if (
@@ -1672,7 +1767,11 @@ export function GameBoard({
     if (tool === "ruler" && event.button === 0) {
       if (rulerAwaitAnchor && rulerStart && rulerPreview) {
         event.preventDefault();
-        finalizeRulerMeasurement();
+        if (shouldPersistRuler(event.shiftKey)) {
+          commitRulerSession(event.shiftKey);
+        } else {
+          clearRulerSession();
+        }
         return;
       }
       const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
@@ -1732,21 +1831,20 @@ export function GameBoard({
           rulerPreview.y - rulerStart.y
         );
         if (leg >= 2) {
-          if (measureSettings.fade === "stay" || Boolean(event?.shiftKey)) {
-            finalizeRulerMeasurement();
-          } else {
+          const chain = pendingRulerLegs.length > 0;
+          if (chain) {
             setRulerAwaitAnchor(true);
+          } else if (shouldPersistRuler(event?.shiftKey)) {
+            finalizeRulerMeasurement(event?.shiftKey);
+          } else {
+            clearRulerSession();
           }
         } else {
-          setRulerStart(null);
-          setRulerPreview(null);
-          setRulerAwaitAnchor(false);
+          clearRulerSession();
         }
       }
     } else if (tool !== "ruler") {
-      setRulerStart(null);
-      setRulerPreview(null);
-      setRulerAwaitAnchor(false);
+      clearRulerSession();
     }
 
     if (tool === "effect" && effectStart && effectPreview && canAnnotate) {
@@ -2880,6 +2978,17 @@ export function GameBoard({
                   />
                 );
               })}
+            {pendingRulerLegs.map((leg, index) => (
+              <MeasureShapeGraphic
+                key={`pending-ruler-${index}`}
+                shape={measureSettings.shape}
+                from={leg.from}
+                to={leg.to}
+                gridSize={gridSize}
+                label={measureLabel(measureCells(leg.from, leg.to))}
+                color={measureSettings.color}
+              />
+            ))}
             {localStickyMeasures.map((mark) => {
               const selected =
                 selectedAnnotation?.kind === "local-measure" &&
