@@ -2,7 +2,7 @@ FROM node:22-slim AS build
 WORKDIR /app
 ENV DATABASE_URL="postgresql://u:p@localhost:5432/db"
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
 RUN npx prisma generate --config prisma7.config.ts && npm run build
 RUN npm prune --omit=dev
