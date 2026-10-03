@@ -98,7 +98,6 @@ export function DiceRollOverlay({
   }, [dice, natural, total]);
 
   const [settled, setSettled] = useState(false);
-  const [engineReady, setEngineReady] = useState(false);
   const [useFallbackFx, setUseFallbackFx] = useState(false);
 
   function scheduleDone(ms: number) {
@@ -138,7 +137,6 @@ export function DiceRollOverlay({
       .then(() => {
         if (cancelled) return;
         initOkRef.current = true;
-        setEngineReady(true);
         box.show();
         bumpDiceBoxLayout();
       })
@@ -165,7 +163,6 @@ export function DiceRollOverlay({
       clearDiceHost();
       boxRef.current = null;
       initPromiseRef.current = null;
-      setEngineReady(false);
     };
   }, [visible]);
 
@@ -173,7 +170,6 @@ export function DiceRollOverlay({
     if (!visible) {
       setSettled(false);
       setUseFallbackFx(false);
-      setEngineReady(false);
       boxRef.current?.clear();
       boxRef.current?.hide();
       if (doneTimerRef.current != null) {
@@ -227,16 +223,12 @@ export function DiceRollOverlay({
         aria-hidden={!visible}
       />
 
-      {visible && (useFallbackFx || !engineReady) ? (
+      {visible && useFallbackFx ? (
         <FallbackDiceFx
           key={diceKey}
           dice={sourceDice}
-          onSettled={() => {
-            if (useFallbackFx || !initOkRef.current) setSettled(true);
-          }}
-          onDone={() => {
-            if (useFallbackFx || !initOkRef.current) scheduleDone(900);
-          }}
+          onSettled={() => setSettled(true)}
+          onDone={() => scheduleDone(900)}
         />
       ) : null}
 
