@@ -10,6 +10,7 @@ import {
 import { getMyCharacters, getCharacterById } from "../services/character.service";
 import {
   getCampaignMonsters,
+  getMonsterById as fetchSavedCustomMonster,
   type SavedCustomMonster,
 } from "../services/monster.service";
 import { customMonsterToMonster } from "../utils/customMonsterAdapter";
@@ -596,13 +597,13 @@ export function GameRoom() {
           } catch (err) {
             console.error(err);
           }
-          if (campaignId != null) {
-            try {
-              const monsters = await getCampaignMonsters(campaignId);
-              if (active) setCampaignMonsters(monsters);
-            } catch (err) {
-              console.error(err);
-            }
+        }
+        if (campaignId != null) {
+          try {
+            const monsters = await getCampaignMonsters(campaignId);
+            if (active) setCampaignMonsters(monsters);
+          } catch (err) {
+            console.error(err);
           }
         }
       } catch (err) {
@@ -1602,23 +1603,39 @@ export function GameRoom() {
     navigate(`/campaigns/${campaignId}`);
   }
 
-  function openMonsterFromToken(token: BoardToken) {
-    const custom =
-      token.customMonsterId != null
-        ? campaignMonsters.find((m) => m.id === token.customMonsterId)
-        : undefined;
-    const monster = custom
-      ? customMonsterToMonster(custom)
-      : token.monsterId
-        ? getMonsterById(token.monsterId)
-        : undefined;
-    if (!monster) return;
-    setOpenMonster(monster);
-    setMonsterDisplayName(token.name || monster.name);
-    setMonsterTokenId(token.id);
-    setMonsterTokenHp({
-      current: token.hpCurrent,
-      max: token.hpMax,
+  async function openMonsterFromToken(token: BoardToken) {
+    await withActionBusy("Abrindo ficha…", async () => {
+      let custom =
+        token.customMonsterId != null
+          ? campaignMonsters.find((m) => m.id === token.customMonsterId)
+          : undefined;
+      if (!custom && token.customMonsterId != null) {
+        try {
+          custom = await fetchSavedCustomMonster(token.customMonsterId);
+          setCampaignMonsters((previous) => {
+            if (previous.some((m) => m.id === custom!.id)) return previous;
+            return [...previous, custom!];
+          });
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      const monster = custom
+        ? customMonsterToMonster(custom)
+        : token.monsterId
+          ? getMonsterById(token.monsterId)
+          : undefined;
+      if (!monster) {
+        alert("Não foi possível carregar a ficha desta criatura.");
+        return;
+      }
+      setOpenMonster(monster);
+      setMonsterDisplayName(token.name || monster.name);
+      setMonsterTokenId(token.id);
+      setMonsterTokenHp({
+        current: token.hpCurrent,
+        max: token.hpMax,
+      });
     });
   }
 

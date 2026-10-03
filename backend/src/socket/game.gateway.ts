@@ -781,8 +781,21 @@ export function attachGameSocket(httpServer: HttpServer) {
           const { membership, state, room } = await loadContext(
             Number(payload.sessionId)
           );
-          if (membership.role !== "MASTER") {
-            ack?.({ ok: false, error: "Apenas o mestre pode rolar pela criatura" });
+          const token =
+            payload.tokenId != null
+              ? state.board.tokens.find(
+                  (item) => item.id === String(payload.tokenId)
+                )
+              : undefined;
+          const isMaster = membership.role === "MASTER";
+          const isDelegatedOwner =
+            token != null &&
+            Number(token.ownerUserId) === Number(socket.data.userId);
+          if (!isMaster && !isDelegatedOwner) {
+            ack?.({
+              ok: false,
+              error: "Você não pode rolar por esta criatura",
+            });
             return;
           }
 

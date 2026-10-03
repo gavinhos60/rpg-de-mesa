@@ -2637,14 +2637,18 @@ export function GameBoard({
                 <button
                   type="button"
                   data-token="true"
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    setTokenLayerMenu(null);
+                    pendingDragRef.current = null;
+                    if (tool === "ruler") return;
+                    openTokenSheet(token);
+                  }}
                   onClick={(event) => {
                     event.stopPropagation();
                     setTokenLayerMenu(null);
                     if (tool === "ruler") return;
-                    if (event.detail >= 2) {
-                      openTokenSheet(token);
-                      return;
-                    }
+                    if (event.detail >= 2) return;
                     if (event.shiftKey && isMaster) {
                       setSelection(
                         selectedIds.includes(token.id)
