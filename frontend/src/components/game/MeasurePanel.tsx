@@ -368,6 +368,11 @@ export function MeasurePanel({
         </button>
       </div>
 
+      <p className="mt-2 text-[10px] leading-snug text-white/45">
+        Esquerdo de novo = fixar e finalizar · Direito = fixar e continuar · Shift ou
+        permanecer = finalizar ao soltar
+      </p>
+
       <div className="flex items-center justify-between border-t border-white/10 pt-2 text-[10px] text-white/55">
         <span className="inline-flex items-center gap-1">
           Compatível com D&D 5E/4E

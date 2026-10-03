@@ -23,6 +23,7 @@ model User {
   email           String           @unique
   password        String?
   characters      Character[]
+  customMonsters  CustomMonster[]
   campaigns       CampaignMember[]
   startedSessions GameSession[]    @relation("SessionStarter")
   createdPapyri   Papyrus[]        @relation("PapyrusCreator")
@@ -69,6 +70,19 @@ model Character {
 
   campaignId Int?
   campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+}
+
+model CustomMonster {
+  id        Int      @id @default(autoincrement())
+  name      String
+  avatar    String?  @db.Text
+  sheet     Json?
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model GameSession {

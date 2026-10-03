@@ -1,0 +1,36 @@
+/** Tipos de dano comuns (5e) para multiseleção na ficha customizada. */
+export const MONSTER_DAMAGE_TYPES = [
+  "ácido",
+  "concussão",
+  "cortante",
+  "elétrico",
+  "fogo",
+  "frio",
+  "força",
+  "necrótico",
+  "perfurante",
+  "psíquico",
+  "radiante",
+  "trovão",
+  "veneno",
+] as const;
+
+export const MONSTER_LANGUAGES = [
+  "Comum",
+  "Anão",
+  "Élfico",
+  "Gigante",
+  "Gnomo",
+  "Goblin",
+  "Halfling",
+  "Orc",
+  "Abissal",
+  "Celestial",
+  "Dracônico",
+  "Infernal",
+  "Primordial",
+  "Silvestre",
+  "Subcomum",
+  "Profundo",
+  "Telepatia",
+] as const;

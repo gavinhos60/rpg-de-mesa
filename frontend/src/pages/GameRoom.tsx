@@ -8,7 +8,15 @@ import {
   getActiveGameSession,
 } from "../services/game.service";
 import { getMyCharacters, getCharacterById } from "../services/character.service";
-import { applyAbilityDisplayName } from "../utils/abilityDisplayNames";
+import {
+  getCampaignMonsters,
+  type SavedCustomMonster,
+} from "../services/monster.service";
+import { customMonsterToMonster } from "../utils/customMonsterAdapter";
+import {
+  applyAbilityDisplayDescription,
+  applyAbilityDisplayName,
+} from "../utils/abilityDisplayNames";
 import {
   updateCharacterWallet,
   updateCharacterAttunedSlots,
@@ -60,7 +68,7 @@ import {
   emptyBoardState,
   normalizeBoardState,
   playerIsOnFrozenScene,
-  snapToGrid,
+  snapTokenTopLeft,
   clearOwnAnnotations,
 } from "../types/game";
 import type {
@@ -150,6 +158,9 @@ export function GameRoom() {
   >([]);
   const [masterCharacters, setMasterCharacters] = useState<
     CampaignCharacterLite[]
+  >([]);
+  const [campaignMonsters, setCampaignMonsters] = useState<
+    SavedCustomMonster[]
   >([]);
   const [board, setBoard] = useState<BoardState>(emptyBoardState());
   const [chat, setChat] = useState<ChatMessage[]>([]);
@@ -585,6 +596,14 @@ export function GameRoom() {
           } catch (err) {
             console.error(err);
           }
+          if (campaignId != null) {
+            try {
+              const monsters = await getCampaignMonsters(campaignId);
+              if (active) setCampaignMonsters(monsters);
+            } catch (err) {
+              console.error(err);
+            }
+          }
         }
       } catch (err) {
         console.error(err);
@@ -654,13 +673,18 @@ export function GameRoom() {
     options?: { commit?: boolean }
   ) {
     const commit = options?.commit !== false;
-    const grid = board.gridSize || 50;
-    const nextX = commit ? snapToGrid(x, grid) : x;
-    const nextY = commit ? snapToGrid(y, grid) : y;
+    const token = board.tokens.find((t) => t.id === tokenId);
+    let nextX = x;
+    let nextY = y;
+    if (commit && token) {
+      const snapped = snapTokenTopLeft(token, x, y, board);
+      nextX = snapped.x;
+      nextY = snapped.y;
+    }
     setBoard((previous) => ({
       ...previous,
-      tokens: previous.tokens.map((token) =>
-        token.id === tokenId ? { ...token, x: nextX, y: nextY } : token
+      tokens: previous.tokens.map((t) =>
+        t.id === tokenId ? { ...t, x: nextX, y: nextY } : t
       ),
     }));
     if (commit) {
@@ -681,12 +705,13 @@ export function GameRoom() {
     options?: { commit?: boolean }
   ) {
     const commit = options?.commit !== false;
-    const grid = board.gridSize || 50;
-    const next = moves.map((move) => ({
-      tokenId: move.tokenId,
-      x: commit ? snapToGrid(move.x, grid) : move.x,
-      y: commit ? snapToGrid(move.y, grid) : move.y,
-    }));
+    const next = moves.map((move) => {
+      if (!commit) return move;
+      const token = board.tokens.find((t) => t.id === move.tokenId);
+      if (!token) return move;
+      const snapped = snapTokenTopLeft(token, move.x, move.y, board);
+      return { tokenId: move.tokenId, x: snapped.x, y: snapped.y };
+    });
     setBoard((previous) => ({
       ...previous,
       tokens: previous.tokens.map((token) => {
@@ -1136,12 +1161,19 @@ export function GameRoom() {
     }
   }
 
+  function canEditMonsterToken(tokenId: string | null): boolean {
+    if (!tokenId || !user) return false;
+    if (isMaster) return true;
+    const token = board.tokens.find((item) => item.id === tokenId);
+    return Number(token?.ownerUserId) === Number(user.id);
+  }
+
   function handleMonsterFeatureDisplayNameChange(
     key: string,
     defaultName: string,
     customLabel: string
   ) {
-    if (!monsterTokenId || !isMaster) return;
+    if (!monsterTokenId || !canEditMonsterToken(monsterTokenId)) return;
     const featureDisplayNames = applyAbilityDisplayName(
       board.tokens.find((token) => token.id === monsterTokenId)?.featureDisplayNames,
       key,
@@ -1152,6 +1184,29 @@ export function GameRoom() {
       ...board,
       tokens: board.tokens.map((token) =>
         token.id === monsterTokenId ? { ...token, featureDisplayNames } : token
+      ),
+    });
+  }
+
+  function handleMonsterFeatureDisplayDescriptionChange(
+    key: string,
+    defaultDescription: string,
+    customDescription: string
+  ) {
+    if (!monsterTokenId || !canEditMonsterToken(monsterTokenId)) return;
+    const featureDisplayDescriptions = applyAbilityDisplayDescription(
+      board.tokens.find((token) => token.id === monsterTokenId)
+        ?.featureDisplayDescriptions,
+      key,
+      defaultDescription,
+      customDescription
+    );
+    handleBoardChange({
+      ...board,
+      tokens: board.tokens.map((token) =>
+        token.id === monsterTokenId
+          ? { ...token, featureDisplayDescriptions }
+          : token
       ),
     });
   }
@@ -1351,9 +1406,15 @@ export function GameRoom() {
 
       if (npcOnly.length > 0) {
         const entries = npcOnly.map((token) => {
-          const monster = token.monsterId
-            ? getMonsterById(token.monsterId)
-            : undefined;
+          const custom =
+            token.customMonsterId != null
+              ? campaignMonsters.find((m) => m.id === token.customMonsterId)
+              : undefined;
+          const monster = custom
+            ? customMonsterToMonster(custom)
+            : token.monsterId
+              ? getMonsterById(token.monsterId)
+              : undefined;
           return {
             tokenId: token.id,
             name: token.name || monster?.name || "NPC",
@@ -1488,7 +1549,9 @@ export function GameRoom() {
     abilityModifier?: number | null;
     abilityLabel?: string | null;
   }) {
-    if (!socket || !sessionId || !user || !isMaster) return;
+    if (!socket || !sessionId || !user || !canEditMonsterToken(monsterTokenId)) {
+      return;
+    }
     await withActionBusy("Rolando ação…", async () => {
       const result = await emitMonsterAction(socket, sessionId, {
         ...payload,
@@ -1540,8 +1603,15 @@ export function GameRoom() {
   }
 
   function openMonsterFromToken(token: BoardToken) {
-    if (!token.monsterId) return;
-    const monster = getMonsterById(token.monsterId);
+    const custom =
+      token.customMonsterId != null
+        ? campaignMonsters.find((m) => m.id === token.customMonsterId)
+        : undefined;
+    const monster = custom
+      ? customMonsterToMonster(custom)
+      : token.monsterId
+        ? getMonsterById(token.monsterId)
+        : undefined;
     if (!monster) return;
     setOpenMonster(monster);
     setMonsterDisplayName(token.name || monster.name);
@@ -1791,6 +1861,7 @@ export function GameRoom() {
                       masterCharacters={masterCharacters}
                       members={members}
                       campaignId={campaignId}
+                      campaignMonsters={campaignMonsters}
                       onPreviewPapyrus={(papyrus) => {
                         setPreviewPapyrus(papyrus);
                       }}
@@ -1875,6 +1946,12 @@ export function GameRoom() {
               canAnnotate
               currentUserId={user?.id ?? 0}
               isMaster={isMaster}
+              campaignPlayers={members
+                .filter((member) => member.role === "PLAYER")
+                .map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                }))}
               placeOnSecretLayer={placeOnSecretLayer}
               watchPlayerScene={isMaster && watchPlayerScene}
               localAnnotationResetKey={localAnnotationResetKey}
@@ -2045,15 +2122,24 @@ export function GameRoom() {
           displayName={monsterDisplayName || openMonster.name}
           hpCurrent={monsterTokenHp.current}
           hpMax={monsterTokenHp.max}
-          canRoll={isMaster}
+          canRoll={canEditMonsterToken(monsterTokenId)}
           featureDisplayNames={
             monsterTokenId
               ? board.tokens.find((token) => token.id === monsterTokenId)
                   ?.featureDisplayNames
               : undefined
           }
-          canEditActionNames={isMaster}
+          featureDisplayDescriptions={
+            monsterTokenId
+              ? board.tokens.find((token) => token.id === monsterTokenId)
+                  ?.featureDisplayDescriptions
+              : undefined
+          }
+          canEditActionNames={canEditMonsterToken(monsterTokenId)}
           onFeatureDisplayNameChange={handleMonsterFeatureDisplayNameChange}
+          onFeatureDisplayDescriptionChange={
+            handleMonsterFeatureDisplayDescriptionChange
+          }
           onAction={handleMonsterAction}
           onClose={() => {
             setOpenMonster(null);

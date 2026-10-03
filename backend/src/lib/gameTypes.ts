@@ -36,6 +36,7 @@ export type BoardToken = {
   borderColor?: string;
   characterId?: number;
   monsterId?: string;
+  customMonsterId?: number;
   ownerUserId?: number;
   gridSpan?: number;
   sizeCategory?: "Tiny" | "Small" | "Medium" | "Large" | "Huge" | "Gargantuan";
@@ -106,6 +107,16 @@ export type BoardEffect = {
   expiresAt?: number;
 };
 
+export type MapLayoutSnapshot = {
+  mapWidth?: number;
+  mapHeight?: number;
+  gridSize?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
+  metersPerSquare?: number;
+  gridType?: "square" | "hex";
+};
+
 export type PreparedMap = {
   id: string;
   name: string;
@@ -114,6 +125,8 @@ export type PreparedMap = {
   mapWidth?: number;
   mapHeight?: number;
   gridSize?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
   metersPerSquare?: number;
   gridType?: "square" | "hex";
 };
@@ -136,6 +149,8 @@ export type BoardState = {
   mapWidth?: number;
   /** Altura do mapa em quadrados (não pixels). */
   mapHeight?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
   gridSize: number;
   gridType?: "square" | "hex";
   metersPerSquare: number;
@@ -149,6 +164,7 @@ export type BoardState = {
   visionByUserId?: Record<string, number>;
   fogExemptUserIds?: number[];
   preparedMaps?: PreparedMap[];
+  mapLayoutsByUrl?: Record<string, MapLayoutSnapshot>;
   /** @deprecated preferir playerViewsByUserId */
   playerMapView?: PlayerMapView | null;
   /** Mapa congelado por jogador (userId → view). */

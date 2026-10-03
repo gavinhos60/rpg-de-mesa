@@ -1,17 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { BoardState, BoardToken, CampaignCharacterLite, CombatState } from "../../types/game";
 import {
   DEFAULT_GRID_SIZE,
   DEFAULT_MAP_COLS,
   DEFAULT_MAP_ROWS,
-  DEFAULT_METERS_PER_SQUARE,
   DEFAULT_VISION_RADIUS_SQUARES,
   loadMapImageSize,
+  gridSizePreservingWorldPixels,
+  mapSquareLimitsPreservingPixels,
+  MIN_GRID_SIZE,
+  MAX_GRID_SIZE,
   mapSquaresOf,
+  boardWithMapLayoutStored,
+  resolveMapLayoutForUrl,
+  worldSizeOf,
   metersPerSquareOf,
   playerIsOnFrozenScene,
   sizeCategoryToSpan,
-  snapToGrid,
+  snapTokenTopLeft,
   snapshotPlayerMapView,
   npcTokenAfterSceneChange,
 } from "../../types/game";
@@ -23,6 +29,11 @@ import {
   searchMonsters,
   type Monster,
 } from "../../data/dnd/monsters";
+import type { SavedCustomMonster } from "../../services/monster.service";
+import {
+  customMonsterToMonster,
+  monsterPortraitFromSaved,
+} from "../../utils/customMonsterAdapter";
 import { monsterPortraitUrl } from "../../data/dnd/monsterPortrait";
 import { hitPointsFromSheet } from "../../utils/characterCombat";
 import { kilogramsToPounds } from "../../data/dnd/equipment";
@@ -103,6 +114,7 @@ interface MasterPanelProps {
   watchPlayerScene?: boolean;
   onWatchPlayerSceneChange?: (enabled: boolean) => void;
   campaignId?: number;
+  campaignMonsters?: SavedCustomMonster[];
   onPreviewPapyrus?: (papyrus: Papyrus) => void;
   /** Layout compacto (tela cheia do mestre). */
   compact?: boolean;
@@ -183,6 +195,7 @@ export function MasterPanel({
   watchPlayerScene = false,
   onWatchPlayerSceneChange,
   campaignId,
+  campaignMonsters = [],
   onPreviewPapyrus,
   compact = false,
 }: MasterPanelProps) {
@@ -193,6 +206,14 @@ export function MasterPanel({
   const [mapHeightDraft, setMapHeightDraft] = useState(() =>
     String(mapSquaresOf(board).rows)
   );
+  const [preserveMapOnSizeChange, setPreserveMapOnSizeChange] = useState(true);
+
+  useEffect(() => {
+    setMapUrl(board.mapUrl || "");
+    const squares = mapSquaresOf(board);
+    setMapWidthDraft(String(squares.cols));
+    setMapHeightDraft(String(squares.rows));
+  }, [board.mapUrl]);
   const [visionDraft, setVisionDraft] = useState(
     String(board.visionRadiusSquares ?? DEFAULT_VISION_RADIUS_SQUARES)
   );
@@ -240,7 +261,13 @@ export function MasterPanel({
     );
   }, [characters, members]);
   const [monsterQuery, setMonsterQuery] = useState("");
+  const [monsterCatalog, setMonsterCatalog] = useState<"srd" | "created">(
+    "srd"
+  );
   const [selectedMonsterId, setSelectedMonsterId] = useState("goblin");
+  const [selectedCustomMonsterId, setSelectedCustomMonsterId] = useState<
+    number | ""
+  >(campaignMonsters[0]?.id ?? "");
   const [selectedSheetId, setSelectedSheetId] = useState<number | "">(
     masterCharacters[0]?.id ?? ""
   );
@@ -280,6 +307,29 @@ export function MasterPanel({
     [selectedMonsterId]
   );
 
+  const customMonsterResults = useMemo(() => {
+    const q = monsterQuery.trim().toLowerCase();
+    const list = campaignMonsters.filter((item) =>
+      q ? item.name.toLowerCase().includes(q) : true
+    );
+    return list.slice(0, 40);
+  }, [campaignMonsters, monsterQuery]);
+
+  const selectedCustomMonster = useMemo(
+    () =>
+      campaignMonsters.find((item) => item.id === selectedCustomMonsterId) ??
+      customMonsterResults[0],
+    [campaignMonsters, selectedCustomMonsterId, customMonsterResults]
+  );
+
+  const selectedCustomAsMonster = useMemo(
+    () =>
+      selectedCustomMonster
+        ? customMonsterToMonster(selectedCustomMonster)
+        : undefined,
+    [selectedCustomMonster]
+  );
+
   const selectedSheet = useMemo(
     () => masterCharacters.find((item) => item.id === selectedSheetId),
     [masterCharacters, selectedSheetId]
@@ -289,6 +339,12 @@ export function MasterPanel({
     setSelectedMonsterId(id);
     const monster = getMonsterById(id);
     if (monster) setNpcName(monster.name);
+  }
+
+  function selectCustomMonster(id: number | "") {
+    setSelectedCustomMonsterId(id);
+    const entry = campaignMonsters.find((item) => item.id === id);
+    if (entry) setNpcName(entry.name);
   }
 
   function selectSheet(id: number | "") {
@@ -310,8 +366,11 @@ export function MasterPanel({
 
   function defaultTokenImage(): string | undefined {
     if (customImageUrl) return customImageUrl;
-    if (npcSource === "monster" && selectedMonster) {
-      return monsterPortraitUrl(selectedMonster);
+    if (npcSource === "monster") {
+      if (monsterCatalog === "created" && selectedCustomMonster) {
+        return monsterPortraitFromSaved(selectedCustomMonster);
+      }
+      if (selectedMonster) return monsterPortraitUrl(selectedMonster);
     }
     if (npcSource === "sheet" && selectedSheet?.avatar) {
       return selectedSheet.avatar;
@@ -345,6 +404,28 @@ export function MasterPanel({
       });
       return;
     }
+    const saved = resolveMapLayoutForUrl(board, url);
+    if (
+      typeof saved.mapWidth === "number" &&
+      saved.mapWidth > 0 &&
+      typeof saved.mapHeight === "number" &&
+      saved.mapHeight > 0
+    ) {
+      const squares = mapSquaresOf({ ...board, ...saved });
+      requestSceneChange({
+        mapUrl: url,
+        mapWidth: squares.cols,
+        mapHeight: squares.rows,
+        gridSize: saved.gridSize,
+        mapPixelWidth: saved.mapPixelWidth,
+        mapPixelHeight: saved.mapPixelHeight,
+        metersPerSquare: saved.metersPerSquare,
+        gridType: saved.gridType,
+        widthDraft: String(squares.cols),
+        heightDraft: String(squares.rows),
+      });
+      return;
+    }
     try {
       const size = await loadMapImageSize(url);
       const grid = board.gridSize || DEFAULT_GRID_SIZE;
@@ -354,6 +435,8 @@ export function MasterPanel({
         mapUrl: url,
         mapWidth: cols,
         mapHeight: rows,
+        mapPixelWidth: size.width,
+        mapPixelHeight: size.height,
         widthDraft: String(cols),
         heightDraft: String(rows),
       });
@@ -369,6 +452,8 @@ export function MasterPanel({
     mapUrl: string;
     mapWidth?: number;
     mapHeight?: number;
+    mapPixelWidth?: number;
+    mapPixelHeight?: number;
     gridSize?: number;
     metersPerSquare?: number;
     gridType?: "square" | "hex";
@@ -385,6 +470,8 @@ export function MasterPanel({
       ...board,
       ...(next.mapWidth != null ? { mapWidth: next.mapWidth } : {}),
       ...(next.mapHeight != null ? { mapHeight: next.mapHeight } : {}),
+      ...(next.mapPixelWidth != null ? { mapPixelWidth: next.mapPixelWidth } : {}),
+      ...(next.mapPixelHeight != null ? { mapPixelHeight: next.mapPixelHeight } : {}),
       ...(next.gridSize != null ? { gridSize: next.gridSize } : {}),
       ...(next.metersPerSquare != null
         ? { metersPerSquare: next.metersPerSquare }
@@ -401,6 +488,8 @@ export function MasterPanel({
       mapUrl: string;
       mapWidth?: number;
       mapHeight?: number;
+      mapPixelWidth?: number;
+      mapPixelHeight?: number;
       gridSize?: number;
       metersPerSquare?: number;
       gridType?: "square" | "hex";
@@ -409,9 +498,10 @@ export function MasterPanel({
     },
     bringPlayerIds: number[]
   ) {
+    const stored = boardWithMapLayoutStored(board);
     const bring = new Set(bringPlayerIds.map(Number));
     const allPlayerIds = new Set(fogPlayers.map((player) => player.userId));
-    for (const token of board.tokens) {
+    for (const token of stored.tokens) {
       if (token.kind === "pc" && token.ownerUserId != null) {
         allPlayerIds.add(Number(token.ownerUserId));
       }
@@ -423,17 +513,35 @@ export function MasterPanel({
       allPlayerIds.size === 0 || leavingIds.length === 0;
     const movingNobody = bring.size === 0;
 
-    const leavingSnapshot = snapshotPlayerMapView(board);
-    const prevViews = { ...(board.playerViewsByUserId ?? {}) };
+    const leavingSnapshot = snapshotPlayerMapView(stored);
+    const prevViews = { ...(stored.playerViewsByUserId ?? {}) };
 
     // O mestre sempre vai para o mapa clicado.
     const nextMapUrl = next.mapUrl;
-    const nextMapWidth = next.mapWidth ?? board.mapWidth;
-    const nextMapHeight = next.mapHeight ?? board.mapHeight;
-    const nextGridSize = next.gridSize ?? board.gridSize;
-    const nextMeters =
-      next.metersPerSquare ?? metersPerSquareOf(board);
-    const nextGridType = next.gridType ?? board.gridType;
+    const resolved = resolveMapLayoutForUrl(stored, nextMapUrl, {
+      mapWidth: next.mapWidth,
+      mapHeight: next.mapHeight,
+      gridSize: next.gridSize,
+      mapPixelWidth: next.mapPixelWidth,
+      mapPixelHeight: next.mapPixelHeight,
+      metersPerSquare: next.metersPerSquare,
+      gridType: next.gridType,
+    });
+    const nextMapWidth = resolved.mapWidth ?? stored.mapWidth;
+    const nextMapHeight = resolved.mapHeight ?? stored.mapHeight;
+    const nextGridSize = resolved.gridSize ?? stored.gridSize;
+    const nextPixelW =
+      resolved.mapPixelWidth ??
+      (nextMapWidth != null && nextGridSize != null
+        ? Number(nextMapWidth) * Number(nextGridSize)
+        : stored.mapPixelWidth);
+    const nextPixelH =
+      resolved.mapPixelHeight ??
+      (nextMapHeight != null && nextGridSize != null
+        ? Number(nextMapHeight) * Number(nextGridSize)
+        : stored.mapPixelHeight);
+    const nextMeters = resolved.metersPerSquare ?? metersPerSquareOf(stored);
+    const nextGridType = resolved.gridType ?? stored.gridType;
 
     let nextViews: Record<string, PlayerMapView> = {};
 
@@ -446,8 +554,8 @@ export function MasterPanel({
         const key = String(userId);
         nextViews[key] =
           prevViews[key] ??
-          (board.playerMapView && Object.keys(prevViews).length === 0
-            ? board.playerMapView
+          (stored.playerMapView && Object.keys(prevViews).length === 0
+            ? stored.playerMapView
             : leavingSnapshot);
       }
     } else {
@@ -456,8 +564,8 @@ export function MasterPanel({
         const key = String(userId);
         nextViews[key] =
           prevViews[key] ??
-          (board.playerMapView && Object.keys(prevViews).length === 0
-            ? board.playerMapView
+          (stored.playerMapView && Object.keys(prevViews).length === 0
+            ? stored.playerMapView
             : leavingSnapshot);
       }
       // Quem veio junto deixa de ter view congelada.
@@ -466,11 +574,11 @@ export function MasterPanel({
       }
     }
 
-    const mapIsChanging = nextMapUrl !== (board.mapUrl ?? "");
-    const oldMapUrl = board.mapUrl ?? "";
+    const mapIsChanging = nextMapUrl !== (stored.mapUrl ?? "");
+    const oldMapUrl = stored.mapUrl ?? "";
     const hasFrozen = Object.keys(nextViews).length > 0;
 
-    const tokens = board.tokens.map((token) => {
+    const tokens = stored.tokens.map((token) => {
       const owner =
         token.ownerUserId != null ? Number(token.ownerUserId) : null;
       const baseScene = token.sceneMapUrl ?? oldMapUrl;
@@ -529,23 +637,27 @@ export function MasterPanel({
       return { ...token, onPlayerScene: undefined };
     });
 
-    onBoardChange({
-      ...board,
-      mapUrl: nextMapUrl,
-      ...(nextMapWidth != null ? { mapWidth: nextMapWidth } : {}),
-      ...(nextMapHeight != null ? { mapHeight: nextMapHeight } : {}),
-      ...(nextGridSize != null ? { gridSize: nextGridSize } : {}),
-      metersPerSquare: nextMeters,
-      ...(nextGridType != null ? { gridType: nextGridType } : {}),
-      tokens,
-      drawings: [],
-      effects: [],
-      rulers: [],
-      playerMapView: hasFrozen
-        ? Object.values(nextViews)[0] ?? leavingSnapshot
-        : null,
-      playerViewsByUserId: hasFrozen ? nextViews : {},
-    });
+    onBoardChange(
+      boardWithMapLayoutStored({
+        ...stored,
+        mapUrl: nextMapUrl,
+        ...(nextMapWidth != null ? { mapWidth: nextMapWidth } : {}),
+        ...(nextMapHeight != null ? { mapHeight: nextMapHeight } : {}),
+        ...(nextPixelW != null ? { mapPixelWidth: nextPixelW } : {}),
+        ...(nextPixelH != null ? { mapPixelHeight: nextPixelH } : {}),
+        ...(nextGridSize != null ? { gridSize: nextGridSize } : {}),
+        metersPerSquare: nextMeters,
+        ...(nextGridType != null ? { gridType: nextGridType } : {}),
+        tokens,
+        drawings: [],
+        effects: [],
+        rulers: [],
+        playerMapView: hasFrozen
+          ? Object.values(nextViews)[0] ?? leavingSnapshot
+          : null,
+        playerViewsByUserId: hasFrozen ? nextViews : {},
+      })
+    );
 
     onWatchPlayerSceneChange?.(false);
     setMapUrl(next.mapUrl);
@@ -570,11 +682,45 @@ export function MasterPanel({
 
   function addNpcToken() {
     const grid = board.gridSize || DEFAULT_GRID_SIZE;
-    const x = snapToGrid(140, grid);
-    const y = snapToGrid(140, grid);
+    const x = 140;
+    const y = 140;
     let token: BoardToken;
 
-    if (npcSource === "monster" && selectedMonster) {
+    if (npcSource === "monster" && monsterCatalog === "created") {
+      if (!selectedCustomAsMonster || !selectedCustomMonster) {
+        window.alert(
+          "Nenhum monstro criado disponível. Crie fichas em Monstros no menu lateral."
+        );
+        return;
+      }
+      const m = selectedCustomAsMonster;
+      const span = sizeCategoryToSpan(m.size);
+      const displayName = npcName.trim() || m.name;
+      token = {
+        id: uid("npc"),
+        kind: "npc",
+        name: displayName,
+        customMonsterId: selectedCustomMonster.id,
+        x,
+        y,
+        color: m.color,
+        sizeCategory: m.size,
+        gridSpan: span,
+        size: span * grid,
+        imageUrl: customImageUrl || monsterPortraitFromSaved(selectedCustomMonster),
+        hpMax: m.hp,
+        hpCurrent: m.hp,
+        customValue: "",
+        meta:
+          displayName !== m.name
+            ? `${m.name} · ND ${m.cr} · CA ${m.ac}`
+            : `ND ${m.cr} · CA ${m.ac}`,
+      };
+    } else if (
+      npcSource === "monster" &&
+      monsterCatalog === "srd" &&
+      selectedMonster
+    ) {
       const span = sizeCategoryToSpan(selectedMonster.size);
       const displayName = npcName.trim() || selectedMonster.name;
       token = {
@@ -637,8 +783,11 @@ export function MasterPanel({
       };
     }
 
+    const snapped = snapTokenTopLeft(token, token.x, token.y, board);
     const placed: BoardToken = {
       ...(placeOnSecretLayer ? { ...token, secret: true } : token),
+      x: snapped.x,
+      y: snapped.y,
       sceneMapUrl: board.mapUrl || undefined,
     };
     onBoardChange({
@@ -754,11 +903,55 @@ export function MasterPanel({
       window.alert("Informe largura e altura válidas em quadrados (ex.: 30 × 40).");
       return;
     }
-    onBoardChange({
-      ...board,
-      mapWidth: cols,
-      mapHeight: rows,
-    });
+    const grid = board.gridSize || DEFAULT_GRID_SIZE;
+    const worldNow = worldSizeOf(board);
+    const pixelW = board.mapPixelWidth ?? worldNow.width;
+    const pixelH = board.mapPixelHeight ?? worldNow.height;
+
+    if (preserveMapOnSizeChange) {
+      const sizedBoard = {
+        ...board,
+        mapPixelWidth: pixelW,
+        mapPixelHeight: pixelH,
+      };
+      const limits = mapSquareLimitsPreservingPixels(sizedBoard);
+      let appliedCols = cols;
+      let appliedRows = rows;
+      if (appliedCols < limits.minCols) appliedCols = limits.minCols;
+      if (appliedRows < limits.minRows) appliedRows = limits.minRows;
+      if (appliedCols > limits.maxCols) appliedCols = limits.maxCols;
+      if (appliedRows > limits.maxRows) appliedRows = limits.maxRows;
+      const gridSize = gridSizePreservingWorldPixels(sizedBoard, appliedCols);
+      if (appliedCols !== cols || appliedRows !== rows) {
+        window.alert(
+          `Com a imagem fixa, cada quadrado fica entre ${MIN_GRID_SIZE} e ${MAX_GRID_SIZE} px na tela. ` +
+            `Ajustado para ${appliedCols}×${appliedRows} (mín. ${limits.minCols}×${limits.minRows} neste mapa).`
+        );
+      }
+      onBoardChange(
+        boardWithMapLayoutStored({
+          ...board,
+          mapWidth: appliedCols,
+          mapHeight: appliedRows,
+          gridSize,
+          mapPixelWidth: pixelW,
+          mapPixelHeight: pixelH,
+        })
+      );
+      setMapWidthDraft(String(appliedCols));
+      setMapHeightDraft(String(appliedRows));
+      return;
+    } else {
+      onBoardChange(
+        boardWithMapLayoutStored({
+          ...board,
+          mapWidth: cols,
+          mapHeight: rows,
+          mapPixelWidth: cols * grid,
+          mapPixelHeight: rows * grid,
+        })
+      );
+    }
     setMapWidthDraft(String(cols));
     setMapHeightDraft(String(rows));
   }
@@ -774,6 +967,7 @@ export function MasterPanel({
       return;
     }
     const squares = mapSquaresOf(board);
+    const worldNow = worldSizeOf(board);
     const entry = {
       id: uid("map"),
       name,
@@ -781,15 +975,19 @@ export function MasterPanel({
       mapWidth: squares.cols,
       mapHeight: squares.rows,
       gridSize: board.gridSize,
+      mapPixelWidth: board.mapPixelWidth ?? worldNow.width,
+      mapPixelHeight: board.mapPixelHeight ?? worldNow.height,
       metersPerSquare: metersPerSquareOf(board),
       gridType: (board.gridType === "hex" ? "hex" : "square") as
         | "square"
         | "hex",
     };
-    onBoardChange({
-      ...board,
-      preparedMaps: [...(board.preparedMaps ?? []), entry],
-    });
+    onBoardChange(
+      boardWithMapLayoutStored({
+        ...board,
+        preparedMaps: [...(board.preparedMaps ?? []), entry],
+      })
+    );
     setPreparedMapName("");
   }
 
@@ -803,25 +1001,17 @@ export function MasterPanel({
     metersPerSquare?: number;
     gridType?: "square" | "hex";
   }) {
-    const gridSize = entry.gridSize || board.gridSize || DEFAULT_GRID_SIZE;
-    const meters =
-      entry.metersPerSquare ??
-      metersPerSquareOf(board) ??
-      DEFAULT_METERS_PER_SQUARE;
-    const gridType = entry.gridType ?? board.gridType ?? "square";
-    const squares = mapSquaresOf({
-      ...board,
-      mapWidth: entry.mapWidth,
-      mapHeight: entry.mapHeight,
-      gridSize,
-    });
+    const layout = resolveMapLayoutForUrl(board, entry.mapUrl, entry);
+    const squares = mapSquaresOf({ ...board, ...layout });
     requestSceneChange({
       mapUrl: entry.mapUrl,
       mapWidth: squares.cols,
       mapHeight: squares.rows,
-      gridSize,
-      metersPerSquare: meters,
-      gridType,
+      gridSize: layout.gridSize,
+      mapPixelWidth: layout.mapPixelWidth,
+      mapPixelHeight: layout.mapPixelHeight,
+      metersPerSquare: layout.metersPerSquare,
+      gridType: layout.gridType,
       widthDraft: String(squares.cols),
       heightDraft: String(squares.rows),
     });
@@ -909,23 +1099,17 @@ export function MasterPanel({
     gridSize?: number;
     metersPerSquare?: number;
   }) {
-    const gridSize = option.gridSize || board.gridSize || DEFAULT_GRID_SIZE;
-    const meters =
-      option.metersPerSquare ??
-      metersPerSquareOf(board) ??
-      DEFAULT_METERS_PER_SQUARE;
-    const squares = mapSquaresOf({
-      ...board,
-      mapWidth: option.mapWidth,
-      mapHeight: option.mapHeight,
-      gridSize,
-    });
+    const layout = resolveMapLayoutForUrl(board, option.mapUrl, option);
+    const squares = mapSquaresOf({ ...board, ...layout });
     const next = {
       mapUrl: option.mapUrl,
       mapWidth: squares.cols,
       mapHeight: squares.rows,
-      gridSize,
-      metersPerSquare: meters,
+      gridSize: layout.gridSize,
+      mapPixelWidth: layout.mapPixelWidth,
+      mapPixelHeight: layout.mapPixelHeight,
+      metersPerSquare: layout.metersPerSquare,
+      gridType: layout.gridType,
       widthDraft: String(squares.cols),
       heightDraft: String(squares.rows),
     };
@@ -1259,8 +1443,39 @@ export function MasterPanel({
                   />
                 </label>
               </div>
+              <label className="mb-2 flex cursor-pointer items-start gap-2 text-[10px] text-[var(--color-ink-soft)]">
+                <input
+                  type="checkbox"
+                  checked={preserveMapOnSizeChange}
+                  onChange={(event) =>
+                    setPreserveMapOnSizeChange(event.target.checked)
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  Manter imagem do mapa ao mudar largura/altura (só ajusta a
+                  grade). Desmarcado: o mapa redimensiona junto com os quadrados.
+                </span>
+              </label>
               <p className="mb-2 text-[10px] leading-snug text-[var(--color-ink-soft)]">
-                Em quadrados (ex.: 30×40).
+                Largura e altura em quadrados (ex.: 30×40).
+                {preserveMapOnSizeChange && board.mapUrl?.trim() ? (
+                  <>
+                    {" "}
+                    Com a imagem fixa, neste mapa:{" "}
+                    {(() => {
+                      const worldNow = worldSizeOf(board);
+                      const lim = mapSquareLimitsPreservingPixels({
+                        ...board,
+                        mapPixelWidth:
+                          board.mapPixelWidth ?? worldNow.width,
+                        mapPixelHeight:
+                          board.mapPixelHeight ?? worldNow.height,
+                      });
+                      return `${lim.minCols}–${lim.maxCols} col. × ${lim.minRows}–${lim.maxRows} lin.`;
+                    })()}
+                  </>
+                ) : null}
               </p>
               <label className="mb-2 block text-[10px] text-[var(--color-ink-soft)]">
                 Formato do grid
@@ -1606,6 +1821,38 @@ export function MasterPanel({
             >
               {npcSource === "monster" && (
                 <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-1">
+                    {(
+                      [
+                        ["srd", "Catálogo SRD"],
+                        ["created", "Criados"],
+                      ] as const
+                    ).map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setMonsterCatalog(id)}
+                        className="border px-1 py-1.5 text-[10px]"
+                        style={{
+                          fontFamily: "'Cinzel', serif",
+                          borderColor:
+                            monsterCatalog === id
+                              ? "var(--color-crimson)"
+                              : "var(--color-border)",
+                          backgroundColor:
+                            monsterCatalog === id
+                              ? "var(--color-crimson)"
+                              : "var(--color-parchment)",
+                          color:
+                            monsterCatalog === id
+                              ? "var(--color-ink-inverse)"
+                              : "var(--color-ink-muted)",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                   <input
                     value={monsterQuery}
                     onChange={(event) => setMonsterQuery(event.target.value)}
@@ -1613,19 +1860,44 @@ export function MasterPanel({
                     className="w-full border px-2 py-1.5 text-sm outline-none"
                     style={fieldStyle}
                   />
-                  <select
-                    value={selectedMonsterId}
-                    onChange={(event) => selectMonster(event.target.value)}
-                    className="w-full border px-2 py-1.5 text-sm"
-                    style={fieldStyle}
-                  >
-                    {monsterResults.map((monster) => (
-                      <option key={monster.id} value={monster.id}>
-                        {monster.name} (ND {monster.cr})
-                      </option>
-                    ))}
-                  </select>
-                  {selectedMonster && (
+                  {monsterCatalog === "srd" ? (
+                    <select
+                      value={selectedMonsterId}
+                      onChange={(event) => selectMonster(event.target.value)}
+                      className="w-full border px-2 py-1.5 text-sm"
+                      style={fieldStyle}
+                    >
+                      {monsterResults.map((monster) => (
+                        <option key={monster.id} value={monster.id}>
+                          {monster.name} (ND {monster.cr})
+                        </option>
+                      ))}
+                    </select>
+                  ) : customMonsterResults.length === 0 ? (
+                    <p className="text-[11px] text-[var(--color-ink-soft)]">
+                      Nenhum monstro criado na campanha. Peça aos jogadores para
+                      criar em Monstros no menu.
+                    </p>
+                  ) : (
+                    <select
+                      value={selectedCustomMonster?.id ?? ""}
+                      onChange={(event) =>
+                        selectCustomMonster(Number(event.target.value) || "")
+                      }
+                      className="w-full border px-2 py-1.5 text-sm"
+                      style={fieldStyle}
+                    >
+                      {customMonsterResults.map((monster) => (
+                        <option key={monster.id} value={monster.id}>
+                          {monster.name}
+                          {monster.user?.name
+                            ? ` · ${monster.user.name}`
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {monsterCatalog === "srd" && selectedMonster && (
                     <div
                       className="flex gap-2 border p-2"
                       style={fieldStyle}
@@ -1656,6 +1928,44 @@ export function MasterPanel({
                       </div>
                     </div>
                   )}
+                  {monsterCatalog === "created" &&
+                    selectedCustomAsMonster &&
+                    selectedCustomMonster && (
+                      <div
+                        className="flex gap-2 border p-2"
+                        style={fieldStyle}
+                      >
+                        <img
+                          src={
+                            customImageUrl ||
+                            monsterPortraitFromSaved(selectedCustomMonster)
+                          }
+                          alt={selectedCustomAsMonster.name}
+                          className="h-12 w-12 rounded-full object-cover"
+                          style={{ backgroundColor: "#1A140F" }}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-[var(--color-ink)]">
+                            {selectedCustomAsMonster.name}
+                          </p>
+                          <p className="text-[10px] text-[var(--color-ink-soft)]">
+                            {selectedCustomAsMonster.type} ·{" "}
+                            {selectedCustomAsMonster.sizeLabel} · CA{" "}
+                            {selectedCustomAsMonster.ac} · PV{" "}
+                            {selectedCustomAsMonster.hp}
+                          </p>
+                          <button
+                            type="button"
+                            className="mt-0.5 text-[11px] text-[var(--color-crimson)] underline"
+                            onClick={() =>
+                              onOpenMonster(selectedCustomAsMonster)
+                            }
+                          >
+                            Ficha completa
+                          </button>
+                        </div>
+                      </div>
+                    )}
                 </div>
               )}
 

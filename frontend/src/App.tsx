@@ -10,6 +10,9 @@ import { Campaigns } from "./pages/Campaigns";
 import { Campaign } from "./pages/Campaign";
 import { CreateCharacter } from "./pages/CreateCharacter";
 import { Characters } from "./pages/Characters";
+import { Monsters } from "./pages/Monsters";
+import { CreateMonster } from "./pages/CreateMonster";
+import { MonsterDetail } from "./pages/MonsterDetail";
 import { CharacterSheet } from "./pages/CharacterSheet";
 import { GameRoom } from "./pages/GameRoom";
 import { AppLayout } from "./components/AppLayout";
@@ -42,6 +45,10 @@ function App() {
                         path="/characters"
                         element={<Characters />}
                     />
+                    <Route path="/monsters" element={<Monsters />} />
+                    <Route path="/monsters/new" element={<CreateMonster />} />
+                    <Route path="/monsters/:id/edit" element={<CreateMonster />} />
+                    <Route path="/monsters/:id" element={<MonsterDetail />} />
                     <Route
                         path="/characters/new"
                         element={<CreateCharacter />}

@@ -14,10 +14,14 @@ import {
   isTokenVisibleThroughFog,
   lightSourcesForViewer,
   loadMapImageSize,
+  mapLayoutKey,
   metersPerSquareOf,
+  resolveMapLayoutForUrl,
   snapToCellCenter,
   snapToCellCorner,
   snapToGrid,
+  snapTokenTopLeft,
+  spanToSizeCategory,
   tokenFootprintPx,
   tokensForViewer,
   viewerIgnoresFog,
@@ -27,9 +31,13 @@ import {
 import {
   distanceHexes,
   hexCentersInBounds,
+  hexMetrics,
   hexPolygonPoints,
+  hexTokenBodyPx,
+  hexTokenFootprintPx,
   snapToHexCenter,
   snapTokenToHex,
+  tokenGridSpanForHex,
 } from "../../utils/hexGrid";
 import {
   DND_CONDITIONS,
@@ -152,6 +160,8 @@ interface GameBoardProps {
   highlightedTokenIds?: string[];
   /** Ref compartilhado: ids em arraste (GameRoom ignora ecos remotos). */
   draggingTokenIdsRef?: React.MutableRefObject<Set<string>>;
+  /** Jogadores da campanha (delegar tokens NPC). */
+  campaignPlayers?: Array<{ userId: number; name: string }>;
 }
 
 function applyMeasureSnap(
@@ -513,6 +523,34 @@ const MIN_SCALE = 0.05;
 const MAX_SCALE = 2.5;
 const ZOOM_FACTOR = 1.12;
 
+function boardWithTokenSpan(
+  board: BoardState,
+  tokenId: string,
+  span: 1 | 2 | 3 | 4,
+  hex: boolean,
+  gridSize: number
+): BoardState {
+  const cell = hex ? hexMetrics(gridSize).width : gridSize;
+  return {
+    ...board,
+    tokens: board.tokens.map((token) => {
+      if (token.id !== tokenId) return token;
+      const patch = {
+        gridSpan: span,
+        sizeCategory: spanToSizeCategory(span),
+        size: span * cell,
+      };
+      const snapped = snapTokenTopLeft(
+        { ...token, ...patch },
+        token.x,
+        token.y,
+        board
+      );
+      return { ...token, ...patch, x: snapped.x, y: snapped.y };
+    }),
+  };
+}
+
 export function GameBoard({
   board,
   tool,
@@ -536,6 +574,7 @@ export function GameBoard({
   onRollTokenInitiative,
   highlightedTokenIds = [],
   draggingTokenIdsRef,
+  campaignPlayers = [],
 }: GameBoardProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -572,6 +611,8 @@ export function GameBoard({
     x: number;
     y: number;
   } | null>(null);
+  /** Trecho pronto para fixar com botão direito (após soltar o arraste). */
+  const [rulerAwaitAnchor, setRulerAwaitAnchor] = useState(false);
   const [measureSettings, setMeasureSettings] = useState<MeasureSettings>(
     DEFAULT_MEASURE_SETTINGS
   );
@@ -660,6 +701,32 @@ export function GameBoard({
     [isHex, world.width, world.height, gridSize]
   );
 
+  function tokenPx(token: BoardToken) {
+    if (isHex) {
+      return hexTokenFootprintPx(
+        tokenGridSpanForHex(token),
+        gridSize
+      );
+    }
+    return tokenFootprintPx(token, gridSize);
+  }
+
+  function setTokenOwner(tokenId: string, ownerUserId: number | undefined) {
+    onChangeBoard({
+      ...board,
+      tokens: board.tokens.map((token) =>
+        token.id === tokenId
+          ? {
+              ...token,
+              ownerUserId:
+                ownerUserId != null ? ownerUserId : undefined,
+            }
+          : token
+      ),
+    });
+    setTokenLayerMenu(null);
+  }
+
   function snapBoardPoint(x: number, y: number, footprintPx = gridSize) {
     if (isHex) {
       return snapTokenToHex(x, y, footprintPx, gridSize);
@@ -669,7 +736,7 @@ export function GameBoard({
 
   /** Centro geométrico do footprint (x/y do token são o canto superior esquerdo). */
   function tokenCenterPoint(token: BoardToken): { x: number; y: number } {
-    const size = tokenFootprintPx(token, gridSize);
+    const size = tokenPx(token);
     return { x: token.x + size / 2, y: token.y + size / 2 };
   }
 
@@ -704,7 +771,7 @@ export function GameBoard({
     let maxX = world.width;
     let maxY = world.height;
     for (const token of viewTokens) {
-      const size = tokenFootprintPx(token, gridSize);
+      const size = tokenPx(token);
       maxX = Math.max(maxX, token.x + size + gridSize * 10);
       maxY = Math.max(maxY, token.y + size + gridSize * 10);
     }
@@ -777,7 +844,38 @@ export function GameBoard({
   }
 
   function isNpcToken(token: BoardToken) {
-    return Boolean(token.monsterId) || !token.characterId;
+    return (
+      Boolean(token.monsterId || token.customMonsterId) || !token.characterId
+    );
+  }
+
+  function tokenHasMonsterSheet(token: BoardToken) {
+    return Boolean(token.monsterId || token.customMonsterId);
+  }
+
+  function canOpenTokenSheet(token: BoardToken) {
+    if (tokenHasMonsterSheet(token)) {
+      return (
+        isMaster ||
+        Number(token.ownerUserId) === Number(currentUserId)
+      );
+    }
+    if (token.characterId) {
+      return (
+        isMaster ||
+        Number(token.ownerUserId) === Number(currentUserId)
+      );
+    }
+    return false;
+  }
+
+  function openTokenSheet(token: BoardToken) {
+    if (!canOpenTokenSheet(token)) return;
+    if (tokenHasMonsterSheet(token)) {
+      onOpenMonsterSheet?.(token);
+    } else if (token.characterId) {
+      onOpenCharacterSheet?.(token);
+    }
   }
 
   /** Token que pode entrar no relógio (ficha ou NPC). */
@@ -990,9 +1088,9 @@ export function GameBoard({
       x: (viewportSize.w - world.width * fitScale) / 2,
       y: (viewportSize.h - world.height * fitScale) / 2,
     });
-    // Novo mapa / grade: reencaixa como ao abrir a página no Roll20.
+    // Novo mapa ou tamanho do mundo: reencaixa (mudar só gridSize com mapa fixo não entra aqui).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [world.width, world.height, gridSize, mapBoard.mapUrl]);
+  }, [world.width, world.height, mapBoard.mapUrl]);
 
   useEffect(() => {
     if (!followFitRef.current) return;
@@ -1005,6 +1103,37 @@ export function GameBoard({
 
   useEffect(() => {
     if (!isMaster || !board.mapUrl) return;
+    const urlKey = mapLayoutKey(board.mapUrl);
+    const saved = resolveMapLayoutForUrl(board, board.mapUrl);
+    if (
+      typeof saved.mapWidth === "number" &&
+      saved.mapWidth > 0 &&
+      typeof saved.mapHeight === "number" &&
+      saved.mapHeight > 0
+    ) {
+      const stale =
+        board.mapWidth !== saved.mapWidth ||
+        board.mapHeight !== saved.mapHeight ||
+        (saved.mapPixelWidth != null &&
+          board.mapPixelWidth !== saved.mapPixelWidth) ||
+        (saved.gridSize != null && board.gridSize !== saved.gridSize);
+      if (stale && probedMapRef.current !== `layout:${urlKey}`) {
+        probedMapRef.current = `layout:${urlKey}`;
+        onChangeBoard({
+          ...board,
+          mapWidth: saved.mapWidth,
+          mapHeight: saved.mapHeight,
+          ...(saved.gridSize != null ? { gridSize: saved.gridSize } : {}),
+          ...(saved.mapPixelWidth != null
+            ? { mapPixelWidth: saved.mapPixelWidth }
+            : {}),
+          ...(saved.mapPixelHeight != null
+            ? { mapPixelHeight: saved.mapPixelHeight }
+            : {}),
+        });
+      }
+      return;
+    }
     if (
       typeof board.mapWidth === "number" &&
       board.mapWidth > 0 &&
@@ -1024,6 +1153,8 @@ export function GameBoard({
           ...board,
           mapWidth: Math.max(1, Math.round(size.width / grid)),
           mapHeight: Math.max(1, Math.round(size.height / grid)),
+          mapPixelWidth: size.width,
+          mapPixelHeight: size.height,
         });
       })
       .catch(() => {
@@ -1092,6 +1223,9 @@ export function GameBoard({
         }
         setSelection([]);
         setSelectedAnnotation(null);
+        setRulerStart(null);
+        setRulerPreview(null);
+        setRulerAwaitAnchor(false);
       }
       if (event.key === "+" || event.key === "=") {
         adjustScale(scale * ZOOM_FACTOR);
@@ -1115,7 +1249,7 @@ export function GameBoard({
         event.preventDefault();
         const step = gridSize;
         const moves = movable.map((token) => {
-          const footprint = tokenFootprintPx(token, step);
+          const footprint = tokenPx(token);
           const snapped = snapBoardPoint(
             token.x + delta.dx * step,
             token.y + delta.dy * step,
@@ -1147,6 +1281,21 @@ export function GameBoard({
   ]);
 
   const dragTokenIdsRef = useRef(dragTokenIds);
+  const pendingDragRef = useRef<{
+    pointerClient: { x: number; y: number };
+    ids: string[];
+    starts: Record<string, { x: number; y: number }>;
+    origin: { x: number; y: number };
+  } | null>(null);
+  const resizeRef = useRef<{
+    tokenId: string;
+    originX: number;
+    originY: number;
+    lastSpan: number;
+  } | null>(null);
+  const onChangeBoardRef = useRef(onChangeBoard);
+  const boardStateRef = useRef(board);
+  const DRAG_THRESHOLD_PX = 6;
   const dragOriginRef = useRef(dragOrigin);
   const dragStartsRef = useRef(dragStarts);
   const boardTokensRef = useRef(board.tokens);
@@ -1170,9 +1319,45 @@ export function GameBoard({
   isHexRef.current = isHex;
   onMoveTokenRef.current = onMoveToken;
   onMoveTokensRef.current = onMoveTokens;
+  onChangeBoardRef.current = onChangeBoard;
+  boardStateRef.current = board;
 
   useEffect(() => {
     function onPointerMove(event: PointerEvent) {
+      const resize = resizeRef.current;
+      if (resize) {
+        const rect = viewportRef.current?.getBoundingClientRect();
+        if (rect) {
+          const s = scaleRef.current;
+          const p = panRef.current;
+          const point = {
+            x: (event.clientX - rect.left - p.x) / s,
+            y: (event.clientY - rect.top - p.y) / s,
+          };
+          const dx = point.x - resize.originX;
+          const dy = point.y - resize.originY;
+          const g = gridSizeRef.current;
+          const hex = isHexRef.current;
+          const cell = hex ? hexMetrics(g).width : g;
+          const span = Math.max(
+            1,
+            Math.min(4, Math.round(Math.max(dx, dy) / Math.max(1, cell)))
+          ) as 1 | 2 | 3 | 4;
+          if (span !== resize.lastSpan) {
+            resize.lastSpan = span;
+            const next = boardWithTokenSpan(
+              boardStateRef.current,
+              resize.tokenId,
+              span,
+              hex,
+              g
+            );
+            boardStateRef.current = next;
+            onChangeBoardRef.current(next);
+          }
+        }
+        return;
+      }
       if (isPanningFlagRef.current && panOriginRef.current) {
         const origin = panOriginRef.current;
         setPan({
@@ -1180,6 +1365,26 @@ export function GameBoard({
           y: origin.panY + (event.clientY - origin.pointerY),
         });
         return;
+      }
+
+      const pending = pendingDragRef.current;
+      if (pending && dragTokenIdsRef.current.length === 0) {
+        const dist = Math.hypot(
+          event.clientX - pending.pointerClient.x,
+          event.clientY - pending.pointerClient.y
+        );
+        if (dist >= DRAG_THRESHOLD_PX) {
+          dragTokenIdsRef.current = pending.ids;
+          dragStartsRef.current = pending.starts;
+          dragOriginRef.current = pending.origin;
+          setDragTokenIds(pending.ids);
+          setDragStarts(pending.starts);
+          setDragOrigin(pending.origin);
+          pendingDragRef.current = null;
+          if (draggingTokenIdsRef) {
+            draggingTokenIdsRef.current = new Set(pending.ids);
+          }
+        }
       }
 
       const activeDragIds = dragTokenIdsRef.current;
@@ -1223,6 +1428,10 @@ export function GameBoard({
     }
 
     function onPointerUp() {
+      resizeRef.current = null;
+      if (pendingDragRef.current) {
+        pendingDragRef.current = null;
+      }
       const activeDragIds = dragTokenIdsRef.current;
       if (activeDragIds.length > 0) {
         const g = gridSizeRef.current;
@@ -1230,7 +1439,11 @@ export function GameBoard({
         const moves = activeDragIds.map((id) => {
           const live = liveDragRef.current[id];
           const token = boardTokensRef.current.find((item) => item.id === id);
-          const footprint = token ? tokenFootprintPx(token, g) : g;
+          const footprint = token
+            ? hex
+              ? hexTokenFootprintPx(tokenGridSpanForHex(token), g)
+              : tokenFootprintPx(token, g)
+            : g;
           const rawX = live?.x ?? token?.x ?? 0;
           const rawY = live?.y ?? token?.y ?? 0;
           if (hex) {
@@ -1264,9 +1477,12 @@ export function GameBoard({
       const currentMarquee = marqueeRef.current;
       if (currentMarquee && toolRef.current === "select" && isMaster) {
         const g = gridSizeRef.current;
+        const hex = isHexRef.current;
         const hits = viewTokensRef.current
           .filter((token) => {
-            const size = tokenFootprintPx(token, g);
+            const size = hex
+              ? hexTokenFootprintPx(tokenGridSpanForHex(token), g)
+              : tokenFootprintPx(token, g);
             return rectsOverlap(currentMarquee, {
               x: token.x,
               y: token.y,
@@ -1293,6 +1509,73 @@ export function GameBoard({
     };
     // Listeners montados uma vez; callbacks/estado via refs.
   }, [isMaster]);
+
+  useEffect(() => {
+    const blockSelection = Boolean(marquee) || isPanning || dragTokenIds.length > 0;
+    if (!blockSelection) return;
+
+    function preventSelect(event: Event) {
+      event.preventDefault();
+    }
+
+    document.addEventListener("selectstart", preventSelect);
+    return () => document.removeEventListener("selectstart", preventSelect);
+  }, [marquee, isPanning, dragTokenIds.length]);
+
+  function stickRulerLeg(
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ) {
+    if (Math.hypot(to.x - from.x, to.y - from.y) < 2) return;
+    if (measureSettings.broadcast) {
+      onRuler(from, to, {
+        sticky: true,
+        broadcast: true,
+        shape: measureSettings.shape,
+        color: measureSettings.color,
+      });
+    } else {
+      setLocalStickyMeasures((previous) => [
+        ...previous,
+        {
+          id: uid("local-measure"),
+          shape: measureSettings.shape,
+          from,
+          to,
+          color: measureSettings.color,
+        },
+      ]);
+    }
+  }
+
+  function finalizeRulerMeasurement() {
+    if (!rulerStart || !rulerPreview) return;
+    if (Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) >= 2) {
+      stickRulerLeg(rulerStart, rulerPreview);
+    }
+    setRulerStart(null);
+    setRulerPreview(null);
+    setRulerAwaitAnchor(false);
+  }
+
+  function anchorRulerAndContinue() {
+    if (!rulerStart || !rulerPreview) return;
+    if (Math.hypot(rulerPreview.x - rulerStart.x, rulerPreview.y - rulerStart.y) < 2) {
+      return;
+    }
+    stickRulerLeg(rulerStart, rulerPreview);
+    const end = rulerPreview;
+    setRulerStart(end);
+    setRulerPreview(end);
+    setRulerAwaitAnchor(false);
+  }
+
+  function handleBoardContextMenu(event: React.MouseEvent) {
+    event.preventDefault();
+    if (tool === "ruler" && rulerStart && rulerPreview) {
+      anchorRulerAndContinue();
+    }
+  }
 
   function handleBoardPointerDown(event: React.PointerEvent) {
     if (
@@ -1322,6 +1605,17 @@ export function GameBoard({
 
     const point = localPoint(event);
 
+    if (
+      event.button === 2 &&
+      tool === "ruler" &&
+      rulerStart &&
+      rulerPreview
+    ) {
+      event.preventDefault();
+      anchorRulerAndContinue();
+      return;
+    }
+
     if (tool === "party-move" && isMaster) {
       const selected = viewTokens.filter((token) =>
         selectedIds.includes(token.id)
@@ -1345,6 +1639,8 @@ export function GameBoard({
     }
 
     if (tool === "select" && isMaster && event.shiftKey) {
+      event.preventDefault();
+      window.getSelection()?.removeAllRanges();
       setMarquee({ x1: point.x, y1: point.y, x2: point.x, y2: point.y });
       return;
     }
@@ -1373,8 +1669,14 @@ export function GameBoard({
       return;
     }
 
-    if (tool === "ruler") {
+    if (tool === "ruler" && event.button === 0) {
+      if (rulerAwaitAnchor && rulerStart && rulerPreview) {
+        event.preventDefault();
+        finalizeRulerMeasurement();
+        return;
+      }
       const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
+      setRulerAwaitAnchor(false);
       setRulerStart(snapped);
       setRulerPreview(snapped);
       return;
@@ -1392,7 +1694,7 @@ export function GameBoard({
     if (tool === "draw" && drawPoints.length > 0 && canAnnotate) {
       setDrawPoints((prev) => [...prev, point]);
     }
-    if (tool === "ruler" && rulerStart) {
+    if (tool === "ruler" && rulerStart && !rulerAwaitAnchor) {
       // Só preview local — evita “replay” de ecos do socket a cada frame.
       const snapped = applyMeasureSnap(point, gridSize, measureSettings.snap, isHex);
       setRulerPreview(snapped);
@@ -1423,33 +1725,29 @@ export function GameBoard({
     setDrawPoints([]);
 
     if (tool === "ruler" && rulerStart && rulerPreview) {
-      const stay =
-        measureSettings.fade === "stay" || Boolean(event?.shiftKey);
-      if (stay) {
-        if (measureSettings.broadcast) {
-          onRuler(rulerStart, rulerPreview, {
-            sticky: true,
-            broadcast: true,
-            shape: measureSettings.shape,
-            color: measureSettings.color,
-          });
+      const isLeftRelease = event == null || event.button === 0;
+      if (isLeftRelease) {
+        const leg = Math.hypot(
+          rulerPreview.x - rulerStart.x,
+          rulerPreview.y - rulerStart.y
+        );
+        if (leg >= 2) {
+          if (measureSettings.fade === "stay" || Boolean(event?.shiftKey)) {
+            finalizeRulerMeasurement();
+          } else {
+            setRulerAwaitAnchor(true);
+          }
         } else {
-          setLocalStickyMeasures((previous) => [
-            ...previous,
-            {
-              id: uid("local-measure"),
-              shape: measureSettings.shape,
-              from: rulerStart,
-              to: rulerPreview,
-              color: measureSettings.color,
-            },
-          ]);
+          setRulerStart(null);
+          setRulerPreview(null);
+          setRulerAwaitAnchor(false);
         }
       }
-      // Instantânea: some só o preview local; não apaga marcações fixas.
+    } else if (tool !== "ruler") {
+      setRulerStart(null);
+      setRulerPreview(null);
+      setRulerAwaitAnchor(false);
     }
-    setRulerStart(null);
-    setRulerPreview(null);
 
     if (tool === "effect" && effectStart && effectPreview && canAnnotate) {
       const needsDrag = fxKindNeedsDrag(effectSettings.kind);
@@ -1590,7 +1888,7 @@ export function GameBoard({
 
   return (
     <div
-      className="relative h-full min-h-0 w-full overflow-hidden border"
+      className="relative h-full min-h-0 w-full select-none overflow-hidden border"
       style={{
         borderColor: "var(--color-border-strong)",
         backgroundColor: "#1A140F",
@@ -1671,7 +1969,7 @@ export function GameBoard({
 
       <div
         ref={viewportRef}
-        className="absolute inset-0 overflow-hidden"
+        className="absolute inset-0 select-none overflow-hidden"
         style={{
           cursor: isPanning
             ? "grabbing"
@@ -1683,7 +1981,7 @@ export function GameBoard({
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
         onPointerUp={handleBoardPointerUp}
-        onContextMenu={(event) => event.preventDefault()}
+        onContextMenu={handleBoardContextMenu}
         onDragOver={(event) => {
           if (event.dataTransfer.types.includes("application/x-rpg-character")) {
             event.preventDefault();
@@ -1729,6 +2027,8 @@ export function GameBoard({
                   fill="none"
                   stroke="rgba(235,223,196,0.28)"
                   strokeWidth={1}
+                  vectorEffect="non-scaling-stroke"
+                  shapeRendering="geometricPrecision"
                 />
               ))}
             </svg>
@@ -1935,7 +2235,7 @@ export function GameBoard({
               isTokenVisibleThroughFog(token, sceneBoard, fogViewer, lightSources)
             )
             .map((token) => {
-            const size = tokenFootprintPx(token, gridSize);
+            const size = tokenPx(token);
             const selected = selectedIds.includes(token.id);
             const highlighted =
               !selected && highlightedTokenIds.includes(token.id);
@@ -1949,8 +2249,17 @@ export function GameBoard({
             const renderX = dragging && live ? live.x : token.x;
             const renderY = dragging && live ? live.y : token.y;
 
-            const inset = Math.max(1, Math.round(gridSize * 0.04));
-            const body = Math.max(8, size - inset * 2);
+            const inset = isHex
+              ? Math.max(
+                  0,
+                  (size -
+                    hexTokenBodyPx(tokenGridSpanForHex(token), gridSize)) /
+                    2
+                )
+              : Math.max(1, Math.round(gridSize * 0.05));
+            const body = isHex
+              ? hexTokenBodyPx(tokenGridSpanForHex(token), gridSize)
+              : Math.max(8, size - inset * 2);
             /** Controles (PV / status) um pouco maiores. */
             const controlSize = Math.max(
               24,
@@ -2139,7 +2448,7 @@ export function GameBoard({
                             event.currentTarget.value
                           );
                         }}
-                        className="rounded-full border-2 text-center font-semibold outline-none shadow"
+                        className="select-text rounded-full border-2 text-center font-semibold outline-none shadow"
                         style={{
                           width: controlSize,
                           height: controlSize,
@@ -2234,6 +2543,10 @@ export function GameBoard({
                     event.stopPropagation();
                     setTokenLayerMenu(null);
                     if (tool === "ruler") return;
+                    if (event.detail >= 2) {
+                      openTokenSheet(token);
+                      return;
+                    }
                     if (event.shiftKey && isMaster) {
                       setSelection(
                         selectedIds.includes(token.id)
@@ -2308,18 +2621,15 @@ export function GameBoard({
                       const item = board.tokens.find((t) => t.id === id);
                       if (item) starts[id] = { x: item.x, y: item.y };
                     }
-                    setDragTokenIds(group);
-                    setDragStarts(starts);
-                    setDragOrigin(localPoint(event));
-                    if (draggingTokenIdsRef) {
-                      draggingTokenIdsRef.current = new Set(group);
-                    }
-                  }}
-                  onDoubleClick={(event) => {
-                    event.stopPropagation();
-                    if (!isMaster) return;
-                    if (token.monsterId) onOpenMonsterSheet?.(token);
-                    else if (token.characterId) onOpenCharacterSheet?.(token);
+                    pendingDragRef.current = {
+                      pointerClient: {
+                        x: event.clientX,
+                        y: event.clientY,
+                      },
+                      ids: group,
+                      starts,
+                      origin: localPoint(event),
+                    };
                   }}
                   className="absolute flex items-center justify-center overflow-hidden rounded-full font-semibold text-[var(--color-ink-inverse)]"
                   style={{
@@ -2483,6 +2793,55 @@ export function GameBoard({
                     {token.name}
                   </div>
                 ) : null}
+
+                {isMaster &&
+                selected &&
+                selectedIds.length === 1 &&
+                tool === "select" ? (
+                  <button
+                    type="button"
+                    data-token-resize="true"
+                    title="Arrastar para aumentar ou reduzir o token"
+                    className="absolute z-[19] flex items-center justify-center rounded-sm border shadow"
+                    style={{
+                      right: -3,
+                      bottom: -3,
+                      width: Math.max(16, Math.round(size * 0.18)),
+                      height: Math.max(16, Math.round(size * 0.18)),
+                      cursor: "nwse-resize",
+                      borderColor: "#C09A5A",
+                      backgroundColor: "rgba(255, 255, 255, 0.94)",
+                      color: "#7A2530",
+                    }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      event.preventDefault();
+                      const span = Math.max(
+                        1,
+                        Math.min(4, Math.round(token.gridSpan ?? 1))
+                      );
+                      resizeRef.current = {
+                        tokenId: token.id,
+                        originX: renderX,
+                        originY: renderY,
+                        lastSpan: span,
+                      };
+                    }}
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="h-[68%] w-[68%]"
+                      aria-hidden
+                    >
+                      <path
+                        d="M16 16 L16 5 L5 16 Z"
+                        fill="currentColor"
+                        opacity="0.35"
+                      />
+                      <path d="M16 16 L16 10 L10 16 Z" fill="currentColor" />
+                    </svg>
+                  </button>
+                ) : null}
               </div>
             );
           })}
@@ -2582,8 +2941,14 @@ export function GameBoard({
                 : [];
           const showInitiative =
             Boolean(onRollTokenInitiative) && menuTargets.length > 0;
-          const menuWidth = 200;
-          const menuHeight = showInitiative ? 148 : 96;
+          const menuWidth = 220;
+          const menuHeight =
+            96 +
+            (showInitiative ? 52 : 0) +
+            (campaignPlayers.length > 0
+              ? 28 + campaignPlayers.length * 36
+              : 44) +
+            (menuToken.ownerUserId != null ? 36 : 0);
           const left = Math.min(
             tokenLayerMenu.x,
             window.innerWidth - menuWidth - 8
@@ -2656,6 +3021,40 @@ export function GameBoard({
                 />
                 Secreta
               </button>
+              <p
+                className="mt-1 border-t px-3 py-1.5 text-[11px] text-[var(--color-ink-muted)]"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                Delegar token (minion)
+              </p>
+              {menuToken.ownerUserId != null ? (
+                <button
+                  type="button"
+                  className="flex w-full px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-[var(--color-parchment)]"
+                  onClick={() => setTokenOwner(menuToken.id, undefined)}
+                >
+                  Remover delegação
+                </button>
+              ) : null}
+              {campaignPlayers.length === 0 ? (
+                <p className="px-3 pb-2 text-xs text-[var(--color-ink-soft)]">
+                  Nenhum jogador disponível
+                </p>
+              ) : (
+                campaignPlayers.map((player) => (
+                  <button
+                    key={player.userId}
+                    type="button"
+                    className="flex w-full px-3 py-2 text-left text-sm text-[var(--color-ink)] hover:bg-[var(--color-parchment)]"
+                    onClick={() => setTokenOwner(menuToken.id, player.userId)}
+                  >
+                    {player.name}
+                    {Number(menuToken.ownerUserId) === player.userId
+                      ? " ✓"
+                      : ""}
+                  </button>
+                ))
+              )}
             </div>
           );
         })()}
@@ -2781,7 +3180,9 @@ export function GameBoard({
                 {selectedToken?.name}
                 {selectedToken &&
                   (() => {
-                    const s = tokenFootprintPx(selectedToken, gridSize) / gridSize;
+                    const s =
+                      tokenPx(selectedToken) /
+                      (isHex ? hexMetrics(gridSize).width : gridSize);
                     return ` · ${s}×${s}`;
                   })()}
                 {typeof selectedToken?.hpCurrent === "number" &&
@@ -2816,17 +3217,13 @@ export function GameBoard({
               selectedIds.length === 1 &&
               (isMaster ||
                 Number(selectedToken.ownerUserId) === Number(currentUserId)) &&
-              (selectedToken.monsterId || selectedToken.characterId) && (
+              (tokenHasMonsterSheet(selectedToken) ||
+                selectedToken.characterId) &&
+              canOpenTokenSheet(selectedToken) && (
                 <button
                   type="button"
                   className="pointer-events-auto underline"
-                  onClick={() => {
-                    if (selectedToken.monsterId) {
-                      onOpenMonsterSheet?.(selectedToken);
-                    } else {
-                      onOpenCharacterSheet?.(selectedToken);
-                    }
-                  }}
+                  onClick={() => openTokenSheet(selectedToken)}
                 >
                   Abrir ficha
                 </button>

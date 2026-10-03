@@ -1,3 +1,9 @@
+import {
+  hexTokenFootprintPx,
+  snapTokenToHex,
+  tokenGridSpanForHex,
+} from "../utils/hexGrid";
+
 export type BoardToken = {
   id: string;
   kind: "pc" | "npc";
@@ -9,6 +15,8 @@ export type BoardToken = {
   borderColor?: string;
   characterId?: number;
   monsterId?: string;
+  /** Ficha de monstro criada pelo jogador (Meus monstros). */
+  customMonsterId?: number;
   ownerUserId?: number;
   /**
    * Lado em quadrados (D&D 5e):
@@ -28,6 +36,8 @@ export type BoardToken = {
   customValue?: string;
   /** Nomes customizados de ações/traços do monstro (chave ex.: actions:0). */
   featureDisplayNames?: Record<string, string>;
+  /** Descrições customizadas (dano/ataque do SRD permanecem). */
+  featureDisplayDescriptions?: Record<string, string>;
   /** IDs de condições D&D 5e ativas no token. */
   conditions?: string[];
   /** Só o mestre vê (camada secreta). */
@@ -113,6 +123,17 @@ export type BoardEffect = {
   expiresAt?: number;
 };
 
+/** Tamanho/grade de um mapa (persistido ao trocar de cena). */
+export type MapLayoutSnapshot = {
+  mapWidth?: number;
+  mapHeight?: number;
+  gridSize?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
+  metersPerSquare?: number;
+  gridType?: "square" | "hex";
+};
+
 export type PreparedMap = {
   id: string;
   name: string;
@@ -122,6 +143,8 @@ export type PreparedMap = {
   /** Altura em quadrados da grade. */
   mapHeight?: number;
   gridSize?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
   metersPerSquare?: number;
   gridType?: "square" | "hex";
 };
@@ -154,6 +177,12 @@ export type BoardState = {
    * Mundo em pixels = mapHeight × gridSize.
    */
   mapHeight?: number;
+  /**
+   * Tamanho fixo da imagem do mapa em pixels (independente de cols×grid).
+   * Usado ao ajustar só a grade sem redimensionar o mapa.
+   */
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
   /** Tamanho do quadrado da grade em pixels (só para render). */
   gridSize: number;
   /** Formato da grade: quadrado (padrão) ou hexagonal. */
@@ -176,6 +205,8 @@ export type BoardState = {
   fogExemptUserIds?: number[];
   /** Mapas salvos pelo mestre para troca rápida. */
   preparedMaps?: PreparedMap[];
+  /** Último tamanho/grade usado por URL de mapa (troca rápida sem resetar). */
+  mapLayoutsByUrl?: Record<string, MapLayoutSnapshot>;
   /**
    * Se definido, jogadores renderizam este mapa em vez do mapa atual do mestre.
    * `null` limpa a trava (todos acompanham o cenário atual).
@@ -336,16 +367,173 @@ export function mapSquaresOf(board: BoardState): {
   };
 }
 
-/** Tamanho do mundo em pixels = quadrados × gridSize (só para render). */
+/** Tamanho do mundo em pixels (área da imagem do mapa na mesa). */
 export function worldSizeOf(board: BoardState): {
   width: number;
   height: number;
 } {
+  const pw = board.mapPixelWidth;
+  const ph = board.mapPixelHeight;
+  if (
+    typeof pw === "number" &&
+    pw > 0 &&
+    typeof ph === "number" &&
+    ph > 0
+  ) {
+    return { width: pw, height: ph };
+  }
   const grid = board.gridSize || DEFAULT_GRID_SIZE;
   const { cols, rows } = mapSquaresOf(board);
   return {
     width: cols * grid,
     height: rows * grid,
+  };
+}
+
+/** Célula em px na mesa (zoom compensa valores baixos). */
+export const MIN_GRID_SIZE = 8;
+/** Células grandes = poucos quadrados na imagem fixa. */
+export const MAX_GRID_SIZE = 512;
+
+/** Faixa de largura/altura em quadrados com imagem fixa (mapPixel*). */
+export function mapSquareLimitsPreservingPixels(board: BoardState): {
+  minCols: number;
+  minRows: number;
+  maxCols: number;
+  maxRows: number;
+} {
+  const { width, height } = worldSizeOf(board);
+  return {
+    minCols: Math.max(1, Math.ceil(width / MAX_GRID_SIZE)),
+    minRows: Math.max(1, Math.ceil(height / MAX_GRID_SIZE)),
+    maxCols: Math.max(1, Math.floor(width / MIN_GRID_SIZE)),
+    maxRows: Math.max(1, Math.floor(height / MIN_GRID_SIZE)),
+  };
+}
+
+/** gridSize para cols quadrados na largura fixa do mapa (imagem não redimensiona). */
+export function gridSizePreservingWorldPixels(
+  board: BoardState,
+  cols: number
+): number {
+  const world = worldSizeOf(board);
+  const safeCols = Math.max(1, cols);
+  const next = world.width / safeCols;
+  return Math.max(MIN_GRID_SIZE, Math.min(MAX_GRID_SIZE, next));
+}
+
+export function mapLayoutKey(mapUrl: string): string {
+  return mapUrl.trim();
+}
+
+export function layoutFromBoard(board: BoardState): MapLayoutSnapshot {
+  return {
+    mapWidth: board.mapWidth,
+    mapHeight: board.mapHeight,
+    gridSize: board.gridSize,
+    mapPixelWidth: board.mapPixelWidth,
+    mapPixelHeight: board.mapPixelHeight,
+    metersPerSquare: metersPerSquareOf(board),
+    gridType: gridTypeOf(board),
+  };
+}
+
+function syncPreparedMapWithLayout(
+  prepared: PreparedMap[] | undefined,
+  mapUrl: string,
+  layout: MapLayoutSnapshot
+): PreparedMap[] | undefined {
+  if (!prepared?.length) return prepared;
+  const key = mapLayoutKey(mapUrl);
+  let touched = false;
+  const next = prepared.map((entry) => {
+    if (mapLayoutKey(entry.mapUrl) !== key) return entry;
+    touched = true;
+    return {
+      ...entry,
+      mapWidth: layout.mapWidth ?? entry.mapWidth,
+      mapHeight: layout.mapHeight ?? entry.mapHeight,
+      gridSize: layout.gridSize ?? entry.gridSize,
+      mapPixelWidth: layout.mapPixelWidth ?? entry.mapPixelWidth,
+      mapPixelHeight: layout.mapPixelHeight ?? entry.mapPixelHeight,
+      metersPerSquare: layout.metersPerSquare ?? entry.metersPerSquare,
+      gridType: layout.gridType ?? entry.gridType,
+    };
+  });
+  return touched ? next : prepared;
+}
+
+/** Grava tamanho/grade do mapa ativo (ou `mapUrl`) em mapLayoutsByUrl. */
+export function boardWithMapLayoutStored(
+  board: BoardState,
+  mapUrl?: string
+): BoardState {
+  const url = mapLayoutKey(mapUrl ?? board.mapUrl ?? "");
+  if (!url) return board;
+  const layout = layoutFromBoard(board);
+  return {
+    ...board,
+    mapLayoutsByUrl: {
+      ...(board.mapLayoutsByUrl ?? {}),
+      [url]: layout,
+    },
+    preparedMaps: syncPreparedMapWithLayout(board.preparedMaps, url, layout),
+  };
+}
+
+/** Restaura layout salvo (ou mapa preparado) ao reabrir uma URL. */
+export function resolveMapLayoutForUrl(
+  board: BoardState,
+  mapUrl: string,
+  hints?: MapLayoutSnapshot
+): MapLayoutSnapshot {
+  const key = mapLayoutKey(mapUrl);
+  const saved = board.mapLayoutsByUrl?.[key];
+  const onThisMap = mapLayoutKey(board.mapUrl ?? "") === key;
+  const current =
+    onThisMap && !saved ? layoutFromBoard(board) : undefined;
+  const prepared = board.preparedMaps?.find(
+    (entry) => mapLayoutKey(entry.mapUrl) === key
+  );
+  return {
+    mapWidth:
+      saved?.mapWidth ??
+      current?.mapWidth ??
+      hints?.mapWidth ??
+      prepared?.mapWidth,
+    mapHeight:
+      saved?.mapHeight ??
+      current?.mapHeight ??
+      hints?.mapHeight ??
+      prepared?.mapHeight,
+    gridSize:
+      saved?.gridSize ??
+      current?.gridSize ??
+      hints?.gridSize ??
+      prepared?.gridSize ??
+      board.gridSize,
+    mapPixelWidth:
+      saved?.mapPixelWidth ??
+      current?.mapPixelWidth ??
+      hints?.mapPixelWidth ??
+      prepared?.mapPixelWidth,
+    mapPixelHeight:
+      saved?.mapPixelHeight ??
+      current?.mapPixelHeight ??
+      hints?.mapPixelHeight ??
+      prepared?.mapPixelHeight,
+    metersPerSquare:
+      saved?.metersPerSquare ??
+      current?.metersPerSquare ??
+      hints?.metersPerSquare ??
+      prepared?.metersPerSquare ??
+      metersPerSquareOf(board),
+    gridType:
+      saved?.gridType ??
+      current?.gridType ??
+      hints?.gridType ??
+      prepared?.gridType ??
+      gridTypeOf(board),
   };
 }
 
@@ -793,12 +981,38 @@ export function snapToGrid(value: number, gridSize: number): number {
   return Math.round(value / g) * g;
 }
 
+/** Snap do canto superior esquerdo do token (quadrado ou hex). */
+export function snapTokenTopLeft(
+  token: Pick<BoardToken, "gridSpan" | "sizeCategory" | "size">,
+  x: number,
+  y: number,
+  board: Pick<BoardState, "gridSize" | "gridType">
+): { x: number; y: number } {
+  const g = board.gridSize || DEFAULT_GRID_SIZE;
+  if (gridTypeOf(board) === "hex") {
+    const span = tokenGridSpanForHex(token);
+    const footprint = hexTokenFootprintPx(span, g);
+    return snapTokenToHex(x, y, footprint, g);
+  }
+  return { x: snapToGrid(x, g), y: snapToGrid(y, g) };
+}
+
 /**
  * Pequeno/Médio → 1×1 (1 quad)
  * Grande → 2×2 (4 quads)
  * Enorme → 3×3 (9 quads)
  * Imenso → 4×4 (16 quads)
  */
+export function spanToSizeCategory(
+  span: number
+): BoardToken["sizeCategory"] {
+  const s = Math.max(1, Math.min(4, Math.round(span)));
+  if (s >= 4) return "Gargantuan";
+  if (s >= 3) return "Huge";
+  if (s >= 2) return "Large";
+  return "Medium";
+}
+
 export function sizeCategoryToSpan(
   size?: string | null
 ): 1 | 2 | 3 | 4 {

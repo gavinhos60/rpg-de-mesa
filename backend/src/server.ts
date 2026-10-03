@@ -5,6 +5,7 @@ import "dotenv/config";
 
 import authRoutes from "./routes/auth.routes";
 import charactersRoutes from "./routes/characters.routes";
+import monstersRoutes from "./routes/monsters.routes";
 import usersRoutes from "./routes/users.routes";
 import campaignsRoutes from "./routes/campaigns.routes";
 import campaignMembersRoutes from "./routes/campaign-members.routes";
@@ -31,6 +32,7 @@ app.get("/", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/characters", charactersRoutes);
+app.use("/monsters", monstersRoutes);
 app.use("/users", authMiddleware, usersRoutes);
 app.use("/campaigns", authMiddleware, campaignsRoutes);
 app.use("/campaigns", authMiddleware, campaignMembersRoutes);

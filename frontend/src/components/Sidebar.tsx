@@ -6,6 +6,7 @@ import {
     CastleIcon,
     CompassIcon,
     ScrollIcon,
+    ShieldIcon,
     DoorIcon,
 } from "./icons/MedievalIcons";
 
@@ -24,6 +25,7 @@ export function Sidebar({ open, onClose, drawerOnly = false }: SidebarProps) {
         { label: "Dashboard", path: "/dashboard", Icon: CastleIcon },
         { label: "Campanhas", path: "/campaigns", Icon: CompassIcon },
         { label: "Personagens", path: "/characters", Icon: ScrollIcon },
+        { label: "Monstros", path: "/monsters", Icon: ShieldIcon },
     ];
 
     const tabClip = "polygon(0 0, 90% 0, 100% 50%, 90% 100%, 0 100%)";
