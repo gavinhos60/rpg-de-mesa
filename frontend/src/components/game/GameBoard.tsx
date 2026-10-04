@@ -684,6 +684,9 @@ export function GameBoard({
   const followFitRef = useRef(true);
   const liveDragRef = useRef<Record<string, { x: number; y: number }>>({});
   const probedMapRef = useRef<string | null>(null);
+  const tokenClipboardRef = useRef<
+    { mapUrl: string; tokens: Omit<BoardToken, "id">[] } | null
+  >(null);
   scaleRef.current = scale;
   panRef.current = pan;
 
@@ -1000,6 +1003,39 @@ export function GameBoard({
     updateTokenFields(token.id, { conditions: next });
   }
 
+  function copySelectedTokens() {
+    if (!isMaster || selectedIds.length === 0 || selectedAnnotation) return;
+    const selected = viewTokens.filter((token) =>
+      selectedIds.includes(token.id)
+    );
+    if (selected.length === 0) return;
+    tokenClipboardRef.current = {
+      mapUrl: mapBoard.mapUrl,
+      tokens: selected.map(({ id: _id, ...rest }) => rest),
+    };
+  }
+
+  function pasteTokensFromClipboard() {
+    if (!isMaster) return;
+    const clip = tokenClipboardRef.current;
+    if (!clip?.tokens.length) return;
+    const activeMapUrl = board.mapUrl ?? mapBoard.mapUrl;
+    const offset = gridSize;
+    const pasted = clip.tokens.map((token) => ({
+      ...token,
+      id: crypto.randomUUID(),
+      x: token.x + offset,
+      y: token.y + offset,
+      sceneMapUrl: activeMapUrl,
+      onPlayerScene: undefined,
+    }));
+    onChangeBoard({
+      ...board,
+      tokens: [...board.tokens, ...pasted],
+    });
+    setSelection(pasted.map((token) => token.id));
+  }
+
   function deleteSelected() {
     if (selectedAnnotation) {
       const { kind, id } = selectedAnnotation;
@@ -1227,6 +1263,21 @@ export function GameBoard({
           target.tagName === "TEXTAREA" ||
           target.isContentEditable)
       ) {
+        return;
+      }
+      const mod = event.ctrlKey || event.metaKey;
+      if (mod && event.key.toLowerCase() === "c") {
+        if (isMaster && selectedIds.length > 0 && !selectedAnnotation) {
+          event.preventDefault();
+          copySelectedTokens();
+        }
+        return;
+      }
+      if (mod && event.key.toLowerCase() === "v") {
+        if (isMaster && tokenClipboardRef.current?.tokens.length) {
+          event.preventDefault();
+          pasteTokensFromClipboard();
+        }
         return;
       }
       if (event.key === "Delete" || event.key === "Backspace") {

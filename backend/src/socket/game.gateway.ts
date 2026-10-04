@@ -30,10 +30,13 @@ import {
   distanceMeters,
   distanceSquares5e,
   emptyCombatState,
+  collectUserAnnotationsForCompare,
   mergeOwnedAnnotations,
   metersPerSquareOf,
   monsterIsOnSecretLayer,
   playerFrozenView,
+  removedOwnedAnnotationIds,
+  stripAnnotationIdsFromBoard,
   publicCombatState,
   sortCombatOrder,
   syncCombatantSecrets,
@@ -305,6 +308,12 @@ export function attachGameSocket(httpServer: HttpServer) {
           } else {
             const userId = Number(socket.data.userId);
             const incomingTokens = incoming.tokens ?? state.board.tokens;
+            const frozenBefore = playerFrozenView(state.board, userId);
+            const prevAnnotations = collectUserAnnotationsForCompare(
+              state.board,
+              userId,
+              frozenBefore
+            );
 
             // Jogador: anotações + editar/criar o próprio token.
             // Remoção de token é só via token:remove (evita race com board:update atrasado).
@@ -397,6 +406,30 @@ export function attachGameSocket(httpServer: HttpServer) {
                   userId
                 ),
               });
+            }
+
+            const frozenAfter = playerFrozenView(state.board, userId);
+            const nextAnnotationItems = frozenAfter
+              ? [
+                  ...(incomingOwnView?.drawings ?? frozenAfter.drawings ?? []),
+                  ...(incomingOwnView?.rulers ?? frozenAfter.rulers ?? []),
+                  ...(incomingOwnView?.effects ?? frozenAfter.effects ?? []),
+                ]
+              : [
+                  ...(incoming.drawings ?? state.board.drawings ?? []),
+                  ...(incoming.rulers ?? state.board.rulers ?? []),
+                  ...(incoming.effects ?? state.board.effects ?? []),
+                ];
+            const removedIds = removedOwnedAnnotationIds(
+              prevAnnotations,
+              nextAnnotationItems,
+              userId
+            );
+            if (removedIds.size > 0) {
+              state.board = stripAnnotationIdsFromBoard(
+                state.board,
+                removedIds
+              );
             }
           }
 

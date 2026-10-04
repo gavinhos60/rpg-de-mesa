@@ -941,26 +941,29 @@ export function GameRoom() {
     });
   }
 
-  async function handlePartyRest(kind: RestKind) {
+  async function handlePartyRest(
+    kind: RestKind,
+    characterIds?: number[]
+  ) {
     if (!isMaster) return;
-    const targets = [
+    const all = [
       ...characters,
       ...masterCharacters.filter(
         (mine) => !characters.some((character) => character.id === mine.id)
       ),
     ];
+    const idSet =
+      characterIds && characterIds.length > 0
+        ? new Set(characterIds)
+        : null;
+    const targets = idSet
+      ? all.filter((character) => idSet.has(character.id))
+      : all;
     if (targets.length === 0) {
-      alert("Nenhum personagem na mesa para descansar.");
+      alert("Nenhum personagem selecionado para descansar.");
       return;
     }
     const label = kind === "short" ? "Descanso curto" : "Descanso longo";
-    if (
-      !window.confirm(
-        `${label} para ${targets.length} personagem(ns)? Recursos serão recuperados conforme as regras.`
-      )
-    ) {
-      return;
-    }
 
     setRestBusy(true);
     setActionBusy(`${label}…`);
@@ -986,10 +989,11 @@ export function GameRoom() {
         await persistSheetResources(character.id, rested);
       }
       if (socket && sessionId && user) {
+        const names = targets.map((character) => character.name).join(", ");
         await emitChatMessage(
           socket,
           sessionId,
-          `✦ ${label} — o grupo recupera forças.`,
+          `✦ ${label} — ${names} recupera(m) forças.`,
           user.name
         );
       }

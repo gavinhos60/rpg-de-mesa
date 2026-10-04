@@ -107,7 +107,10 @@ interface MasterPanelProps {
   onCombatEnd?: () => void;
   onCloseSession?: () => void;
   onCharacterUpdated?: (character: CampaignCharacterLite) => void;
-  onRest?: (kind: "short" | "long") => void | Promise<void>;
+  onRest?: (
+    kind: "short" | "long",
+    characterIds: number[]
+  ) => void | Promise<void>;
   restBusy?: boolean;
   placeOnSecretLayer: boolean;
   onPlaceOnSecretLayerChange: (enabled: boolean) => void;
@@ -231,6 +234,10 @@ export function MasterPanel({
   } | null>(null);
   /** Jogadores que acompanham o mestre no novo mapa (câmera; tokens ficam no mapa anterior). */
   const [movePlayerIds, setMovePlayerIds] = useState<number[]>([]);
+  const [pendingRestKind, setPendingRestKind] = useState<
+    "short" | "long" | null
+  >(null);
+  const [restCharacterIds, setRestCharacterIds] = useState<number[]>([]);
   const [npcSource, setNpcSource] = useState<NpcSource>("monster");
   const [npcName, setNpcName] = useState("Goblin");
   const [customImageUrl, setCustomImageUrl] = useState<string>("");
@@ -334,6 +341,22 @@ export function MasterPanel({
     () => masterCharacters.find((item) => item.id === selectedSheetId),
     [masterCharacters, selectedSheetId]
   );
+
+  const restableCharacters = useMemo(() => {
+    const seen = new Set<number>();
+    const out: CampaignCharacterLite[] = [];
+    for (const character of [...characters, ...masterCharacters]) {
+      if (seen.has(character.id)) continue;
+      seen.add(character.id);
+      out.push(character);
+    }
+    return out;
+  }, [characters, masterCharacters]);
+
+  function openRestPicker(kind: "short" | "long") {
+    setRestCharacterIds(restableCharacters.map((character) => character.id));
+    setPendingRestKind(kind);
+  }
 
   function selectMonster(id: string) {
     setSelectedMonsterId(id);
@@ -2161,15 +2184,15 @@ export function MasterPanel({
                 Descanso
               </h4>
               <p className="mb-2 text-[10px] text-[var(--color-ink-soft)]">
-                Recupera recursos de todos os personagens da mesa (ki, fúrias,
-                espaços de magia etc.), conforme descanso curto ou longo.
+                Recupera recursos (ki, fúrias, magias etc.) dos personagens
+                escolhidos.
               </p>
               <div className="flex flex-col gap-1.5">
                 <RibbonButton
                   type="button"
                   className="w-full"
                   disabled={restBusy || !onRest}
-                  onClick={() => void onRest?.("short")}
+                  onClick={() => openRestPicker("short")}
                 >
                   {restBusy ? "…" : "Descanso curto"}
                 </RibbonButton>
@@ -2177,7 +2200,7 @@ export function MasterPanel({
                   type="button"
                   className="w-full"
                   disabled={restBusy || !onRest}
-                  onClick={() => void onRest?.("long")}
+                  onClick={() => openRestPicker("long")}
                 >
                   {restBusy ? "…" : "Descanso longo"}
                 </RibbonButton>
@@ -2797,6 +2820,140 @@ export function MasterPanel({
                 }}
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingRestKind && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setPendingRestKind(null);
+              setRestCharacterIds([]);
+            }
+          }}
+        >
+          <div
+            className="flex max-h-[min(90vh,36rem)] w-full max-w-lg flex-col border-2 shadow-xl"
+            style={{
+              backgroundColor: "var(--color-surface)",
+              borderColor: "var(--color-crimson)",
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="border-b p-4" style={{ borderColor: "var(--color-border)" }}>
+              <h4
+                className="text-base text-[var(--color-ink)]"
+                style={{ fontFamily: "'Cinzel', serif", fontWeight: 600 }}
+              >
+                {pendingRestKind === "short"
+                  ? "Descanso curto"
+                  : "Descanso longo"}
+              </h4>
+              <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+                Marque quem participa do descanso.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {restableCharacters.length === 0 ? (
+                <p className="text-sm italic text-[var(--color-ink-soft)]">
+                  Nenhum personagem na mesa.
+                </p>
+              ) : (
+                <>
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      className="border px-2 py-1 text-[11px]"
+                      style={fieldStyle}
+                      onClick={() => setRestCharacterIds([])}
+                    >
+                      Nenhum
+                    </button>
+                    <button
+                      type="button"
+                      className="border px-2 py-1 text-[11px]"
+                      style={fieldStyle}
+                      onClick={() =>
+                        setRestCharacterIds(
+                          restableCharacters.map((character) => character.id)
+                        )
+                      }
+                    >
+                      Todos
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {restableCharacters.map((character) => {
+                      const checked = restCharacterIds.includes(character.id);
+                      return (
+                        <label
+                          key={character.id}
+                          className="flex cursor-pointer items-center gap-2 border px-2 py-1.5 text-sm"
+                          style={{
+                            ...fieldStyle,
+                            borderColor: checked
+                              ? "var(--color-crimson)"
+                              : "var(--color-border)",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              setRestCharacterIds((prev) =>
+                                checked
+                                  ? prev.filter((id) => id !== character.id)
+                                  : [...prev, character.id]
+                              );
+                            }}
+                          />
+                          <span className="truncate text-[var(--color-ink)]">
+                            {character.name}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+            <div
+              className="flex gap-2 border-t p-4"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              <button
+                type="button"
+                className="flex-1 border px-3 py-2 text-sm"
+                style={fieldStyle}
+                onClick={() => {
+                  setPendingRestKind(null);
+                  setRestCharacterIds([]);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="flex-1 border px-3 py-2 text-sm text-[var(--color-ink-inverse)]"
+                style={{
+                  backgroundColor: "var(--color-crimson)",
+                  borderColor: "var(--color-crimson-deep)",
+                  fontFamily: "'Cinzel', serif",
+                }}
+                disabled={restBusy || restCharacterIds.length === 0 || !onRest}
+                onClick={() => {
+                  const kind = pendingRestKind;
+                  const ids = [...restCharacterIds];
+                  setPendingRestKind(null);
+                  setRestCharacterIds([]);
+                  if (kind) void onRest?.(kind, ids);
+                }}
+              >
+                Aplicar descanso
               </button>
             </div>
           </div>

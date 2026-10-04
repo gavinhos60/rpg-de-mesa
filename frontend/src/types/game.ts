@@ -158,6 +158,8 @@ export type PlayerMapView = {
   mapWidth?: number;
   mapHeight?: number;
   gridSize?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
   metersPerSquare?: number;
   gridType?: "square" | "hex";
   drawings?: BoardDrawing[];
@@ -544,6 +546,8 @@ export function snapshotPlayerMapView(board: BoardState): PlayerMapView {
     mapWidth: board.mapWidth,
     mapHeight: board.mapHeight,
     gridSize: board.gridSize,
+    mapPixelWidth: board.mapPixelWidth,
+    mapPixelHeight: board.mapPixelHeight,
     metersPerSquare: metersPerSquareOf(board),
     gridType: gridTypeOf(board),
     drawings: board.drawings,
@@ -575,12 +579,37 @@ function applyPlayerMapView(
   board: BoardState,
   view: PlayerMapView
 ): BoardState {
+  const grid = view.gridSize ?? board.gridSize ?? DEFAULT_GRID_SIZE;
+  const layout = resolveMapLayoutForUrl(board, view.mapUrl, {
+    mapWidth: view.mapWidth,
+    mapHeight: view.mapHeight,
+    gridSize: grid,
+    mapPixelWidth: view.mapPixelWidth,
+    mapPixelHeight: view.mapPixelHeight,
+  });
+  const { cols, rows } = mapSquaresOf({
+    ...board,
+    mapWidth: view.mapWidth ?? board.mapWidth,
+    mapHeight: view.mapHeight ?? board.mapHeight,
+    gridSize: grid,
+  });
+  const mapPixelWidth =
+    view.mapPixelWidth ??
+    layout.mapPixelWidth ??
+    (cols * grid > 0 ? cols * grid : undefined);
+  const mapPixelHeight =
+    view.mapPixelHeight ??
+    layout.mapPixelHeight ??
+    (rows * grid > 0 ? rows * grid : undefined);
+
   return {
     ...board,
     mapUrl: view.mapUrl,
     mapWidth: view.mapWidth,
     mapHeight: view.mapHeight,
-    gridSize: view.gridSize ?? board.gridSize,
+    gridSize: grid,
+    mapPixelWidth,
+    mapPixelHeight,
     metersPerSquare: view.metersPerSquare ?? board.metersPerSquare,
     gridType: view.gridType ?? board.gridType,
     drawings: view.drawings ?? [],

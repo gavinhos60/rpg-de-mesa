@@ -136,6 +136,8 @@ export type PlayerMapView = {
   mapWidth?: number;
   mapHeight?: number;
   gridSize?: number;
+  mapPixelWidth?: number;
+  mapPixelHeight?: number;
   metersPerSquare?: number;
   gridType?: "square" | "hex";
   drawings?: BoardDrawing[];
@@ -500,6 +502,95 @@ export function mergeOwnedAnnotations<
   const others = existing.filter((item) => Number(item.byUserId) !== uid);
   const ownIncoming = incoming.filter((item) => Number(item.byUserId) === uid);
   return [...others, ...ownIncoming];
+}
+
+function userOwnedAnnotations(
+  board: BoardState,
+  userId: number,
+  frozen: PlayerMapView | null
+): Array<{ id: string; byUserId?: number }> {
+  const uid = Number(userId);
+  const pick = <T extends { id: string; byUserId?: number }>(
+    items: T[] | undefined
+  ) => (items ?? []).filter((item) => Number(item.byUserId) === uid);
+  return [
+    ...pick(board.drawings),
+    ...pick(board.rulers),
+    ...pick(board.effects),
+    ...pick(frozen?.drawings),
+    ...pick(frozen?.rulers),
+    ...pick(frozen?.effects),
+  ];
+}
+
+/** Remove marcações por id em todo o board (inclui views congeladas duplicadas). */
+export function stripAnnotationIdsFromBoard(
+  board: BoardState,
+  removedIds: Set<string>
+): BoardState {
+  if (removedIds.size === 0) return board;
+  const filter = <T extends { id: string }>(items: T[] | undefined) =>
+    (items ?? []).filter((item) => !removedIds.has(item.id));
+
+  let next: BoardState = {
+    ...board,
+    drawings: filter(board.drawings),
+    rulers: filter(board.rulers),
+    effects: filter(board.effects),
+  };
+
+  if (board.playerMapView) {
+    next = {
+      ...next,
+      playerMapView: {
+        ...board.playerMapView,
+        drawings: filter(board.playerMapView.drawings),
+        rulers: filter(board.playerMapView.rulers),
+        effects: filter(board.playerMapView.effects),
+      },
+    };
+  }
+
+  if (board.playerViewsByUserId) {
+    const views: Record<string, PlayerMapView> = {};
+    for (const [key, view] of Object.entries(board.playerViewsByUserId)) {
+      views[key] = {
+        ...view,
+        drawings: filter(view.drawings),
+        rulers: filter(view.rulers),
+        effects: filter(view.effects),
+      };
+    }
+    next = { ...next, playerViewsByUserId: views };
+  }
+
+  return next;
+}
+
+export function removedOwnedAnnotationIds(
+  before: Array<{ id: string; byUserId?: number }>,
+  after: Array<{ id: string; byUserId?: number }>,
+  userId: number
+): Set<string> {
+  const uid = Number(userId);
+  const afterIds = new Set(
+    after.filter((item) => Number(item.byUserId) === uid).map((item) => item.id)
+  );
+  const removed = new Set<string>();
+  for (const item of before) {
+    if (Number(item.byUserId) === uid && !afterIds.has(item.id)) {
+      removed.add(item.id);
+    }
+  }
+  return removed;
+}
+
+export function collectUserAnnotationsForCompare(
+  board: BoardState,
+  userId: number,
+  frozen: PlayerMapView | null
+): Array<{ id: string; byUserId?: number }> {
+  return userOwnedAnnotations(board, userId, frozen);
 }
 
 export function playerFrozenView(
