@@ -61,6 +61,7 @@ import {
 } from "../../utils/characterResources";
 import { getLanguageOptions } from "../character/CharacterTalentChoices";
 import { AdvantageConfirm } from "../game/AdvantageConfirm";
+import { SpellCastConfirm } from "../game/SpellCastConfirm";
 import {
     COIN_DEFINITIONS,
     COINS_PER_POUND,
@@ -95,7 +96,10 @@ interface CharacterSheetReviewProps {
     onRollAbility?: (ability: Ability, options?: { advantage?: boolean }) => void;
     onRollSkill?: (skill: Skill, options?: { advantage?: boolean }) => void;
     onUseFeature?: (name: string, description: string, abilityId?: string) => void;
-    onCastSpell?: (spell: Spell, options?: { advantage?: boolean }) => void;
+    onCastSpell?: (
+        spell: Spell,
+        options?: { advantage?: boolean; slotLevel?: number }
+    ) => void;
     canRoll?: boolean;
     /** Gerenciar carteira/itens na mesa (ficha do próprio jogador). */
     inventoryManage?: {
@@ -1450,16 +1454,12 @@ export function CharacterSheetReview({
                                                 onCast={
                                                     castSpells
                                                         ? () => {
-                                                              if (spell.attack) {
-                                                                  setPendingRoll({
-                                                                      type: "spell",
-                                                                      key: spell.id,
-                                                                      label: spell.name,
-                                                                      spell,
-                                                                  });
-                                                              } else {
-                                                                  onCastSpell?.(spell);
-                                                              }
+                                                              setPendingRoll({
+                                                                  type: "spell",
+                                                                  key: spell.id,
+                                                                  label: spell.name,
+                                                                  spell,
+                                                              });
                                                           }
                                                         : undefined
                                                 }
@@ -1515,26 +1515,33 @@ export function CharacterSheetReview({
                 </section>
             </div>
 
-            {pendingRoll && (
+            {pendingRoll?.type === "spell" && pendingRoll.spell ? (
+                <SpellCastConfirm
+                    spell={pendingRoll.spell}
+                    sheet={data}
+                    onCancel={() => setPendingRoll(null)}
+                    onConfirm={({ advantage, slotLevel }) => {
+                        onCastSpell?.(pendingRoll.spell!, {
+                            advantage,
+                            slotLevel,
+                        });
+                        setPendingRoll(null);
+                    }}
+                />
+            ) : pendingRoll ? (
                 <AdvantageConfirm
-                    title={
-                        pendingRoll.type === "spell"
-                            ? `Conjurar ${pendingRoll.label}`
-                            : `Teste de ${pendingRoll.label}`
-                    }
+                    title={`Teste de ${pendingRoll.label}`}
                     onCancel={() => setPendingRoll(null)}
                     onConfirm={(advantage) => {
                         if (pendingRoll.type === "skill") {
                             onRollSkill?.(pendingRoll.key as Skill, { advantage });
-                        } else if (pendingRoll.type === "spell" && pendingRoll.spell) {
-                            onCastSpell?.(pendingRoll.spell, { advantage });
                         } else {
                             onRollAbility?.(pendingRoll.key as Ability, { advantage });
                         }
                         setPendingRoll(null);
                     }}
                 />
-            )}
+            ) : null}
 
             {xpManage && (
                 <CharacterLevelUpModal

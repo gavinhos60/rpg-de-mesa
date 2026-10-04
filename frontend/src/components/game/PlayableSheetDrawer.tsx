@@ -32,7 +32,10 @@ interface PlayableSheetDrawerProps {
     description: string,
     abilityId?: string
   ) => void;
-  onCastSpell: (spell: Spell, options?: { advantage?: boolean }) => void;
+  onCastSpell: (
+    spell: Spell,
+    options?: { advantage?: boolean; slotLevel?: number }
+  ) => void;
   readOnly?: boolean;
   /** Mestre pode gerenciar inventário mesmo em ficha “somente leitura”. */
   allowInventoryEdit?: boolean;

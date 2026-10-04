@@ -480,6 +480,115 @@ export function spendPool(
   };
 }
 
+/** Níveis de espaço que o jogador pode gastar para uma magia (inclui upcast). */
+export function listCastableSpellSlotLevels(
+  data: CharacterFormData,
+  minSpellLevel: number
+): Array<{
+  level: number;
+  remaining: number;
+  max: number;
+  source: "regular" | "pact";
+}> {
+  if (minSpellLevel <= 0) return [];
+  const synced = ensureResourcesSynced(data);
+  const slots = getSpellSlotAvailability(synced);
+  const pact = getPactSlotAvailability(synced);
+  const warlockOnly =
+    (synced.classes ?? []).length > 0 &&
+    (synced.classes ?? []).every((item) => item.classId === "warlock");
+  const hasRegular = slots.some((slot) => slot.max > 0);
+  const out: Array<{
+    level: number;
+    remaining: number;
+    max: number;
+    source: "regular" | "pact";
+  }> = [];
+
+  for (const slot of slots) {
+    if (slot.level >= minSpellLevel && slot.remaining > 0) {
+      out.push({
+        level: slot.level,
+        remaining: slot.remaining,
+        max: slot.max,
+        source: "regular",
+      });
+    }
+  }
+
+  if (
+    pact &&
+    pact.remaining > 0 &&
+    pact.level >= minSpellLevel &&
+    (warlockOnly || !hasRegular || !out.some((item) => item.level === minSpellLevel))
+  ) {
+    if (!out.some((item) => item.source === "pact" && item.level === pact.level)) {
+      out.push({
+        level: pact.level,
+        remaining: pact.remaining,
+        max: pact.max,
+        source: "pact",
+      });
+    }
+  }
+
+  return out.sort((a, b) => a.level - b.level);
+}
+
+/** Gasta um espaço de magia em um círculo escolhido (≥ nível da magia). */
+export function spendSpellSlotAtLevel(
+  data: CharacterFormData,
+  spellLevel: number,
+  slotLevel: number
+): ResourceMutationResult {
+  if (spellLevel <= 0) {
+    return { ok: true, sheet: ensureResourcesSynced(data) };
+  }
+  if (slotLevel < spellLevel) {
+    return {
+      ok: false,
+      error: `Espaço de ${slotLevel}º círculo não serve para magia de ${spellLevel}º.`,
+    };
+  }
+
+  const options = listCastableSpellSlotLevels(data, spellLevel);
+  const pick = options.find((item) => item.level === slotLevel);
+  if (!pick) {
+    return {
+      ok: false,
+      error: `Sem espaço disponível de ${slotLevel}º círculo.`,
+    };
+  }
+
+  const synced = ensureResourcesSynced(data);
+  const state = normalizeResourcesState(synced.resources);
+
+  if (pick.source === "pact") {
+    return {
+      ok: true,
+      sheet: {
+        ...synced,
+        resources: {
+          ...state,
+          pactSlotsSpent: state.pactSlotsSpent + 1,
+        },
+      },
+      note: `Pacto ${pick.remaining - 1}/${pick.max} (nível ${pick.level})`,
+    };
+  }
+
+  const spent = [...state.spellSlotsSpent];
+  spent[pick.level - 1] = (spent[pick.level - 1] ?? 0) + 1;
+  return {
+    ok: true,
+    sheet: {
+      ...synced,
+      resources: { ...state, spellSlotsSpent: spent },
+    },
+    note: `Espaço ${pick.level}º (${pick.remaining - 1}/${pick.max})`,
+  };
+}
+
 export function spendSpellSlot(
   data: CharacterFormData,
   spellLevel: number

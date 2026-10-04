@@ -142,6 +142,7 @@ export function attachGameSocket(httpServer: HttpServer) {
 
         const room = `session:${sessionId}`;
         await socket.join(room);
+        await socket.join(`session:${sessionId}:user:${socket.data.userId}`);
         if (membership.role === "MASTER") {
           await socket.join(`session:${sessionId}:masters`);
         }
@@ -783,7 +784,14 @@ export function attachGameSocket(httpServer: HttpServer) {
           state.chat = [...state.chat, systemMessage].slice(-200);
           schedulePersist(Number(payload.sessionId), state);
 
-          io.to(room).emit("check:request", request);
+          if (targetUserId != null) {
+            io.to(`session:${Number(payload.sessionId)}:user:${targetUserId}`).emit(
+              "check:request",
+              request
+            );
+          } else {
+            io.to(room).emit("check:request", request);
+          }
           io.to(room).emit("chat:message", systemMessage);
           ack?.({ ok: true, request });
         } catch (error) {

@@ -22,7 +22,7 @@ export function CheckPrompt({
     "Seu personagem";
 
   return (
-    <div className="fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+    <div className="fixed inset-x-0 bottom-4 z-[110] flex justify-center px-4">
       <div
         className="w-full max-w-xl border-2 px-4 py-3"
         style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-crimson)" }}

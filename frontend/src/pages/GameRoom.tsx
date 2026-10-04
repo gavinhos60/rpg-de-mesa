@@ -89,6 +89,7 @@ import {
   resolveFeatureSpend,
   spendFeatureOnSheet,
   spendSpellSlot,
+  spendSpellSlotAtLevel,
 } from "../utils/characterResources";
 import {
   buildFeatureAction,
@@ -171,11 +172,14 @@ export function GameRoom() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [diceFx, setDiceFx] = useState<{
+    seq: number;
     label: string;
     total: number;
     natural?: number | null;
     dice?: Array<{ sides: number; value: number }>;
   } | null>(null);
+  const diceFxSeqRef = useRef(0);
+  const seenRollMessageIdsRef = useRef(new Set<string>());
   const [loading, setLoading] = useState(true);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [restBusy, setRestBusy] = useState(false);
@@ -243,6 +247,51 @@ export function GameRoom() {
   userIdRef.current = user?.id;
   const roleRef = useRef(role);
   roleRef.current = role;
+
+  function mergeChatMessage(
+    message: ChatMessage,
+    options?: { allowSecretSelf?: boolean }
+  ) {
+    if (message.secret && roleRef.current !== "MASTER") {
+      if (!options?.allowSecretSelf) return;
+    }
+    setChat((previous) => {
+      if (previous.some((item) => item.id === message.id)) return previous;
+      return [...previous, message].slice(-200);
+    });
+  }
+
+  function applyRollMessage(
+    message: ChatMessage,
+    options?: { allowSecretSelf?: boolean }
+  ) {
+    if (message.type !== "roll" || !message.roll) return;
+    const isMaster = roleRef.current === "MASTER";
+    if (message.secret && !isMaster && !options?.allowSecretSelf) return;
+    if (seenRollMessageIdsRef.current.has(message.id)) return;
+    seenRollMessageIdsRef.current.add(message.id);
+    if (seenRollMessageIdsRef.current.size > 100) {
+      seenRollMessageIdsRef.current = new Set(
+        [...seenRollMessageIdsRef.current].slice(-50)
+      );
+    }
+    diceFxSeqRef.current += 1;
+    setDiceFx({
+      seq: diceFxSeqRef.current,
+      label: message.roll.label || message.text,
+      total: message.roll.total,
+      natural: naturalD20(message.roll),
+      dice: diceFromChatRoll(message.roll),
+    });
+  }
+
+  function ingestRollChatMessage(
+    message: ChatMessage,
+    options?: { allowSecretSelf?: boolean }
+  ) {
+    mergeChatMessage(message, options);
+    applyRollMessage(message, options);
+  }
   /** Tokens em arraste local — ignora ecos remotos para não teleportar. */
   const draggingTokenIdsRef = useRef<Set<string>>(new Set());
   const immersiveAppliedRef = useRef(false);
@@ -407,17 +456,9 @@ export function GameRoom() {
         );
 
         currentSocket.on("chat:message", (message: ChatMessage) => {
-          // Defesa: mensagens secretas não devem chegar a jogadores
           if (message.secret && roleRef.current !== "MASTER") return;
-          setChat((previous) => [...previous, message].slice(-200));
-          if (message.type === "roll" && message.roll) {
-            setDiceFx({
-              label: message.roll.label || message.text,
-              total: message.roll.total,
-              natural: naturalD20(message.roll),
-              dice: diceFromChatRoll(message.roll),
-            });
-          }
+          mergeChatMessage(message);
+          applyRollMessage(message);
         });
 
         currentSocket.on(
@@ -451,14 +492,17 @@ export function GameRoom() {
         );
 
         currentSocket.on("check:request", (request: CheckRequest) => {
+          if (roleRef.current === "MASTER") return;
           const mine = myCharactersRef.current;
           const uid = userIdRef.current;
           const targetsMe =
-            !request.targetCharacterId ||
-            mine.some(
-              (character) => character.id === request.targetCharacterId
-            ) ||
-            request.targetUserId === uid;
+            (request.targetUserId != null && request.targetUserId === uid) ||
+            (request.targetCharacterId != null &&
+              mine.some(
+                (character) => character.id === request.targetCharacterId
+              )) ||
+            (request.targetCharacterId == null &&
+              request.targetUserId == null);
           if (targetsMe) {
             setPendingCheck(request);
           }
@@ -903,13 +947,15 @@ export function GameRoom() {
       });
       if (!result.ok) {
         alert(result.error || "Falha ao enviar habilidade");
+      } else if (result.message) {
+        ingestRollChatMessage(result.message, { allowSecretSelf: true });
       }
     });
   }
 
   async function handleCastSpell(
     spell: Spell,
-    options?: { advantage?: boolean }
+    options?: { advantage?: boolean; slotLevel?: number }
   ) {
     if (!socket || !sessionId || !user || !openCharacter) return;
     const sheet = getOpenCharacterSheet();
@@ -918,7 +964,14 @@ export function GameRoom() {
       return;
     }
     await withActionBusy("Conjurando…", async () => {
-      const spent = spendSpellSlot(sheet, spell.level);
+      const slotLevel =
+        options?.slotLevel != null && options.slotLevel > 0
+          ? options.slotLevel
+          : spell.level;
+      const spent =
+        spell.level > 0
+          ? spendSpellSlotAtLevel(sheet, spell.level, slotLevel)
+          : spendSpellSlot(sheet, 0);
       if (spent.ok === false) {
         alert(spent.error);
         return;
@@ -928,15 +981,24 @@ export function GameRoom() {
       }
 
       const action = buildSpellAction(spent.sheet, spell);
+      const upcastNote =
+        slotLevel > spell.level
+          ? `\nConjurada com espaço de ${slotLevel}º círculo.`
+          : "";
       const result = await emitCharacterAction(socket, sessionId, {
         characterId: openCharacter.id,
         characterName: openCharacter.name,
         ...action,
+        description: [action.description, upcastNote.trim()]
+          .filter(Boolean)
+          .join("\n"),
         userName: user.name,
         advantage: Boolean(options?.advantage),
       });
       if (!result.ok) {
         alert(result.error || "Falha ao conjurar magia");
+      } else if (result.message) {
+        ingestRollChatMessage(result.message, { allowSecretSelf: true });
       }
     });
   }
@@ -1345,6 +1407,10 @@ export function GameRoom() {
       : await send();
     if (!result.ok) {
       alert(result.error || "Falha ao enviar");
+    } else if (result.message?.type === "roll" && result.message.roll) {
+      ingestRollChatMessage(result.message, { allowSecretSelf: true });
+    } else if (result.message) {
+      mergeChatMessage(result.message, { allowSecretSelf: true });
     }
   }
 
@@ -1364,6 +1430,8 @@ export function GameRoom() {
       });
       if (!result.ok) {
         alert(result.error || "Falha na rolagem");
+      } else if (result.message) {
+        ingestRollChatMessage(result.message, { allowSecretSelf: true });
       }
     });
   }
@@ -1406,6 +1474,9 @@ export function GameRoom() {
         if (!result.ok) {
           alert(result.error || `Falha na iniciativa de ${token.name}`);
           return;
+        }
+        if (result.message) {
+          ingestRollChatMessage(result.message, { allowSecretSelf: true });
         }
       }
 
@@ -1536,11 +1607,16 @@ export function GameRoom() {
 
     if (!socket || !sessionId || !user) return;
     await withActionBusy("Rolando iniciativa…", async () => {
-      await emitInitiativeRoll(socket, sessionId, {
+      const result = await emitInitiativeRoll(socket, sessionId, {
         characterId: target.id,
         userName: user.name,
         advantage: Boolean(options?.advantage),
       });
+      if (!result.ok) {
+        alert(result.error || "Falha na iniciativa");
+      } else if (result.message) {
+        ingestRollChatMessage(result.message, { allowSecretSelf: true });
+      }
       setPendingInitiative(null);
     });
   }
@@ -1565,6 +1641,8 @@ export function GameRoom() {
       });
       if (!result.ok) {
         alert(result.error || "Falha ao enviar ação da criatura");
+      } else if (result.message) {
+        ingestRollChatMessage(result.message, { allowSecretSelf: true });
       }
     });
   }
@@ -1589,13 +1667,18 @@ export function GameRoom() {
 
     if (!socket || !sessionId || !user) return;
     await withActionBusy("Rolando teste…", async () => {
-      await emitSheetRoll(socket, sessionId, {
+      const result = await emitSheetRoll(socket, sessionId, {
         characterId: target.id,
         type: pendingCheck.type,
         key: pendingCheck.key,
         userName: user.name,
         advantage: Boolean(options?.advantage),
       });
+      if (!result.ok) {
+        alert(result.error || "Falha na rolagem");
+      } else if (result.message) {
+        ingestRollChatMessage(result.message, { allowSecretSelf: true });
+      }
       setPendingCheck(null);
     });
   }
@@ -2084,6 +2167,7 @@ export function GameRoom() {
       </div>
 
       <DiceRollOverlay
+        key={diceFx?.seq ?? 0}
         visible={Boolean(diceFx)}
         label={diceFx?.label}
         total={diceFx?.total}
